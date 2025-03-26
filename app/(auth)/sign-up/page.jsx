@@ -1,3 +1,5 @@
+// app/(auth)/sign-up.page.jsx
+
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -112,14 +114,10 @@ export default function SignUpPage() {
     }
   };
 
-  /**
-   * Check company name availability.
-   * Calls GET {NEXT_PUBLIC_API_URL}/api/account/check-company-name?name=...
-   */
   const checkCompanyAvailability = async () => {
     if (!companyForm.name.trim()) {
       setCompanyError("Company name is required.");
-      return;
+      return false;
     }
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -130,11 +128,14 @@ export default function SignUpPage() {
       const data = await res.json();
       if (data.data.exists) {
         setCompanyError("Company name is already in use.");
+        return false;
       } else {
         setCompanyError("");
+        return true;
       }
     } catch (err) {
       setCompanyError("Error checking company name.");
+      return false;
     }
   };
 
@@ -231,9 +232,14 @@ export default function SignUpPage() {
     return companyForm.name.trim() !== "" && companyError === "";
   };
 
-  const handleNext = () => {
-    if (step === 1 && validateStep1()) setStep(2);
-    else if (step === 2 && validateStep2()) setStep(3);
+  const handleNext = async () => {
+    if (step === 1 && validateStep1()) {
+      setStep(2);
+    } else if (step === 2 && validateStep2()) {
+      const isAvailable = await checkCompanyAvailability();
+      if (!isAvailable) return;
+      setStep(3);
+    }
   };
 
   const handleBack = () => setStep((prev) => prev - 1);

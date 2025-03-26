@@ -5,13 +5,12 @@ import { useRouter } from "next/navigation";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { motion } from "framer-motion";
 
-// Define labels for features (adjust as needed)
 const featureLabels = {
   timekeeping: "Timekeeping",
   leaves: "Leaves",
   payroll: "Payroll",
-  "timekeeping-offline": "Timekeeping Offline",
-  "timekeeping-location": "Timekeeping Location",
+  "timekeeping-punch-offline": "Timekeeping Offline",
+  "timekeeping-punch-location": "Timekeeping Location",
 };
 
 export default function PriceCard({ plan }) {
@@ -23,7 +22,6 @@ export default function PriceCard({ plan }) {
     setMounted(true);
   }, []);
 
-  // Use plan.options if it exists; otherwise, create a fallback option using plan fields.
   const options =
     Array.isArray(plan.options) && plan.options.length > 0
       ? plan.options
@@ -35,7 +33,6 @@ export default function PriceCard({ plan }) {
             description: plan.description,
           },
         ];
-
   const selectedOption = options[selectedOptionIndex];
 
   const handlePrevOption = () => {
@@ -74,7 +71,6 @@ export default function PriceCard({ plan }) {
         <h2 className="lg:text-4xl text-2xl font-bold">{plan.name} Plan</h2>
         <span className="lg:text-4xl text-2xl font-bold">${selectedOption.price}</span>
       </div>
-
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <button
@@ -94,7 +90,6 @@ export default function PriceCard({ plan }) {
           </button>
         </div>
       </div>
-
       <div className="mb-6 flex-grow">
         <h3 className="text-lg font-semibold mb-3">Features:</h3>
         <ul className="space-y-2">
@@ -109,7 +104,7 @@ export default function PriceCard({ plan }) {
                 delay: 0.1 * Object.keys(featureLabels).indexOf(featureKey),
               }}
             >
-              {plan.features && plan.features[featureKey] ? (
+              {plan.features[featureKey] ? (
                 <svg className="w-5 h-5 mr-3 text-green-500 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
@@ -123,11 +118,9 @@ export default function PriceCard({ plan }) {
           ))}
         </ul>
       </div>
-
       <div className="mt-auto">
         <p className="text-neutral-600 dark:text-neutral-400 text-sm italic">{selectedOption.description}</p>
       </div>
-
       <motion.button
         onClick={handleChoosePlan}
         className="mt-6 w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold py-2 px-4 rounded-xl transition-all ease-in-out duration-200"

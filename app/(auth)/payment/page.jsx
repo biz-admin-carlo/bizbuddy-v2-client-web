@@ -1,3 +1,5 @@
+// app/(auth)/payment.page.jsx
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -10,7 +12,7 @@ import { motion } from "framer-motion";
 // Load publishable key from env
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
-function CheckoutForm({ planId, email, companyName, onPaymentSuccess }) {
+function CheckoutForm({ planId, planPrice, email, companyName, onPaymentSuccess }) {
   const stripe = useStripe();
   const elements = useElements();
   const [error, setError] = useState(null);
@@ -32,7 +34,7 @@ function CheckoutForm({ planId, email, companyName, onPaymentSuccess }) {
           planId,
           email,
           companyName,
-          amount: 1000, // example amount in cents
+          amount: planPrice,
         }),
       });
       const data = await response.json();
@@ -41,6 +43,15 @@ function CheckoutForm({ planId, email, companyName, onPaymentSuccess }) {
         setProcessing(false);
         return;
       }
+
+      // If the plan is free, clientSecret will be null.
+      if (data.data.clientSecret === null) {
+        localStorage.setItem("paymentStatus", "paid");
+        onPaymentSuccess();
+        setProcessing(false);
+        return;
+      }
+
       const clientSecret = data.data.clientSecret;
       setClientSecret(clientSecret);
 
@@ -276,7 +287,7 @@ export default function PaymentPage() {
 
           <Elements stripe={stripePromise}>
             {plan && email && companyName && (
-              <CheckoutForm planId={plan.id} email={email} companyName={companyName} onPaymentSuccess={handlePaymentSuccess} />
+              <CheckoutForm planId={plan.id} planPrice={plan.price} email={email} companyName={companyName} onPaymentSuccess={handlePaymentSuccess} />
             )}
           </Elements>
 

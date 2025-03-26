@@ -7,13 +7,12 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge";
 import { Check, X, ChevronLeft, ChevronRight, Sparkles, Star } from "lucide-react";
 
-// Define labels for features (adjust as needed)
 const featureLabels = {
   timekeeping: "Timekeeping",
   leaves: "Leaves",
   payroll: "Payroll",
-  "timekeeping-offline": "Timekeeping Offline",
-  "timekeeping-location": "Timekeeping Location",
+  "timekeeping-punch-offline": "Timekeeping Offline",
+  "timekeeping-punch-location": "Timekeeping Location",
 };
 
 export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
@@ -21,9 +20,7 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
     hidden: { opacity: 0 },
     show: {
       opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-      },
+      transition: { staggerChildren: 0.1 },
     },
   };
 
@@ -32,7 +29,6 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
     show: { opacity: 1, y: 0 },
   };
 
-  // Track selected option index for each plan
   const [selectedOptionIndices, setSelectedOptionIndices] = useState({});
 
   const handlePrevOption = (planName) => {
@@ -49,13 +45,10 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
     }));
   };
 
-  // Check if plans have options property
   const hasOptions = plans.length > 0 && plans[0].options;
 
-  // Function to check if an option is the current plan
   const isCurrentOption = (option, planName) => {
     if (!currentPlan) return false;
-
     return currentPlan.name === planName && currentPlan.rangeOfUsers === option.rangeOfUsers && currentPlan.price === option.price;
   };
 
@@ -66,7 +59,6 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
         <p className="text-neutral-600 dark:text-neutral-400">Select the plan that best fits your business needs</p>
       </div>
 
-      {/* Current Plan Card */}
       {currentPlan && (
         <motion.div variants={item} className="mb-8">
           <Card className="border-2 border-orange-500 bg-gradient-to-r from-orange-500/5 to-orange-600/5 shadow-md overflow-hidden rounded-xl">
@@ -97,12 +89,12 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
                   >
                     <div
                       className={`w-5 h-5 rounded-full flex items-center justify-center mr-3 ${
-                        currentPlan.features && currentPlan.features[featureKey]
+                        selectedOption.features && selectedOption.features[featureKey]
                           ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
                           : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
                       }`}
                     >
-                      {currentPlan.features && currentPlan.features[featureKey] ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                      {selectedOption.features && selectedOption.features[featureKey] ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
                     </div>
                     <span className="text-sm">{label}</span>
                   </div>
@@ -115,15 +107,9 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {plans.map((plan) => {
-          // Get the current option index for this plan
           const optionIndex = selectedOptionIndices[plan.name] || 0;
-
-          // If plan has options, use the selected option, otherwise use the plan itself
           const selectedOption = hasOptions && plan.options && plan.options.length > 0 ? plan.options[optionIndex] : plan;
-
-          // Check if this specific option is the current plan
           const isCurrentlySelected = isCurrentOption(selectedOption, plan.name);
-
           return (
             <motion.div key={plan.name} variants={item}>
               <Card className="h-full transition-all duration-300 hover:shadow-lg border border-neutral-200 dark:border-neutral-700 shadow-md bg-white dark:bg-neutral-800 rounded-xl overflow-hidden">
@@ -145,7 +131,6 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
                     <span className="text-sm text-neutral-500 dark:text-neutral-400 ml-2">/ month</span>
                   </div>
 
-                  {/* User Range Selector */}
                   {hasOptions && plan.options && plan.options.length > 1 && (
                     <div className="flex items-center justify-between mt-3 p-1 bg-neutral-100 dark:bg-neutral-700 rounded-lg">
                       <button
@@ -181,12 +166,12 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
                       >
                         <div
                           className={`w-5 h-5 rounded-full flex items-center justify-center mr-3 ${
-                            plan.features && plan.features[featureKey]
+                            selectedOption.features && selectedOption.features[featureKey]
                               ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
                               : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
                           }`}
                         >
-                          {plan.features && plan.features[featureKey] ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                          {selectedOption.features && selectedOption.features[featureKey] ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
                         </div>
                         <span className="text-sm">{label}</span>
                       </div>
@@ -203,14 +188,12 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
                     }`}
                     disabled={isCurrentlySelected}
                   >
-                    {isCurrentlySelected ? (
-                      "Current Plan"
-                    ) : (
-                      <>
-                        {currentPlan && currentPlan.name === plan.name ? "Change User Range" : `Upgrade to ${plan.name}`}
-                        <ChevronRight className="ml-2 h-4 w-4" />
-                      </>
-                    )}
+                    {isCurrentlySelected
+                      ? "Current Plan"
+                      : currentPlan && currentPlan.name === plan.name
+                      ? "Change User Range"
+                      : `Upgrade to ${plan.name}`}
+                    <ChevronRight className="ml-2 h-4 w-4" />
                   </Button>
                 </CardFooter>
               </Card>

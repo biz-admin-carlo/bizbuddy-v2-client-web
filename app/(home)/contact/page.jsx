@@ -1,12 +1,13 @@
-// File: biz-web-app/app/(home)/faq/page.jsx
+// app/(home)/faq/page.jsx
+
 "use client";
-import FAQ from "@/components/Home/Accordion";
+import Contact from "@/components/Home/Contact";
 import Footer from "@/components/Partial/Footer";
 import React from "react";
 function page() {
   return (
     <div className="flex flex-col justify-between items-center">
-      <FAQ />
+      <Contact />
       <Footer />
     </div>
   );

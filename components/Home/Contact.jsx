@@ -36,12 +36,7 @@ function Contact() {
   };
 
   return (
-    <motion.div
-      className="py-10 mx-auto px-4 w-full max-w-7xl "
-      initial="hidden"
-      animate="visible"
-      variants={containerVariants}
-    >
+    <motion.div className="py-10 mx-auto px-4 w-full max-w-7xl " initial="hidden" animate="visible" variants={containerVariants}>
       <motion.h2
         className="text-orange-500 font-bold text-center pb-2 max-w-7xl mx-auto text-xl sm:text-2xl md:text-4xl lg:text-5xl capitalize"
         variants={itemVariants}
@@ -67,11 +62,7 @@ function Contact() {
                   </div>
                   <div className="flex items-center space-x-2 bg-orange-50 dark:bg-neutral-900 p-2 rounded-xl text-neutral-600 dark:text-neutral-400 text-base">
                     <MdOutlineEmail className="w-6 h-6 text-white bg-orange-500 p-1 rounded-xl" />
-                    <Link
-                      href="#"
-                      prefetch={false}
-                      className="text-xs sm:text-sm hover:text-orange-500 transition-colors"
-                    >
+                    <Link href="#" prefetch={false} className="text-xs sm:text-sm hover:text-orange-500 transition-colors">
                       info@example.com
                     </Link>
                   </div>
@@ -91,28 +82,15 @@ function Contact() {
               <CardContent>
                 <form className="space-y-4">
                   <div className="space-y-2">
-                    <Input
-                      id="name"
-                      placeholder="Your name"
-                      className="border-none p-2 pl-3 bg-white dark:bg-neutral-800"
-                    />
+                    <Input id="name" placeholder="Your name" className="border-none p-2 pl-3 bg-white dark:bg-neutral-800" />
                   </div>
 
                   <div className="space-y-2">
-                    <Input
-                      id="email"
-                      placeholder="Your email"
-                      type="email"
-                      className="border-none p-2 pl-3 bg-white dark:bg-neutral-800"
-                    />
+                    <Input id="email" placeholder="Your email" type="email" className="border-none p-2 pl-3 bg-white dark:bg-neutral-800" />
                   </div>
 
                   <div className="space-y-2">
-                    <Textarea
-                      id="message"
-                      placeholder="Your message"
-                      className="bg-white dark:bg-neutral-800"
-                    />
+                    <Textarea id="message" placeholder="Your message" className="bg-white dark:bg-neutral-800" />
                   </div>
 
                   <Button className="py-3 px-4 w-full font-semibold text-white rounded-xl text-sm bg-gradient-to-r from-orange-500 to-orange-600">

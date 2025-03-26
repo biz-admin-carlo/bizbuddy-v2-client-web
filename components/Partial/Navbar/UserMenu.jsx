@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Transition } from "@headlessui/react";
 import useAuthStore from "@/store/useAuthStore";
+import Link from "next/link";
 
 export default function UserMenu() {
   const { token, logout } = useAuthStore();
@@ -70,12 +71,15 @@ export default function UserMenu() {
             <p className="text-xs text-neutral-500 dark:text-neutral-400">{user.username}</p>
           </div>
           <div className="py-2">
+            <Link href="/dashboard">
+              <button className="mt-1 block w-full text-left px-4 py-1 text-sm">Dashboard</button>
+            </Link>
             <button
               onClick={() => {
                 logout();
                 setIsOpen(false);
               }}
-              className="mt-2 block w-full text-left px-4 py-2 text-sm"
+              className="mt-1 block w-full text-left px-4 py-1 text-sm"
             >
               Sign Out
             </button>

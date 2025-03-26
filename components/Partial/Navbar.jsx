@@ -21,9 +21,7 @@ function DesktopNavLinks({ pathname }) {
         <Link
           key={link.href}
           href={link.href}
-          className={`px-1 py-1 transition-colors hover:text-orange-500 ${
-            pathname === link.href ? "text-orange-500" : ""
-          }`}
+          className={`px-1 py-1 transition-colors hover:text-orange-500 ${pathname === link.href ? "text-orange-500" : ""}`}
         >
           {link.label}
         </Link>
@@ -46,13 +44,7 @@ function SignInLink() {
 function NotificationIcon() {
   return (
     <button className="relative p-2">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        className="h-6 w-6 hover:text-orange-500"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 hover:text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -73,32 +65,18 @@ export default function NavBar() {
       <div className="mx-auto max-w-7xl md:px-4 px-2">
         <div className="hidden md:flex items-center justify-between h-14">
           <Link href="/">
-            <img
-              src="/logo.png"
-              alt="Bizbuddy title and logo"
-              width={110}
-              height={40}
-            />
+            <img src="/logo.png" alt="Bizbuddy title and logo" width={110} height={40} />
           </Link>
           <div className="flex items-center space-x-4">
             <ThemeToggle />
-            {!token ? (
-              <DesktopNavLinks pathname={pathname} />
-            ) : (
-              <NotificationIcon />
-            )}
+            {!token ? <DesktopNavLinks pathname={pathname} /> : <NotificationIcon />}
             {!token ? <SignInLink /> : <UserMenu />}
           </div>
         </div>
         <div className="md:hidden">
           <div className="flex items-center justify-between h-14">
             <Link href="/">
-              <img
-                src="/logo.png"
-                alt="Bizbuddy title and logo"
-                width={100}
-                height={25}
-              />
+              <img src="/logo.png" alt="Bizbuddy title and logo" width={100} height={25} />
             </Link>
             <div className="flex items-center">
               <ThemeToggle />
