@@ -16,12 +16,37 @@ const featureLabels = {
 };
 
 export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
+  // === FIX: Parse `features` if it's a JSON string ===
+  // This ensures that "Pro plan (2-9 users)" or any other plan
+  // that has `features` stored as a string will be an actual object
+  // so we can correctly show check icons where features are true.
+  plans.forEach((plan) => {
+    if (typeof plan.features === "string") {
+      try {
+        plan.features = JSON.parse(plan.features);
+      } catch {
+        // if parsing fails, fall back to empty object
+        plan.features = {};
+      }
+    }
+
+    if (Array.isArray(plan.options)) {
+      plan.options.forEach((option) => {
+        if (typeof option.features === "string") {
+          try {
+            option.features = JSON.parse(option.features);
+          } catch {
+            option.features = {};
+          }
+        }
+      });
+    }
+  });
+  // === END FIX ===
+
   const container = {
     hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.1 },
-    },
+    show: { opacity: 1, transition: { staggerChildren: 0.1 } },
   };
 
   const item = {
@@ -76,10 +101,8 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
               </div>
               <p className="text-sm mt-1 text-neutral-600 dark:text-neutral-400">{currentPlan.rangeOfUsers} users</p>
             </CardHeader>
-
             <CardContent className="pb-6 pt-4">
               <p className="text-sm mb-4 text-neutral-700 dark:text-neutral-300">{currentPlan.description}</p>
-
               <div className="space-y-2">
                 <p className="text-sm font-medium mb-2 text-neutral-700 dark:text-neutral-300">Features:</p>
                 {Object.entries(featureLabels).map(([featureKey, label]) => (
@@ -89,12 +112,12 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
                   >
                     <div
                       className={`w-5 h-5 rounded-full flex items-center justify-center mr-3 ${
-                        selectedOption.features && selectedOption.features[featureKey]
+                        currentPlan.features && currentPlan.features[featureKey]
                           ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
                           : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
                       }`}
                     >
-                      {selectedOption.features && selectedOption.features[featureKey] ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                      {currentPlan.features && currentPlan.features[featureKey] ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
                     </div>
                     <span className="text-sm">{label}</span>
                   </div>
@@ -107,9 +130,13 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {plans.map((plan) => {
+          if (!plan) return null;
           const optionIndex = selectedOptionIndices[plan.name] || 0;
-          const selectedOption = hasOptions && plan.options && plan.options.length > 0 ? plan.options[optionIndex] : plan;
+          const selectedOption =
+            hasOptions && plan.options && plan.options.length > 0 ? plan.options[optionIndex] : { ...plan, features: plan.features || {} };
+
           const isCurrentlySelected = isCurrentOption(selectedOption, plan.name);
+
           return (
             <motion.div key={plan.name} variants={item}>
               <Card className="h-full transition-all duration-300 hover:shadow-lg border border-neutral-200 dark:border-neutral-700 shadow-md bg-white dark:bg-neutral-800 rounded-xl overflow-hidden">
@@ -130,7 +157,6 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
                     <span className="text-3xl font-bold">${selectedOption.price}</span>
                     <span className="text-sm text-neutral-500 dark:text-neutral-400 ml-2">/ month</span>
                   </div>
-
                   {hasOptions && plan.options && plan.options.length > 1 && (
                     <div className="flex items-center justify-between mt-3 p-1 bg-neutral-100 dark:bg-neutral-700 rounded-lg">
                       <button
@@ -150,13 +176,10 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
                       </button>
                     </div>
                   )}
-
                   {!hasOptions && <p className="text-sm mt-1 text-neutral-600 dark:text-neutral-400">{selectedOption.rangeOfUsers} users</p>}
                 </CardHeader>
-
                 <CardContent className="pb-6 pt-4">
                   <p className="text-sm mb-4 text-neutral-700 dark:text-neutral-300">{selectedOption.description || plan.description}</p>
-
                   <div className="space-y-2">
                     <p className="text-sm font-medium mb-2 text-neutral-700 dark:text-neutral-300">Features:</p>
                     {Object.entries(featureLabels).map(([featureKey, label]) => (
@@ -186,9 +209,9 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
                         ? "bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700"
                         : "border border-orange-200 dark:border-orange-800 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20"
                     }`}
-                    disabled={isCurrentlySelected}
+                    disabled={isCurrentOption(selectedOption, plan.name)}
                   >
-                    {isCurrentlySelected
+                    {isCurrentOption(selectedOption, plan.name)
                       ? "Current Plan"
                       : currentPlan && currentPlan.name === plan.name
                       ? "Change User Range"

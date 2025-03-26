@@ -23,11 +23,9 @@ export default function AccountSubscription() {
   const [plans, setPlans] = useState([]);
   const [groupedPlans, setGroupedPlans] = useState({});
 
-  // Ref for the upgrade section to scroll to
   const upgradeContentRef = useRef(null);
   const pricingRef = useRef(null);
 
-  // Fetch user profile (includes company and subscription)
   useEffect(() => {
     if (!token) return;
     async function fetchProfile() {
@@ -38,7 +36,6 @@ export default function AccountSubscription() {
         const data = await res.json();
         if (data && data.data) {
           const { user, company, subscription } = data.data;
-          // Only allow company owner to manage subscriptions.
           if (company.userId !== user.id) {
             setError("Access denied. Only the company owner can manage subscriptions.");
             toast.error("Access denied. Only the company owner can manage subscriptions.");
@@ -62,7 +59,6 @@ export default function AccountSubscription() {
     fetchProfile();
   }, [token]);
 
-  // Fetch available subscription plans
   useEffect(() => {
     async function fetchPlans() {
       try {
@@ -74,7 +70,7 @@ export default function AccountSubscription() {
         if (res.ok && data.data) {
           setPlans(data.data);
 
-          // Group plans by name (Free, Basic, Pro)
+          // Group plans by name (Free, Basic, Pro) and include features on each option.
           const grouped = {};
           data.data.forEach((plan) => {
             if (!grouped[plan.name]) {
@@ -83,16 +79,22 @@ export default function AccountSubscription() {
                 options: [],
               };
             }
-
             grouped[plan.name].options.push({
               id: plan.id,
               price: plan.price,
               rangeOfUsers: plan.rangeOfUsers,
               description: plan.description,
+              features: plan.features, // include features here
             });
           });
-
-          // Convert to array of plan objects with options
+          // Sort each grouped plan's options by the lower bound of rangeOfUsers.
+          Object.keys(grouped).forEach((planName) => {
+            grouped[planName].options.sort((a, b) => {
+              const aLow = Number(a.rangeOfUsers.split("-")[0]);
+              const bLow = Number(b.rangeOfUsers.split("-")[0]);
+              return aLow - bLow;
+            });
+          });
           setGroupedPlans(Object.values(grouped));
         } else {
           toast.error(data.message || "Failed to fetch subscription plans.");
@@ -105,17 +107,14 @@ export default function AccountSubscription() {
     fetchPlans();
   }, []);
 
-  // Effect to scroll to the upgrade content when it appears
   useEffect(() => {
     if (showUpgrade && pricingRef.current) {
-      // Small delay to ensure content is rendered
       const timer = setTimeout(() => {
         pricingRef.current.scrollIntoView({
           behavior: "smooth",
           block: "start",
         });
       }, 300);
-
       return () => clearTimeout(timer);
     }
   }, [showUpgrade]);
@@ -126,8 +125,6 @@ export default function AccountSubscription() {
 
   const handlePlanSelect = (plan) => {
     setSelectedPlan(plan);
-
-    // Scroll to payment form after selecting a plan
     setTimeout(() => {
       if (upgradeContentRef.current) {
         upgradeContentRef.current.scrollIntoView({
@@ -140,8 +137,6 @@ export default function AccountSubscription() {
 
   const handleBackToPlans = () => {
     setSelectedPlan(null);
-
-    // Scroll back to pricing options
     setTimeout(() => {
       if (pricingRef.current) {
         pricingRef.current.scrollIntoView({
@@ -152,7 +147,6 @@ export default function AccountSubscription() {
     }, 300);
   };
 
-  // Scroll to top function
   const scrollToTop = () => {
     window.scrollTo({
       top: 0,
@@ -160,16 +154,12 @@ export default function AccountSubscription() {
     });
   };
 
-  // After a successful payment, call the upgrade subscription endpoint
-  // then refetch the profile to update the subscription info.
   const handlePaymentSuccess = async () => {
     if (selectedPlan) {
-      // Call the upgrade endpoint (the endpoint extracts the token itself).
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/subscriptions/upgrade`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          // We pass the token in the Authorization header.
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ planId: selectedPlan.id }),
@@ -183,7 +173,6 @@ export default function AccountSubscription() {
     toast.success("Subscription upgraded successfully!");
     setShowUpgrade(false);
     setSelectedPlan(null);
-    // Refetch profile to update subscription info
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/account/profile`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -195,8 +184,6 @@ export default function AccountSubscription() {
     } catch (error) {
       console.error("Error refetching profile after upgrade:", error);
     }
-
-    // Scroll back to top after successful upgrade
     scrollToTop();
   };
 
@@ -298,7 +285,6 @@ export default function AccountSubscription() {
                   </Badge>
                   <span className="text-sm text-neutral-600 dark:text-neutral-400">{subscription.plan.rangeOfUsers} users</span>
                 </div>
-
                 <div className="flex flex-col md:flex-row md:items-center gap-4">
                   <div className="flex items-center p-2 rounded-lg bg-neutral-50 dark:bg-neutral-700/50 border border-neutral-200 dark:border-neutral-700">
                     <Calendar className="mr-2 h-4 w-4 text-orange-500" />
@@ -307,7 +293,6 @@ export default function AccountSubscription() {
                       <p className="text-sm font-medium">{new Date(subscription.startDate).toLocaleDateString()}</p>
                     </div>
                   </div>
-
                   {subscription.endDate && (
                     <div className="flex items-center p-2 rounded-lg bg-neutral-50 dark:bg-neutral-700/50 border border-neutral-200 dark:border-neutral-700">
                       <Calendar className="mr-2 h-4 w-4 text-orange-500" />
@@ -386,7 +371,6 @@ export default function AccountSubscription() {
         </Card>
       </motion.div>
 
-      {/* Back to top button (fixed position) */}
       {showUpgrade && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="fixed bottom-6 right-6">
           <Button
