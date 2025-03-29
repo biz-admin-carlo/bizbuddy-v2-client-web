@@ -16,33 +16,30 @@ const featureLabels = {
 };
 
 export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
-  // === FIX: Parse `features` if it's a JSON string ===
-  // This ensures that "Pro plan (2-9 users)" or any other plan
-  // that has `features` stored as a string will be an actual object
-  // so we can correctly show check icons where features are true.
+  // 1. PARSE FEATURES IF THEY’RE STRINGS
   plans.forEach((plan) => {
     if (typeof plan.features === "string") {
       try {
         plan.features = JSON.parse(plan.features);
       } catch {
-        // if parsing fails, fall back to empty object
         plan.features = {};
       }
     }
-
     if (Array.isArray(plan.options)) {
-      plan.options.forEach((option) => {
-        if (typeof option.features === "string") {
+      plan.options.forEach((opt) => {
+        if (typeof opt.features === "string") {
           try {
-            option.features = JSON.parse(option.features);
+            opt.features = JSON.parse(opt.features);
           } catch {
-            option.features = {};
+            opt.features = {};
           }
         }
       });
     }
   });
-  // === END FIX ===
+
+  // 2. LOG THE ENTIRE PLANS ARRAY
+  console.log("DEBUG: All plans in UpgradePricing: ", plans);
 
   const container = {
     hidden: { opacity: 0 },
@@ -131,9 +128,15 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {plans.map((plan) => {
           if (!plan) return null;
+
           const optionIndex = selectedOptionIndices[plan.name] || 0;
           const selectedOption =
             hasOptions && plan.options && plan.options.length > 0 ? plan.options[optionIndex] : { ...plan, features: plan.features || {} };
+
+          // 3. LOG THE SELECTED OPTION FOR THIS PLAN
+          if (plan.name === "Pro") {
+            console.log("DEBUG: selectedOption for plan ‘Pro’:", selectedOption);
+          }
 
           const isCurrentlySelected = isCurrentOption(selectedOption, plan.name);
 
@@ -209,9 +212,9 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
                         ? "bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700"
                         : "border border-orange-200 dark:border-orange-800 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20"
                     }`}
-                    disabled={isCurrentOption(selectedOption, plan.name)}
+                    disabled={isCurrentlySelected}
                   >
-                    {isCurrentOption(selectedOption, plan.name)
+                    {isCurrentlySelected
                       ? "Current Plan"
                       : currentPlan && currentPlan.name === plan.name
                       ? "Change User Range"
