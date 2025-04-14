@@ -40,8 +40,7 @@ function DataDisplay() {
                 transition={{ delay: 0.6, duration: 0.6 }}
                 className="text-lg sm:text-xl text-neutral-800 max-w-2xl mx-auto lg:mx-0"
               >
-                Manage schedules, track hours, and stay on top of work. Try
-                BizBuddy now!
+                Manage schedules, track hours, and stay on top of work. Try BizBuddy now!
               </motion.p>
             </div>
 
@@ -74,19 +73,14 @@ function DataDisplay() {
             initial={{ x: 50, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             transition={{ delay: 0.4, duration: 0.6 }}
-            className="w-full lg:w-1/2 h-28 flex justify-center items-center mt-4 lg:mt-2"
+            className="w-3/5 lg:w-1/2 h-28 flex justify-center items-center mt-4 lg:mt-2"
           >
             <motion.div
               animate={{ y: [0, -10, 0] }}
               transition={{ repeat: Number.POSITIVE_INFINITY, duration: 3 }}
               className="relative w-full h-[300px] lg:h-[800px]"
             >
-              <Image
-                src="/laptop.png"
-                alt="BizBuddy App Interface"
-                fill
-                className="object-contain drop-shadow-2xl"
-              />
+              <Image src="/laptop.png" alt="BizBuddy App Interface" fill className="object-contain drop-shadow-2xl" />
             </motion.div>
           </motion.div>
         </div>
@@ -109,11 +103,7 @@ function DataDisplay() {
                 transition={{ delay: 0.8 + index * 0.1, duration: 0.6 }}
                 className="text-center bg-gradient-to-t from-red-600 via-orange-600 to-orange-400 backdrop-blur-sm rounded-lg p-4 transform hover:scale-105 transition-transform flex-1 min-w-[150px] max-w-[200px]"
               >
-                <p className="text-3xl font-bold text-white mb-1">
-                  {typeof data.quantity === "number"
-                    ? data.quantity.toLocaleString()
-                    : data.quantity}
-                </p>
+                <p className="text-3xl font-bold text-white mb-1">{typeof data.quantity === "number" ? data.quantity.toLocaleString() : data.quantity}</p>
                 <p className="text-sm text-white/90">{data.metric}</p>
               </motion.div>
             ))}

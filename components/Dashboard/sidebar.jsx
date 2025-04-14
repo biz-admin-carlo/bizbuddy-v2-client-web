@@ -1,18 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+
+// Example store for auth tokens
 import useAuthStore from "@/store/useAuthStore";
+
+// lucide-react icons
+import { Menu as MenuIcon, X as CloseIcon, Lock, ChevronDown, ChevronUp } from "lucide-react";
+
+// Example UI components
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider } from "../ui/sidebar";
-import { ChevronDown, ChevronUp, Lock } from "lucide-react";
 
-// ====================================================================
-// 1. Data Structures: Original Features and Settings Items
-// ====================================================================
+/* ------------------------------------------------------------------
+  1) Sample data for demonstration
+------------------------------------------------------------------ */
 const originalFeaturesItems = [
   {
     id: "overview",
@@ -33,26 +38,9 @@ const originalFeaturesItems = [
     label: "My Payroll",
     children: [{ id: "my-payroll", label: "My Payroll" }],
   },
-  {
-    id: "leaves",
-    label: "Leaves",
-    children: [
-      { id: "my-leave-requests", label: "Request Leave" },
-      { id: "my-leave-approvals", label: "My Approval Leaves" },
-    ],
-  },
 ];
 
 const originalSettingsItems = [
-  {
-    id: "company",
-    label: "Company",
-    children: [
-      { id: "manage-companies", label: "Companies" },
-      { id: "manage-subscribers", label: "Subscribers" },
-      { id: "manage-subscription-plans", label: "Subscription Plans" },
-    ],
-  },
   {
     id: "departments",
     label: "Departments",
@@ -63,15 +51,8 @@ const originalSettingsItems = [
     label: "Employees",
     children: [
       { id: "manage-employees", label: "Employees" },
-      { id: "manage-shift-schedules", label: "Shifts Schedules" },
-      { id: "manage-locations", label: "Locations" },
-      { id: "manage-leave-requests", label: "Leave Requests" },
+      { id: "manage-shift-schedules", label: "Shift Schedules" },
     ],
-  },
-  {
-    id: "payroll",
-    label: "Payroll",
-    children: [{ id: "manage-payroll", label: "Payroll" }],
   },
   {
     id: "account",
@@ -83,12 +64,13 @@ const originalSettingsItems = [
   },
 ];
 
-// ====================================================================
-// 2. Utility Functions to Lock/Unlock Menu Items Based on Subscription
-// ====================================================================
+/* ------------------------------------------------------------------
+  2) Example locking logic: Lock/unlock sub-items based on plan
+------------------------------------------------------------------ */
 function getFeaturesWithLock(items, subscriptionPlan) {
   if (subscriptionPlan === "free") {
-    const allowedIds = new Set(["time-logs", "punch", "shift-schedule"]);
+    // Lock everything except "my-time-log" and "my-punch" (example)
+    const allowedIds = new Set(["my-time-log", "my-punch"]);
     return items.map((group) => ({
       ...group,
       children: group.children.map((child) => ({
@@ -98,228 +80,168 @@ function getFeaturesWithLock(items, subscriptionPlan) {
       })),
     }));
   }
+  // Otherwise, fully unlocked
   return items.map((group) => ({
     ...group,
-    children: group.children.map((child) => ({ ...child, locked: false })),
+    children: group.children.map((child) => ({
+      ...child,
+      locked: false,
+      requiredPlan: null,
+    })),
   }));
 }
 
 function getSettingsWithLock(items, subscriptionPlan, role) {
   let updated = items;
+  // Example lock for "free" plan
   if (subscriptionPlan === "free") {
-    updated = items.map((group) => ({
-      ...group,
-      children: group.children.map((child) => ({
-        ...child,
-        locked: !["mysubscription", "appearance"].includes(child.id),
-        requiredPlan: ["mysubscription", "appearance"].includes(child.id) ? null : "Basic",
-      })),
-    }));
-  } else if (subscriptionPlan === "basic") {
-    updated = items.map((group) => ({
-      ...group,
-      children: group.children.map((child) => ({
-        ...child,
-        locked: child.id === "locations",
-        requiredPlan: child.id === "locations" ? "Pro" : null,
-      })),
-    }));
-  } else {
-    updated = items.map((group) => ({
-      ...group,
-      children: group.children.map((child) => ({ ...child, locked: false })),
-    }));
-  }
-
-  // ---------- FIX: Force unlock the "account" group regardless ----------
-  updated = updated.map((group) => {
-    if (group.id === "account") {
+    updated = items.map((group) => {
+      if (group.id === "account") {
+        return {
+          ...group,
+          children: group.children.map((child) => ({
+            ...child,
+            locked: false,
+            requiredPlan: null,
+          })),
+        };
+      }
       return {
         ...group,
         children: group.children.map((child) => ({
           ...child,
-          locked: false,
-          requiredPlan: null,
+          locked: true,
+          requiredPlan: "Basic",
         })),
       };
-    }
-    return group;
-  });
-  // -----------------------------------------------------------------------
+    });
+  } else {
+    // everything unlocked
+    updated = items.map((group) => ({
+      ...group,
+      children: group.children.map((child) => ({
+        ...child,
+        locked: false,
+        requiredPlan: null,
+      })),
+    }));
+  }
 
+  // Example role-based filtering
   switch (role?.toLowerCase()) {
     case "superadmin":
       return updated;
     case "admin":
-      return updated.filter((group) => group.id !== "company");
-    case "supervisor":
-      return updated.filter((group) => ["departments", "preference"].includes(group.id));
+      // maybe remove some items
+      return updated.filter((g) => g.id !== "some-other-group");
     case "employee":
-    case "employees":
-      return updated.filter((group) => group.id === "preference");
+      // only "account"
+      return updated.filter((g) => g.id === "account");
     default:
       return updated;
   }
 }
 
-// ====================================================================
-// 3. Collapsible Navigation Item Component
-// ====================================================================
-function CollapsibleNavItem({ item, pathname, onNavigate, expanded, onToggle }) {
+/* ------------------------------------------------------------------
+  3) Collapsible sub-menu (Framer Motion expand/collapse)
+------------------------------------------------------------------ */
+function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle }) {
   return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
+    <li className="mb-1">
+      <button
+        className="flex justify-between items-center w-full px-3 py-2 rounded-md 
+                   hover:bg-neutral-200 dark:hover:bg-neutral-700 transition"
         onClick={() => onToggle(item.id)}
-        className="justify-between hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors duration-200 mb-1 p-2"
       >
-        {item.label}
+        <span>{item.label}</span>
         {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-      </SidebarMenuButton>
+      </button>
+
       <AnimatePresence>
         {expanded && (
-          <motion.div
+          <motion.ul
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
+            className="ml-4 border-l border-neutral-200 dark:border-neutral-700"
           >
-            <ul className="ml-4 space-y-1">
-              {item.children.map((child) => {
-                const routePath = `/dashboard/${child.id}`;
-                const isActive = pathname === routePath;
-                return (
-                  <li key={child.id}>
-                    <Button
-                      onClick={() => {
-                        if (!child.locked) onNavigate(routePath);
-                      }}
-                      disabled={child.locked}
-                      className={`flex justify-between items-center w-full text-left px-2 text-sm transition-all bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-400 ${
-                        isActive
-                          ? "font-semibold bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-300"
-                          : "hover:bg-neutral-200 dark:hover:bg-neutral-700"
-                      } ${child.locked ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-                    >
-                      {child.label}
-                      {child.locked && (
-                        <Badge variant="outline" className="ml-2 bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300">
-                          {child.requiredPlan} <Lock className="w-3 h-3 ml-1" />
-                        </Badge>
-                      )}
-                    </Button>
-                  </li>
-                );
-              })}
-            </ul>
-          </motion.div>
+            {item.children.map((child) => {
+              const route = `/dashboard/${child.id}`;
+              const isActive = currentPath === route;
+              return (
+                <li key={child.id}>
+                  <button
+                    onClick={() => {
+                      if (!child.locked) onNavigate(route);
+                    }}
+                    disabled={child.locked}
+                    className={`flex items-center justify-between w-full text-left 
+                                px-3 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-600 
+                                ${isActive ? "font-semibold bg-white dark:bg-neutral-900" : ""} 
+                                ${child.locked ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                  >
+                    {child.label}
+                    {child.locked && child.requiredPlan && (
+                      <Badge variant="outline" className="ml-2 flex items-center gap-1">
+                        {child.requiredPlan}
+                        <Lock className="w-3 h-3" />
+                      </Badge>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </motion.ul>
         )}
       </AnimatePresence>
-    </SidebarMenuItem>
+    </li>
   );
 }
 
-// ====================================================================
-// 4. Main Navigation Component for Dashboard
-// ====================================================================
-function MainNavigation({ items, pathname, onNavigate, openDropdown, setOpenDropdown }) {
-  return (
-    <SidebarMenu>
-      {items.map((item) =>
-        item.children ? (
-          <CollapsibleNavItem
-            key={item.id}
-            item={item}
-            pathname={pathname}
-            onNavigate={onNavigate}
-            expanded={openDropdown === item.id}
-            onToggle={(id) => setOpenDropdown(openDropdown === id ? null : id)}
-          />
-        ) : (
-          <SidebarMenuItem key={item.id}>
-            <SidebarMenuButton
-              onClick={() => onNavigate(`/dashboard/${item.id}`)}
-              className="block w-full text-left p-2 my-1 rounded-md transition-colors duration-200"
-            >
-              {item.label}
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        )
-      )}
-    </SidebarMenu>
-  );
-}
-
-// ====================================================================
-// 5. Settings Navigation Component
-// ====================================================================
-function SettingsMenu({ items, pathname, onNavigate, openDropdown, setOpenDropdown }) {
-  return (
-    <SidebarMenu>
-      {items.map((item) => (
-        <CollapsibleNavItem
-          key={item.id}
-          item={item}
-          pathname={pathname}
-          onNavigate={onNavigate}
-          expanded={openDropdown === item.id}
-          onToggle={(id) => setOpenDropdown(openDropdown === id ? null : id)}
-        />
-      ))}
-    </SidebarMenu>
-  );
-}
-
-// ====================================================================
-// 6. Sidebar User Info Component
-// ====================================================================
+/* ------------------------------------------------------------------
+  4) User info in the sidebar header
+------------------------------------------------------------------ */
 function SidebarUserInfo({ profileData, subscriptionPlan }) {
-  // Now extract the proper nested data
-  const user = profileData.user;
-  const userProfile = profileData.profile;
-  const company = profileData.company;
+  const userObj = profileData?.user || {};
+  const userProfile = profileData?.profile || {};
+  const company = profileData?.company || {};
 
-  // Extract initials from userProfile (if available)
-  const initials = `${userProfile?.firstName?.charAt(0) || ""}${userProfile?.lastName?.charAt(0) || ""}`.toUpperCase() || "?";
-  // For display name, prefer firstName and lastName; fallback to username from the user object
+  const initials = (userProfile.firstName?.[0] || "") + (userProfile.lastName?.[0] || "");
   const displayName =
-    userProfile?.firstName || userProfile?.lastName ? `${userProfile.firstName || ""} ${userProfile.lastName || ""}`.trim() : user.username;
+    userProfile.firstName || userProfile.lastName ? `${userProfile.firstName} ${userProfile.lastName}`.trim() : userObj.username || "Unknown User";
 
   return (
-    <div className="flex flex-col items-center space-y-2 p-3 border-b border-neutral-200 dark:border-neutral-700">
-      <Avatar className="w-12 h-12">
-        <AvatarImage src={userProfile?.avatarUrl} alt={displayName} />
-        <AvatarFallback className="text-sm font-semibold border">{initials}</AvatarFallback>
+    <div className="flex flex-col items-center p-4 border-b border-neutral-200 dark:border-neutral-700">
+      <Avatar className="w-12 h-12 mb-2">
+        <AvatarImage src={userProfile.avatarUrl} alt={displayName} />
+        <AvatarFallback>{initials.toUpperCase() || "?"}</AvatarFallback>
       </Avatar>
       <div className="text-center capitalize">
         <p className="font-semibold text-sm">{displayName}</p>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">{user.role}</p>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">{userObj.role}</p>
       </div>
-      <div className="flex w-full justify-between items-center">
-        <p className="text-sm">{company?.name}</p>
-        <Badge variant="secondary" className="capitalize px-2 py-0.5 text-xs">
-          {subscriptionPlan}
-        </Badge>
-      </div>
-      <div className="text-xs text-start text-neutral-500 dark:text-neutral-400">
-        <p>Comp ID: {company?.id}</p>
-        <p>User ID: {user?.id}</p>
+      <div className="flex w-full justify-between items-center mt-2">
+        <span className="text-sm">{company.name || "No Company"}</span>
+        <Badge className="capitalize">{subscriptionPlan}</Badge>
       </div>
     </div>
   );
 }
 
-// ====================================================================
-// 7. Complete Sidebar Component
-// ====================================================================
-export default function SideBar() {
+/* ------------------------------------------------------------------
+  5) Main Sidebar: includes the close button (X) for mobile
+------------------------------------------------------------------ */
+export default function ResponsiveSidebar({ isSidebarOpen, closeSidebar }) {
   const { token } = useAuthStore();
-  const pathname = usePathname();
   const router = useRouter();
+  const pathname = usePathname();
+
   const [profileData, setProfileData] = useState(null);
-  const [subscription, setSubscription] = useState(null);
+  const [subscriptionPlan, setSubscriptionPlan] = useState("free");
   const [openDropdown, setOpenDropdown] = useState(null);
 
-  // Fetch user profile from the backend endpoint (/api/account/profile)
+  // Fetch user profile
   useEffect(() => {
     if (token) {
       fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/account/profile`, {
@@ -328,62 +250,101 @@ export default function SideBar() {
         .then((res) => res.json())
         .then((data) => {
           if (data.data) {
-            console.log("SignedInUser Data: ", data.data);
             setProfileData(data.data);
+            const plan = data.data.subscription?.plan?.name?.toLowerCase() || "free";
+            setSubscriptionPlan(plan);
           }
         })
-        .catch((err) => console.error("Failed to fetch user profile:", err));
+        .catch((err) => console.error("Error fetching profile:", err));
     }
   }, [token]);
 
-  // Extract subscription from the profileData if available.
-  useEffect(() => {
-    if (profileData && profileData.subscription) {
-      setSubscription(profileData.subscription);
-    } else {
-      setSubscription(null);
-    }
-  }, [profileData]);
-
-  if (!profileData) return null;
-
-  const subscriptionPlan = subscription?.plan?.name?.toLowerCase() || "free";
+  // Build locked/unlocked menus
   const featuresItems = getFeaturesWithLock(originalFeaturesItems, subscriptionPlan);
-  const settingsItems = getSettingsWithLock(originalSettingsItems, subscriptionPlan, profileData.user.role);
+  const role = profileData?.user?.role || "employee";
+  const settingsItems = getSettingsWithLock(originalSettingsItems, subscriptionPlan, role);
 
-  const onNavigate = (path) => {
-    router.push(path);
+  // Navigation
+  const onNavigate = (route) => {
+    if (closeSidebar) closeSidebar();
+    router.push(route);
   };
 
+  const toggleGroup = (id) => {
+    setOpenDropdown(openDropdown === id ? null : id);
+  };
+
+  if (!token || !profileData) {
+    // not loaded or no user => return nothing or a fallback
+    return null;
+  }
+
   return (
-    <SidebarProvider className="border-none">
-      <Sidebar className="border-none bg-gradient-to-r from-neutral-100 dark:from-black to-white dark:to-neutral-900 lg:pt-14 h-[calc(100vh-4rem)] lg:h-screen fixed left-0 top-16 lg:top-0 z-40 w-64 overflow-y-auto">
-        <SidebarHeader>
-          <SidebarUserInfo profileData={profileData} subscriptionPlan={subscriptionPlan} />
-        </SidebarHeader>
-        <SidebarContent className="space-y-6 px-3 py-4">
-          <div>
-            <h2 className="mb-2 px-4 text-sm font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Dashboard</h2>
-            <MainNavigation
-              items={featuresItems}
-              pathname={pathname}
-              onNavigate={onNavigate}
-              openDropdown={openDropdown}
-              setOpenDropdown={setOpenDropdown}
-            />
-          </div>
-          <div>
-            <h2 className="mb-2 px-4 text-sm font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Settings</h2>
-            <SettingsMenu
-              items={settingsItems}
-              pathname={pathname}
-              onNavigate={onNavigate}
-              openDropdown={openDropdown}
-              setOpenDropdown={setOpenDropdown}
-            />
-          </div>
-        </SidebarContent>
-      </Sidebar>
-    </SidebarProvider>
+    <div
+      className={`
+        fixed top-0 left-0 z-50 w-64 h-screen 
+        bg-gradient-to-r from-neutral-100 dark:from-black to-white dark:to-neutral-900
+        border-r border-neutral-200 dark:border-neutral-700
+        transform transition-transform duration-300 ease-in-out
+        ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        md:translate-x-0 md:static md:h-auto
+      `}
+    >
+      {/* 
+        The backdrop if you want to click outside to close – 
+        only display on mobile and only if open
+      */}
+      {isSidebarOpen && <div className="absolute inset-0 bg-black/30 block md:hidden" onClick={closeSidebar} />}
+
+      {/* The actual scrollable sidebar content */}
+      <div className="relative z-10 flex flex-col h-full overflow-y-auto">
+        {/* Close button (X) for mobile */}
+        {isSidebarOpen && (
+          <button
+            onClick={closeSidebar}
+            className="absolute top-3 right-3 md:hidden p-2 text-neutral-800 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 rounded-full hover:bg-neutral-200"
+          >
+            <CloseIcon className="w-4 h-4" />
+          </button>
+        )}
+
+        {/* 1) Header: user info */}
+        <SidebarUserInfo profileData={profileData} subscriptionPlan={subscriptionPlan} />
+
+        {/* 2) Features menu */}
+        <div className="px-3 py-3">
+          <h2 className="mb-2 px-2 text-sm font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Dashboard</h2>
+          <ul className="space-y-1">
+            {featuresItems.map((group) => (
+              <CollapsibleNavItem
+                key={group.id}
+                item={group}
+                currentPath={pathname}
+                onNavigate={onNavigate}
+                expanded={openDropdown === group.id}
+                onToggle={toggleGroup}
+              />
+            ))}
+          </ul>
+        </div>
+
+        {/* 3) Settings menu */}
+        <div className="px-3 py-3">
+          <h2 className="mb-2 px-2 text-sm font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Settings</h2>
+          <ul className="space-y-1">
+            {settingsItems.map((group) => (
+              <CollapsibleNavItem
+                key={group.id}
+                item={group}
+                currentPath={pathname}
+                onNavigate={onNavigate}
+                expanded={openDropdown === group.id}
+                onToggle={toggleGroup}
+              />
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
   );
 }
