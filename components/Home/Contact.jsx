@@ -56,14 +56,10 @@ function Contact() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="flex items-center space-x-2 bg-orange-50 dark:bg-neutral-900 p-2 rounded-xl text-neutral-600 text-base dark:text-neutral-400 ">
-                    <FaPhone className="w-6 h-6 text-white bg-orange-500 p-1 rounded-xl" />
-                    <span className="text-xs sm:text-sm">(123) 456-7890</span>
-                  </div>
                   <div className="flex items-center space-x-2 bg-orange-50 dark:bg-neutral-900 p-2 rounded-xl text-neutral-600 dark:text-neutral-400 text-base">
                     <MdOutlineEmail className="w-6 h-6 text-white bg-orange-500 p-1 rounded-xl" />
                     <Link href="#" prefetch={false} className="text-xs sm:text-sm hover:text-orange-500 transition-colors">
-                      info@example.com
+                      info@bizsolutions.us
                     </Link>
                   </div>
                 </div>

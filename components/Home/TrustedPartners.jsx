@@ -50,8 +50,8 @@ function TrustedPartners() {
       </div>
 
       <div className="relative w-full mt-8">
-        <div className="absolute left-0 w-20 h-full z-10 bg-gradient-to-r from-white dark:from-black to-transparent"></div>
-        <div className="absolute right-0 w-20 h-full z-10 bg-gradient-to-l from-white dark:from-black to-transparent"></div>
+        <div className="absolute left-0 w-20 h-full z-10 bg-gradient-to-r from-white dark:from-neutral-950 to-transparent"></div>
+        <div className="absolute right-0 w-20 h-full z-10 bg-gradient-to-l from-white dark:from-neutral-950 to-transparent"></div>
 
         <div className="overflow-hidden w-full py-8" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
           <motion.div animate={controls} initial={{ x: "0%" }} className="flex items-center gap-16 sm:gap-24 md:gap-32 lg:gap-40 w-[200%]">
@@ -62,7 +62,7 @@ function TrustedPartners() {
                 whileHover={{ scale: 1.05 }}
                 transition={{ type: "spring", stiffness: 400, damping: 10 }}
               >
-                <div className="relative bg-white dark:bg-neutral-800 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 flex items-center justify-center">
+                <div className="relative bg-white dark:bg-neutral-600 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 flex items-center justify-center">
                   <Image
                     src={partner.src || "/placeholder.svg"}
                     alt={partner.name || `Trusted Partner ${index + 1}`}
