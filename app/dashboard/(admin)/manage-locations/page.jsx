@@ -1,10 +1,10 @@
-import TemporaryPage from "@/components/Dashboard/temporary-page";
+import ManageLocations from "@/components/Dashboard/DashboardContent/Settings/Admin/ManageLocations";
 import React from "react";
 
 export default function ManageLocationsPage() {
   return (
     <div>
-      <TemporaryPage />
+      <ManageLocations />
     </div>
   );
 }

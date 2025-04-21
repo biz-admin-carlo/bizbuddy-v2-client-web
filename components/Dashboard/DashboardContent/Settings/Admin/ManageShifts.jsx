@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { PlusCircle, Edit3, Trash2, ChevronUp, ChevronDown, Search, Calendar, AlertCircle, RefreshCw, XCircle, Filter, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { PlusCircle, Edit3, Trash2, ChevronUp, ChevronDown, Search, Clock, AlertCircle, RefreshCw, XCircle, Filter } from "lucide-react";
 import { toast, Toaster } from "sonner";
-import { RRule } from "rrule";
-import { format } from "date-fns";
 import useAuthStore from "@/store/useAuthStore";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -12,140 +10,111 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-/* ---------- helpers ---------- */
-const DAY_OPTIONS = [
-  { value: "MO", label: "MO" },
-  { value: "TU", label: "TU" },
-  { value: "WE", label: "WE" },
-  { value: "TH", label: "TH" },
-  { value: "FR", label: "FR" },
-  { value: "SA", label: "SA" },
-  { value: "SU", label: "SU" },
-];
-
-// Add this mapping function near the top of the file, after the DAY_OPTIONS constant
-const dayCodeToName = {
-  MO: "Mon",
-  TU: "Tues",
-  WE: "Wed",
-  TH: "Thurs",
-  FR: "Fri",
-  SA: "Sat",
-  SU: "Sun",
-};
-
-function buildRRule(byday, dtStartISO) {
-  return new RRule({
-    freq: RRule.WEEKLY,
-    byweekday: byday.map((d) => RRule[d]),
-    dtstart: new Date(dtStartISO),
-  }).toString();
-}
-
-function parseRRule(rule) {
+/* ---------- helper: total hours ---------- */
+function totalHours(startISO, endISO) {
+  if (!startISO || !endISO) return "—";
   try {
-    const r = RRule.fromString(rule);
-    return (r.options.byweekday || []).map((w) => w.toString().slice(0, 2));
-  } catch {
-    return [];
+    const start = new Date(startISO);
+    const end = new Date(endISO);
+    let diff = end - start;
+    if (diff < 0) diff += 24 * 60 * 60 * 1000;
+    return (diff / 36e5).toFixed(2);
+  } catch (err) {
+    console.error("Error calculating hours:", err);
+    return "—";
   }
 }
 
-function ManageShiftSchedules() {
+function ManageShifts() {
   const { token } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   /* ---------- state ---------- */
-  const [schedules, setSchedules] = useState([]);
   const [shifts, setShifts] = useState([]);
-  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({
-    shiftId: "",
-    byday: ["MO", "TU", "WE", "TH", "FR"],
-    startDate: format(new Date(), "yyyy-MM-dd"),
-    endDate: "",
-    assignedToAll: true,
-    assignedUserId: "",
+    shiftName: "",
+    startTime: "08:00",
+    endTime: "17:00",
+    differentialMultiplier: "1.0",
   });
 
   const [showEdit, setShowEdit] = useState(false);
-  const [editForm, setEditForm] = useState({ ...createForm, id: null });
+  const [editForm, setEditForm] = useState({
+    id: null,
+    shiftName: "",
+    startTime: "",
+    endTime: "",
+    differentialMultiplier: "1.0",
+  });
 
   const [showDelete, setShowDelete] = useState(false);
-  const [scheduleToDelete, setScheduleToDelete] = useState(null);
+  const [shiftToDelete, setShiftToDelete] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   const [filters, setFilters] = useState({ name: "" });
-  const [sortConfig, setSortConfig] = useState({ key: "startDate", direction: "descending" });
+  const [sortConfig, setSortConfig] = useState({ key: "shiftName", direction: "ascending" });
 
   /* ---------- fetch ---------- */
   useEffect(() => {
-    if (token) fetchAll();
+    if (token) fetchShifts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  async function fetchAll() {
+  async function fetchShifts() {
     setLoading(true);
     try {
-      const [schRes, shiftRes, userRes] = await Promise.all([
-        fetch(`${API_URL}/api/shiftschedules`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${API_URL}/api/shifts`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${API_URL}/api/employee`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
-      const [schData, shiftData, userData] = await Promise.all([schRes.json(), shiftRes.json(), userRes.json()]);
-      if (schRes.ok) setSchedules(schData.data || []);
-      else toast.message(schData.error || "Failed to fetch schedules.");
-      if (shiftRes.ok) setShifts(shiftData.data || []);
-      else toast.message(shiftData.error || "Failed to fetch shifts.");
-      if (userRes.ok) setUsers(userData.data || []);
-      else toast.message(userData.error || "Failed to fetch users.");
+      const res = await fetch(`${API_URL}/api/shifts`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) setShifts(data.data || []);
+      else toast.message(data.error || "Failed to fetch shifts.");
     } catch (e) {
       console.error(e);
-      toast.message("Failed to fetch data.");
+      toast.message("Failed to fetch shifts.");
     }
     setLoading(false);
   }
 
-  const refreshData = async () => {
+  const refreshShifts = async () => {
     setRefreshing(true);
     try {
-      await fetchAll();
-      toast.message("Data refreshed");
+      const res = await fetch(`${API_URL}/api/shifts`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setShifts(data.data || []);
+        toast.message("Shifts refreshed");
+      } else {
+        toast.message(data.error || "Failed to refresh shifts.");
+      }
     } catch (e) {
       console.error(e);
-      toast.message("Failed to refresh data.");
+      toast.message("Failed to refresh shifts.");
     }
     setRefreshing(false);
   };
 
-  /* ---------- helpers ---------- */
-  const shiftMap = useMemo(() => Object.fromEntries(shifts.map((s) => [s.id, s.shiftName])), [shifts]);
-
+  /* ---------- filter / sort ---------- */
   function filteredSorted() {
-    const data = schedules.filter((s) => shiftMap[s.shiftId]?.toLowerCase().includes(filters.name.toLowerCase()));
+    const data = shifts.filter((s) => s.shiftName.toLowerCase().includes(filters.name.toLowerCase()));
     if (sortConfig.key) {
       data.sort((a, b) => {
         let aVal = a[sortConfig.key];
         let bVal = b[sortConfig.key];
-        if (sortConfig.key === "startDate") {
-          aVal = new Date(aVal).getTime();
-          bVal = new Date(bVal).getTime();
+        if (sortConfig.key === "differentialMultiplier") {
+          aVal = Number(aVal);
+          bVal = Number(bVal);
         } else {
           aVal = (aVal ?? "").toString().toLowerCase();
           bVal = (bVal ?? "").toString().toLowerCase();
@@ -161,32 +130,25 @@ function ManageShiftSchedules() {
   /* ---------- create ---------- */
   function openCreate() {
     setCreateForm({
-      shiftId: shifts[0]?.id || "",
-      byday: ["MO", "TU", "WE", "TH", "FR"],
-      startDate: format(new Date(), "yyyy-MM-dd"),
-      endDate: "",
-      assignedToAll: true,
-      assignedUserId: "",
+      shiftName: "",
+      startTime: "08:00",
+      endTime: "17:00",
+      differentialMultiplier: "1.0",
     });
     setShowCreate(true);
   }
 
   async function handleCreate() {
-    if (!createForm.shiftId) return toast.message("Select shift template.");
-    if (createForm.byday.length === 0) return toast.message("Select day(s).");
+    if (!createForm.shiftName.trim()) return toast.message("Shift name required.");
     setActionLoading(true);
-
-    const payload = {
-      shiftId: createForm.shiftId,
-      recurrencePattern: buildRRule(createForm.byday, `${createForm.startDate}T00:00:00Z`),
-      startDate: createForm.startDate,
-      endDate: createForm.endDate || null,
-      assignedToAll: createForm.assignedToAll,
-      assignedUserId: createForm.assignedToAll ? null : createForm.assignedUserId,
-    };
-
     try {
-      const res = await fetch(`${API_URL}/api/shiftschedules/create`, {
+      const payload = {
+        shiftName: createForm.shiftName.trim(),
+        startTime: new Date(`1970-01-01T${createForm.startTime}:00`).toISOString(),
+        endTime: new Date(`1970-01-01T${createForm.endTime}:00`).toISOString(),
+        differentialMultiplier: Number.parseFloat(createForm.differentialMultiplier),
+      };
+      const res = await fetch(`${API_URL}/api/shifts/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -196,50 +158,42 @@ function ManageShiftSchedules() {
       });
       const data = await res.json();
       if (res.status === 201 || res.status === 200) {
-        toast.message(data.message || "Schedule created.");
+        toast.message(data.message || "Shift created.");
         setShowCreate(false);
-        fetchAll();
-      } else toast.message(data.error || "Failed to create schedule.");
+        fetchShifts();
+      } else toast.message(data.error || "Failed to create shift.");
     } catch (e) {
       console.error(e);
-      toast.message("Failed to create schedule.");
+      toast.message("Failed to create shift.");
     } finally {
       setActionLoading(false);
     }
   }
 
   /* ---------- edit ---------- */
-  function openEdit(sch) {
+  function openEdit(shift) {
     setEditForm({
-      id: sch.id,
-      shiftId: sch.shiftId,
-      byday: parseRRule(sch.recurrencePattern),
-      startDate: sch.startDate.slice(0, 10),
-      endDate: sch.endDate?.slice(0, 10) || "",
-      assignedToAll: sch.assignedToAll,
-      assignedUserId: sch.assignedUserId || "",
+      id: shift.id,
+      shiftName: shift.shiftName,
+      startTime: new Date(shift.startTime).toISOString().slice(11, 16),
+      endTime: new Date(shift.endTime).toISOString().slice(11, 16),
+      differentialMultiplier: String(shift.differentialMultiplier),
     });
     setShowEdit(true);
   }
 
   async function handleSaveEdit() {
-    const { id, shiftId, byday, startDate, endDate, assignedToAll, assignedUserId } = editForm;
-
-    if (!shiftId) return toast.message("Select shift template.");
-    if (byday.length === 0) return toast.message("Select day(s).");
+    const { id, shiftName, startTime, endTime, differentialMultiplier } = editForm;
+    if (!shiftName.trim()) return toast.message("Shift name required.");
     setActionLoading(true);
-
-    const payload = {
-      shiftId,
-      recurrencePattern: buildRRule(byday, `${startDate}T00:00:00Z`),
-      startDate,
-      endDate: endDate || null,
-      assignedToAll,
-      assignedUserId: assignedToAll ? null : assignedUserId,
-    };
-
     try {
-      const res = await fetch(`${API_URL}/api/shiftschedules/${id}`, {
+      const payload = {
+        shiftName: shiftName.trim(),
+        startTime: new Date(`1970-01-01T${startTime}:00`).toISOString(),
+        endTime: new Date(`1970-01-01T${endTime}:00`).toISOString(),
+        differentialMultiplier: Number.parseFloat(differentialMultiplier),
+      };
+      const res = await fetch(`${API_URL}/api/shifts/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -249,44 +203,44 @@ function ManageShiftSchedules() {
       });
       const data = await res.json();
       if (res.ok) {
-        toast.message(data.message || "Schedule updated.");
+        toast.message(data.message || "Shift updated.");
         setShowEdit(false);
-        fetchAll();
-      } else toast.message(data.error || "Failed to update schedule.");
+        fetchShifts();
+      } else toast.message(data.error || "Failed to update shift.");
     } catch (e) {
       console.error(e);
-      toast.message("Failed to update schedule.");
+      toast.message("Failed to update shift.");
     } finally {
       setActionLoading(false);
     }
   }
 
   /* ---------- delete ---------- */
-  function openDelete(schedule) {
-    setScheduleToDelete(schedule);
+  function openDelete(shift) {
+    setShiftToDelete(shift);
     setShowDelete(true);
   }
 
   async function confirmDelete() {
-    if (!scheduleToDelete) return;
+    if (!shiftToDelete) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/shiftschedules/${scheduleToDelete.id}`, {
+      const res = await fetch(`${API_URL}/api/shifts/${shiftToDelete.id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (res.ok) {
-        toast.message(data.message || "Schedule deleted.");
-        setSchedules((p) => p.filter((s) => s.id !== scheduleToDelete.id));
-      } else toast.message(data.error || "Failed to delete schedule.");
+        toast.message(data.message || "Shift deleted.");
+        setShifts((p) => p.filter((s) => s.id !== shiftToDelete.id));
+      } else toast.message(data.error || "Failed to delete shift.");
     } catch (e) {
       console.error(e);
-      toast.message("Failed to delete schedule.");
+      toast.message("Failed to delete shift.");
     } finally {
       setActionLoading(false);
       setShowDelete(false);
-      setScheduleToDelete(null);
+      setShiftToDelete(null);
     }
   }
 
@@ -299,10 +253,10 @@ function ManageShiftSchedules() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Calendar className="h-7 w-7 text-orange-500" />
-            Manage Shift Schedules
+            <Clock className="h-7 w-7 text-orange-500" />
+            Manage Shift Templates
           </h2>
-          <p className="text-muted-foreground mt-1">Create and manage recurring shift schedules</p>
+          <p className="text-muted-foreground mt-1">Create and manage shift templates for your organization</p>
         </div>
 
         <div className="flex gap-2">
@@ -312,7 +266,7 @@ function ManageShiftSchedules() {
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={refreshData}
+                  onClick={refreshShifts}
                   disabled={refreshing}
                   className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
                 >
@@ -320,7 +274,7 @@ function ManageShiftSchedules() {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Refresh data</p>
+                <p>Refresh shifts</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -329,122 +283,44 @@ function ManageShiftSchedules() {
             <DialogTrigger asChild>
               <Button onClick={openCreate} className="bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-semibold">
                 <PlusCircle className="mr-2 h-4 w-4" />
-                Create Schedule
+                Create Shift
               </Button>
             </DialogTrigger>
 
             {/* create dialog */}
-            <DialogContent className="border-2 dark:border-white/10 max-w-xl">
+            <DialogContent className="border-2 dark:border-white/10">
               <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
                     <PlusCircle className="h-5 w-5" />
                   </div>
-                  Create New Schedule
+                  Create New Shift
                 </DialogTitle>
-                <DialogDescription>Add a new recurring shift schedule</DialogDescription>
+                <DialogDescription>Add a new shift template to your organization</DialogDescription>
               </DialogHeader>
 
               <div className="space-y-4 py-4">
-                {/* shift template */}
-                <div className="grid grid-cols-4 items-center gap-4 text-sm">
-                  <label className="text-right font-medium">Shift Template</label>
-                  <Select value={createForm.shiftId} onValueChange={(v) => setCreateForm((p) => ({ ...p, shiftId: v }))}>
-                    <SelectTrigger className="col-span-3">
-                      <SelectValue placeholder="Select shift" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {shifts.map((s) => (
-                        <SelectItem key={s.id} value={String(s.id)}>
-                          {s.shiftName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* days */}
-                <div className="grid grid-cols-4 items-start gap-4 text-sm">
-                  <label className="text-right font-medium">Days</label>
-                  <div className="col-span-3 flex flex-wrap gap-2">
-                    {DAY_OPTIONS.map((d) => {
-                      const active = createForm.byday.includes(d.label);
-                      return (
-                        <Button
-                          key={d.label}
-                          size="sm"
-                          variant={active ? "default" : "outline"}
-                          className={`px-2 ${
-                            active
-                              ? "bg-orange-500 hover:bg-orange-600"
-                              : "border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                          }`}
-                          onClick={() =>
-                            setCreateForm((p) => {
-                              const exists = p.byday.includes(d.label);
-                              const list = exists ? p.byday.filter((x) => x !== d.label) : [...p.byday, d.label];
-                              return { ...p, byday: list };
-                            })
-                          }
-                        >
-                          {dayCodeToName[d.label] || d.label}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* dates */}
-                {["startDate", "endDate"].map((field) => (
+                {[
+                  ["shiftName", "Shift Name", "text"],
+                  ["startTime", "Start Time", "time"],
+                  ["endTime", "End Time", "time"],
+                  ["differentialMultiplier", "Multiplier", "number"],
+                ].map(([field, label, type]) => (
                   <div key={field} className="grid grid-cols-4 items-center gap-4 text-sm">
-                    <label className="text-right font-medium">{field === "startDate" ? "Start Date" : "End Date (opt.)"}</label>
+                    <label className="text-right font-medium" htmlFor={`c-${field}`}>
+                      {label}
+                    </label>
                     <Input
-                      type="date"
+                      id={`c-${field}`}
+                      type={type}
+                      step={field === "differentialMultiplier" ? "0.1" : undefined}
                       className="col-span-3"
                       value={createForm[field]}
                       onChange={(e) => setCreateForm((p) => ({ ...p, [field]: e.target.value }))}
                     />
                   </div>
                 ))}
-
-                {/* assign to all */}
-                <div className="grid grid-cols-4 items-center gap-4 text-sm">
-                  <label className="text-right font-medium">Assign to</label>
-                  <div className="col-span-3">
-                    <div className="flex items-center mb-2">
-                      <input
-                        type="checkbox"
-                        id="assignToAll"
-                        className="mr-2"
-                        checked={createForm.assignedToAll}
-                        onChange={(e) =>
-                          setCreateForm((p) => ({
-                            ...p,
-                            assignedToAll: e.target.checked,
-                          }))
-                        }
-                      />
-                      <label htmlFor="assignToAll" className="text-sm">
-                        Assign to all users
-                      </label>
-                    </div>
-                    {!createForm.assignedToAll && (
-                      <Select value={createForm.assignedUserId} onValueChange={(v) => setCreateForm((p) => ({ ...p, assignedUserId: v }))}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select user" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60">
-                          {users.map((u) => (
-                            <SelectItem key={u.id} value={String(u.id)}>
-                              {u.email}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                </div>
               </div>
 
               <DialogFooter>
@@ -465,7 +341,7 @@ function ManageShiftSchedules() {
                       Creating...
                     </span>
                   ) : (
-                    <span>Create Schedule</span>
+                    <span>Create Shift</span>
                   )}
                 </Button>
               </DialogFooter>
@@ -484,7 +360,7 @@ function ManageShiftSchedules() {
             </div>
             Search & Filter
           </CardTitle>
-          <CardDescription>Find schedules by shift name</CardDescription>
+          <CardDescription>Find shifts by name</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-3 mb-4">
@@ -508,7 +384,7 @@ function ManageShiftSchedules() {
 
           <div className="flex justify-between items-center">
             <div className="text-sm text-muted-foreground">
-              Showing {filteredSorted().length} of {schedules.length} schedules
+              Showing {filteredSorted().length} of {shifts.length} shifts
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Sort by:</span>
@@ -520,19 +396,46 @@ function ManageShiftSchedules() {
                       size="sm"
                       onClick={() =>
                         setSortConfig({
-                          key: "startDate",
-                          direction: sortConfig.key === "startDate" && sortConfig.direction === "ascending" ? "descending" : "ascending",
+                          key: "shiftName",
+                          direction: sortConfig.key === "shiftName" && sortConfig.direction === "ascending" ? "descending" : "ascending",
                         })
                       }
-                      className={`${sortConfig.key === "startDate" ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}`}
+                      className={`${sortConfig.key === "shiftName" ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}`}
                     >
-                      Date{" "}
-                      {sortConfig.key === "startDate" &&
+                      Name{" "}
+                      {sortConfig.key === "shiftName" &&
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Sort by start date</p>
+                    <p>Sort by shift name</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setSortConfig({
+                          key: "differentialMultiplier",
+                          direction: sortConfig.key === "differentialMultiplier" && sortConfig.direction === "ascending" ? "descending" : "ascending",
+                        })
+                      }
+                      className={`${
+                        sortConfig.key === "differentialMultiplier" ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""
+                      }`}
+                    >
+                      Multiplier{" "}
+                      {sortConfig.key === "differentialMultiplier" &&
+                        (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Sort by multiplier</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -547,11 +450,11 @@ function ManageShiftSchedules() {
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
             <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
-              <Calendar className="h-5 w-5" />
+              <Clock className="h-5 w-5" />
             </div>
-            Shift Schedules
+            Shift Templates
           </CardTitle>
-          <CardDescription>Manage your organization's recurring shift schedules</CardDescription>
+          <CardDescription>Manage your organization's shift templates</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="rounded-md border">
@@ -562,35 +465,35 @@ function ManageShiftSchedules() {
                     className="cursor-pointer"
                     onClick={() =>
                       setSortConfig({
-                        key: "shift",
-                        direction: sortConfig.key === "shift" && sortConfig.direction === "ascending" ? "descending" : "ascending",
+                        key: "shiftName",
+                        direction: sortConfig.key === "shiftName" && sortConfig.direction === "ascending" ? "descending" : "ascending",
                       })
                     }
                   >
                     <div className="flex items-center">
-                      Shift{" "}
-                      {sortConfig.key === "shift" &&
+                      Shift Name{" "}
+                      {sortConfig.key === "shiftName" &&
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </div>
                   </TableHead>
-                  <TableHead>Days</TableHead>
+                  <TableHead>Start</TableHead>
+                  <TableHead>End</TableHead>
                   <TableHead
                     className="cursor-pointer"
                     onClick={() =>
                       setSortConfig({
-                        key: "startDate",
-                        direction: sortConfig.key === "startDate" && sortConfig.direction === "ascending" ? "descending" : "ascending",
+                        key: "differentialMultiplier",
+                        direction: sortConfig.key === "differentialMultiplier" && sortConfig.direction === "ascending" ? "descending" : "ascending",
                       })
                     }
                   >
                     <div className="flex items-center">
-                      Start Date{" "}
-                      {sortConfig.key === "startDate" &&
+                      Multiplier{" "}
+                      {sortConfig.key === "differentialMultiplier" &&
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </div>
                   </TableHead>
-                  <TableHead>End Date</TableHead>
-                  <TableHead>Assigned</TableHead>
+                  <TableHead>Total hrs</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -634,43 +537,34 @@ function ManageShiftSchedules() {
                         <TableCell className="font-medium">
                           <div className="flex items-center">
                             <div className="w-2 h-2 rounded-full bg-orange-500 mr-2"></div>
-                            {shiftMap[s.shiftId] || "—"}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {parseRRule(s.recurrencePattern).map((day) => (
-                              <Badge key={day} variant="outline" className="border-orange-500/30 text-orange-700 dark:text-orange-400">
-                                {dayCodeToName[day] || day}
-                              </Badge>
-                            ))}
+                            {s.shiftName}
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center">
-                            <Calendar className="h-3 w-3 mr-1 text-orange-500" />
-                            {s.startDate.slice(0, 10)}
+                            <Clock className="h-3 w-3 mr-1 text-orange-500" />
+                            {new Date(s.startTime).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
                           </div>
                         </TableCell>
                         <TableCell>
-                          {s.endDate ? (
-                            <div className="flex items-center">
-                              <Calendar className="h-3 w-3 mr-1 text-orange-500" />
-                              {s.endDate.slice(0, 10)}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">No end date</span>
-                          )}
+                          <div className="flex items-center">
+                            <Clock className="h-3 w-3 mr-1 text-orange-500" />
+                            {new Date(s.endTime).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </div>
                         </TableCell>
                         <TableCell>
-                          {s.assignedToAll ? (
-                            <Badge className="bg-orange-500 hover:bg-orange-600 text-white">
-                              <Users className="h-3 w-3 mr-1" />
-                              All users
-                            </Badge>
-                          ) : (
-                            <span className="text-sm">{users.find((u) => u.id === s.assignedUserId)?.email || "—"}</span>
-                          )}
+                          <Badge variant="outline" className="border-orange-500/30 text-orange-700 dark:text-orange-400">
+                            {s.differentialMultiplier}x
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className="bg-orange-500 hover:bg-orange-600 text-white">{totalHours(s.startTime, s.endTime)} hrs</Badge>
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
@@ -687,7 +581,7 @@ function ManageShiftSchedules() {
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>Edit schedule</p>
+                                  <p>Edit shift</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -705,7 +599,7 @@ function ManageShiftSchedules() {
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>Delete schedule</p>
+                                  <p>Delete shift</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -719,9 +613,9 @@ function ManageShiftSchedules() {
                     <TableCell colSpan={6} className="h-32 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
                         <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <Calendar className="h-8 w-8 text-orange-500/50" />
+                          <Clock className="h-8 w-8 text-orange-500/50" />
                         </div>
-                        <p>No schedules found matching your filters</p>
+                        <p>No shifts found matching your filters</p>
                         {filters.name && (
                           <Button variant="link" onClick={() => setFilters({ name: "" })} className="text-orange-500 hover:text-orange-600 mt-2">
                             Clear all filters
@@ -739,117 +633,39 @@ function ManageShiftSchedules() {
 
       {/* edit dialog */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
-        <DialogContent className="border-2 dark:border-white/10 max-w-xl">
+        <DialogContent className="border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
                 <Edit3 className="h-5 w-5" />
               </div>
-              Edit Schedule
+              Edit Shift
             </DialogTitle>
-            <DialogDescription>Update shift schedule information</DialogDescription>
+            <DialogDescription>Update shift template information</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* shift */}
-            <div className="grid grid-cols-4 items-center gap-4 text-sm">
-              <label className="text-right font-medium">Shift Template</label>
-              <Select value={editForm.shiftId} onValueChange={(v) => setEditForm((p) => ({ ...p, shiftId: v }))}>
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select shift" />
-                </SelectTrigger>
-                <SelectContent>
-                  {shifts.map((s) => (
-                    <SelectItem key={s.id} value={String(s.id)}>
-                      {s.shiftName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* days */}
-            <div className="grid grid-cols-4 items-start gap-4 text-sm">
-              <label className="text-right font-medium">Days</label>
-              <div className="col-span-3 flex flex-wrap gap-2">
-                {DAY_OPTIONS.map((d) => {
-                  const active = editForm.byday.includes(d.label);
-                  return (
-                    <Button
-                      key={d.label}
-                      size="sm"
-                      variant={active ? "default" : "outline"}
-                      className={`px-2 ${
-                        active
-                          ? "bg-orange-500 hover:bg-orange-600"
-                          : "border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                      }`}
-                      onClick={() =>
-                        setEditForm((p) => {
-                          const exists = p.byday.includes(d.label);
-                          const list = exists ? p.byday.filter((x) => x !== d.label) : [...p.byday, d.label];
-                          return { ...p, byday: list };
-                        })
-                      }
-                    >
-                      {dayCodeToName[d.label] || d.label}
-                    </Button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* dates */}
-            {["startDate", "endDate"].map((field) => (
+            {[
+              ["shiftName", "Shift Name", "text"],
+              ["startTime", "Start Time", "time"],
+              ["endTime", "End Time", "time"],
+              ["differentialMultiplier", "Multiplier", "number"],
+            ].map(([field, label, type]) => (
               <div key={field} className="grid grid-cols-4 items-center gap-4 text-sm">
-                <label className="text-right font-medium">{field === "startDate" ? "Start Date" : "End Date (opt.)"}</label>
+                <label className="text-right font-medium" htmlFor={`e-${field}`}>
+                  {label}
+                </label>
                 <Input
-                  type="date"
+                  id={`e-${field}`}
+                  type={type}
+                  step={field === "differentialMultiplier" ? "0.1" : undefined}
                   className="col-span-3"
                   value={editForm[field]}
                   onChange={(e) => setEditForm((p) => ({ ...p, [field]: e.target.value }))}
                 />
               </div>
             ))}
-
-            {/* assign */}
-            <div className="grid grid-cols-4 items-center gap-4 text-sm">
-              <label className="text-right font-medium">Assign to</label>
-              <div className="col-span-3">
-                <div className="flex items-center mb-2">
-                  <input
-                    type="checkbox"
-                    id="editAssignToAll"
-                    className="mr-2"
-                    checked={editForm.assignedToAll}
-                    onChange={(e) =>
-                      setEditForm((p) => ({
-                        ...p,
-                        assignedToAll: e.target.checked,
-                      }))
-                    }
-                  />
-                  <label htmlFor="editAssignToAll" className="text-sm">
-                    Assign to all users
-                  </label>
-                </div>
-                {!editForm.assignedToAll && (
-                  <Select value={editForm.assignedUserId} onValueChange={(v) => setEditForm((p) => ({ ...p, assignedUserId: v }))}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select user" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      {users.map((u) => (
-                        <SelectItem key={u.id} value={String(u.id)}>
-                          {u.email}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            </div>
           </div>
 
           <DialogFooter>
@@ -886,32 +702,37 @@ function ManageShiftSchedules() {
               <div className="p-2 rounded-full bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400">
                 <AlertCircle className="h-5 w-5" />
               </div>
-              Delete Schedule
+              Delete Shift
             </DialogTitle>
-            <DialogDescription>Are you sure you want to delete this schedule? This action cannot be undone.</DialogDescription>
+            <DialogDescription>Are you sure you want to delete this shift? This action cannot be undone.</DialogDescription>
           </DialogHeader>
 
-          {scheduleToDelete && (
+          {shiftToDelete && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4 my-4">
               <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-sm text-red-600 dark:text-red-400">
                 <div>
-                  <span className="opacity-70">Shift:</span> <span className="font-medium">{shiftMap[scheduleToDelete.shiftId] || "—"}</span>
+                  <span className="opacity-70">Shift Name:</span> <span className="font-medium">{shiftToDelete.shiftName}</span>
                 </div>
                 <div>
-                  <span className="opacity-70">Days:</span>{" "}
+                  <span className="opacity-70">Hours:</span>{" "}
+                  <span className="font-medium">{totalHours(shiftToDelete.startTime, shiftToDelete.endTime)}</span>
+                </div>
+                <div>
+                  <span className="opacity-70">Start Time:</span>{" "}
                   <span className="font-medium">
-                    {parseRRule(scheduleToDelete.recurrencePattern)
-                      .map((day) => dayCodeToName[day] || day)
-                      .join(", ")}
+                    {new Date(shiftToDelete.startTime).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </span>
                 </div>
                 <div>
-                  <span className="opacity-70">Start Date:</span> <span className="font-medium">{scheduleToDelete.startDate.slice(0, 10)}</span>
-                </div>
-                <div>
-                  <span className="opacity-70">Assigned:</span>{" "}
+                  <span className="opacity-70">End Time:</span>{" "}
                   <span className="font-medium">
-                    {scheduleToDelete.assignedToAll ? "All users" : users.find((u) => u.id === scheduleToDelete.assignedUserId)?.email || "—"}
+                    {new Date(shiftToDelete.endTime).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </span>
                 </div>
               </div>
@@ -940,7 +761,7 @@ function ManageShiftSchedules() {
                   Deleting...
                 </span>
               ) : (
-                <span>Delete Schedule</span>
+                <span>Delete Shift</span>
               )}
             </Button>
           </DialogFooter>
@@ -950,4 +771,4 @@ function ManageShiftSchedules() {
   );
 }
 
-export default ManageShiftSchedules;
+export default ManageShifts;

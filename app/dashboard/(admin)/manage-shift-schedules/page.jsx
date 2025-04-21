@@ -1,10 +1,10 @@
-import TemporaryPage from "@/components/Dashboard/temporary-page";
+import ManageShiftSchedules from "@/components/Dashboard/DashboardContent/Settings/Admin/ManageShiftSchedules";
 import React from "react";
 
 export default function ManageShiftSchedulesPage() {
   return (
     <div>
-      <TemporaryPage />
+      <ManageShiftSchedules />
     </div>
   );
 }

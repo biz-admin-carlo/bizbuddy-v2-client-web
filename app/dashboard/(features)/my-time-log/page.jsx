@@ -1,10 +1,10 @@
-import TemporaryPage from "@/components/Dashboard/temporary-page";
+import MyTimeLog from "@/components/Dashboard/DashboardContent/Features/MyTimeLog";
 import React from "react";
 
 export default function MyTimeLogPage() {
   return (
     <div>
-      <TemporaryPage />
+      <MyTimeLog />
     </div>
   );
 }

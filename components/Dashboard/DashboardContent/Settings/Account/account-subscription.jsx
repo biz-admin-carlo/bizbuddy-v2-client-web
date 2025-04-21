@@ -8,7 +8,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
-import { Building, Calendar, CreditCard, ChevronRight, ShieldCheck, AlertCircle, ArrowUp, ChevronLeft } from "lucide-react";
+import { Building, Calendar, CreditCard, ShieldCheck, AlertCircle, ArrowUp, ChevronLeft, CheckCircle2, Sparkles, RefreshCcw } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import UpgradePricing from "./UpgradeSubscription/upgrade-subscription-pricing";
 import UpgradePayment from "./UpgradeSubscription/upgrade-subscription-payment";
 
@@ -38,7 +39,10 @@ export default function AccountSubscription() {
           const { user, company, subscription } = data.data;
           if (company.userId !== user.id) {
             setError("Access denied. Only the company owner can manage subscriptions.");
-            toast.error("Access denied. Only the company owner can manage subscriptions.");
+            toast.message("Access denied. Only the company owner can manage subscriptions.", {
+              icon: <AlertCircle className="h-5 w-5 text-red-500" />,
+              duration: 5000,
+            });
             setLoading(false);
             return;
           }
@@ -46,12 +50,18 @@ export default function AccountSubscription() {
           setSubscription(subscription);
         } else {
           setError("Failed to retrieve profile data.");
-          toast.error("Failed to retrieve profile data.");
+          toast.message("Failed to retrieve profile data.", {
+            icon: <AlertCircle className="h-5 w-5 text-red-500" />,
+            duration: 5000,
+          });
         }
       } catch (err) {
         console.error("Error fetching profile:", err);
         setError("Failed to fetch profile.");
-        toast.error("Failed to fetch profile.");
+        toast.message("Failed to fetch profile.", {
+          icon: <AlertCircle className="h-5 w-5 text-red-500" />,
+          duration: 5000,
+        });
       } finally {
         setLoading(false);
       }
@@ -97,11 +107,17 @@ export default function AccountSubscription() {
           });
           setGroupedPlans(Object.values(grouped));
         } else {
-          toast.error(data.message || "Failed to fetch subscription plans.");
+          toast.message(data.message || "Failed to fetch subscription plans.", {
+            icon: <AlertCircle className="h-5 w-5 text-red-500" />,
+            duration: 5000,
+          });
         }
       } catch (err) {
         console.error("Error fetching subscription plans:", err);
-        toast.error("Failed to fetch subscription plans.");
+        toast.message("Failed to fetch subscription plans.", {
+          icon: <AlertCircle className="h-5 w-5 text-red-500" />,
+          duration: 5000,
+        });
       }
     }
     fetchPlans();
@@ -166,11 +182,16 @@ export default function AccountSubscription() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.message || "Failed to upgrade subscription.");
+        toast.message(data.message || "Failed to upgrade subscription.", {
+          icon: <AlertCircle className="h-5 w-5 text-red-500" />,
+          duration: 5000,
+        });
         return;
       }
     }
-    toast.success("Subscription upgraded successfully!");
+    toast.message("Subscription upgraded successfully!", {
+      icon: <CheckCircle2 className="h-5 w-5 text-orange-500" />,
+    });
     setShowUpgrade(false);
     setSelectedPlan(null);
     try {
@@ -189,22 +210,29 @@ export default function AccountSubscription() {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto p-6 space-y-8 bg-gradient-to-b from-orange-50/50 to-white dark:from-neutral-950 dark:to-neutral-900">
-        <h1 className="text-3xl font-bold text-orange-600 dark:text-orange-500">Manage My Subscription</h1>
-        <Card className="border border-neutral-200 dark:border-neutral-700 shadow-md bg-white dark:bg-neutral-800 rounded-xl overflow-hidden">
-          <CardHeader className="bg-gradient-to-r from-orange-500/10 to-orange-600/10 border-b border-neutral-200 dark:border-neutral-700">
+      <div className="max-w-7xl mx-auto p-4 space-y-6">
+        <div className="flex items-center gap-2 mb-2">
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
+            <CreditCard className="h-7 w-7 text-orange-500" />
+            Manage Subscription
+          </h2>
+        </div>
+        <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
+          <div className="h-1 w-full bg-orange-500"></div>
+          <CardHeader className="pb-2">
             <Skeleton className="h-8 w-3/4" />
           </CardHeader>
-          <CardContent className="space-y-4 p-6">
+          <CardContent className="space-y-4 pt-4">
             <Skeleton className="h-6 w-1/2" />
             <Skeleton className="h-6 w-2/3" />
           </CardContent>
         </Card>
-        <Card className="border border-neutral-200 dark:border-neutral-700 shadow-md bg-white dark:bg-neutral-800 rounded-xl overflow-hidden">
-          <CardHeader className="bg-gradient-to-r from-orange-500/10 to-orange-600/10 border-b border-neutral-200 dark:border-neutral-700">
+        <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
+          <div className="h-1 w-full bg-orange-500"></div>
+          <CardHeader className="pb-2">
             <Skeleton className="h-8 w-3/4" />
           </CardHeader>
-          <CardContent className="space-y-4 p-6">
+          <CardContent className="space-y-4 pt-4">
             <Skeleton className="h-6 w-1/2" />
             <Skeleton className="h-6 w-2/3" />
             <Skeleton className="h-6 w-1/3" />
@@ -216,23 +244,33 @@ export default function AccountSubscription() {
 
   if (error) {
     return (
-      <div className="max-w-7xl mx-auto p-6 bg-gradient-to-b from-orange-50/50 to-white dark:from-neutral-950 dark:to-neutral-900">
-        <Card className="border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 shadow-md rounded-xl overflow-hidden">
-          <CardHeader>
-            <CardTitle className="flex items-center text-red-700 dark:text-red-400">
-              <AlertCircle className="mr-2 h-5 w-5" />
+      <div className="max-w-7xl mx-auto p-4 space-y-6">
+        <div className="flex items-center gap-2 mb-2">
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
+            <CreditCard className="h-7 w-7 text-orange-500" />
+            Manage Subscription
+          </h2>
+        </div>
+        <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
+          <div className="h-1 w-full bg-red-500"></div>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2">
+              <div className="p-2 rounded-full bg-red-500/10 text-red-500 dark:bg-red-500/20 dark:text-red-500">
+                <AlertCircle className="h-5 w-5" />
+              </div>
               Error
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-red-700 dark:text-red-400">{error}</p>
+          <CardContent className="pt-4">
+            <p className="text-red-600 dark:text-red-400">{error}</p>
           </CardContent>
-          <CardFooter>
+          <CardFooter className="pt-2 pb-6">
             <Button
               variant="outline"
               onClick={() => window.location.reload()}
-              className="border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
+              className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
             >
+              <RefreshCcw className="h-4 w-4 mr-2" />
               Try Again
             </Button>
           </CardFooter>
@@ -242,97 +280,154 @@ export default function AccountSubscription() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-8 min-h-screen">
-      <Toaster position="top-center" richColors />
+    <TooltipProvider delayDuration={300}>
+      <div className="max-w-7xl mx-auto p-4 space-y-6">
+        <Toaster position="top-center" richColors />
 
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}>
-        <Card className="overflow-hidden border border-neutral-200 dark:border-neutral-700 shadow-md bg-white dark:bg-neutral-800 rounded-xl">
-          <CardHeader className="pb-3 bg-gradient-to-r from-orange-500/10 to-orange-600/10 border-b border-neutral-200 dark:border-neutral-700">
-            <CardTitle className="flex items-center text-xl text-orange-700 dark:text-orange-400">
-              <Building className="mr-2 h-5 w-5 text-orange-500" />
+        {/* Header with title and icon */}
+        <div className="flex items-center gap-2 mb-2">
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
+            <CreditCard className="h-7 w-7 text-orange-500" />
+            Manage Subscription
+          </h2>
+        </div>
+
+        {/* Company Information Card */}
+        <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
+          <div className="h-1 w-full bg-orange-500"></div>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2">
+              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
+                <Building className="h-5 w-5" />
+              </div>
               Company Information
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-neutral-500 dark:text-neutral-400">Company ID</p>
-                <p className="font-medium text-neutral-800 dark:text-neutral-200">{company.id}</p>
+          <CardContent className="space-y-4 pt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="rounded-lg border p-4 bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10">
+                <p className="text-sm text-muted-foreground mb-1">Company ID</p>
+                <p className="font-medium text-lg">{company.id}</p>
               </div>
-              <div>
-                <p className="text-sm text-neutral-500 dark:text-neutral-400">Company Name</p>
-                <p className="font-medium text-neutral-800 dark:text-neutral-200">{company.name}</p>
+              <div className="rounded-lg border p-4 bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10">
+                <p className="text-sm text-muted-foreground mb-1">Company Name</p>
+                <p className="font-medium text-lg">{company.name}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-      </motion.div>
 
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}>
-        <Card className="overflow-hidden border border-neutral-200 dark:border-neutral-700 shadow-md bg-white dark:bg-neutral-800 rounded-xl">
-          <CardHeader className="pb-3 bg-gradient-to-r from-orange-500/10 to-orange-600/10 border-b border-neutral-200 dark:border-neutral-700">
-            <CardTitle className="flex items-center text-xl text-orange-700 dark:text-orange-400">
-              <CreditCard className="mr-2 h-5 w-5 text-orange-500" />
+        {/* Subscription Details Card */}
+        <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
+          <div className="h-1 w-full bg-orange-500"></div>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2">
+              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
+                <CreditCard className="h-5 w-5" />
+              </div>
               Subscription Details
             </CardTitle>
           </CardHeader>
-          <CardContent className="pt-6">
+          <CardContent className="space-y-6 pt-4">
             {subscription ? (
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-                <div className="flex items-center mb-4 md:mb-0">
-                  <Badge className="bg-gradient-to-r from-orange-500 to-orange-600 text-white mr-2 px-3 py-1 rounded-full font-medium">
-                    {subscription.plan.name} Plan
-                  </Badge>
-                  <span className="text-sm text-neutral-600 dark:text-neutral-400">{subscription.plan.rangeOfUsers} users</span>
-                </div>
-                <div className="flex flex-col md:flex-row md:items-center gap-4">
-                  <div className="flex items-center p-2 rounded-lg bg-neutral-50 dark:bg-neutral-700/50 border border-neutral-200 dark:border-neutral-700">
-                    <Calendar className="mr-2 h-4 w-4 text-orange-500" />
-                    <div>
-                      <p className="text-xs text-neutral-500 dark:text-neutral-400">Start Date</p>
-                      <p className="text-sm font-medium">{new Date(subscription.startDate).toLocaleDateString()}</p>
-                    </div>
+              <div className="flex flex-col space-y-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div className="flex items-center">
+                    <Badge className="bg-orange-500 hover:bg-orange-600 dark:bg-orange-500 mr-2 px-3 py-1">{subscription.plan.name} Plan</Badge>
+                    <span className="text-sm text-muted-foreground">{subscription.plan.rangeOfUsers} users</span>
                   </div>
-                  {subscription.endDate && (
-                    <div className="flex items-center p-2 rounded-lg bg-neutral-50 dark:bg-neutral-700/50 border border-neutral-200 dark:border-neutral-700">
-                      <Calendar className="mr-2 h-4 w-4 text-orange-500" />
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="rounded-lg border p-3 flex items-center gap-3 bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10">
+                      <Calendar className="h-4 w-4 text-orange-500" />
                       <div>
-                        <p className="text-xs text-neutral-500 dark:text-neutral-400">End Date</p>
-                        <p className="text-sm font-medium">{new Date(subscription.endDate).toLocaleDateString()}</p>
+                        <p className="text-xs text-muted-foreground">Start Date</p>
+                        <p className="text-sm font-medium">{new Date(subscription.startDate).toLocaleDateString()}</p>
                       </div>
                     </div>
-                  )}
+                    {subscription.endDate && (
+                      <div className="rounded-lg border p-3 flex items-center gap-3 bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10">
+                        <Calendar className="h-4 w-4 text-orange-500" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">End Date</p>
+                          <p className="text-sm font-medium">{new Date(subscription.endDate).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Plan Features */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="rounded-lg border p-4 bg-orange-500/10 border-orange-500/30 dark:bg-orange-500/20 dark:border-orange-500/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="p-1.5 rounded-full bg-white text-orange-500 dark:bg-black/50 dark:text-orange-500">
+                        <Sparkles className="h-4 w-4" />
+                      </div>
+                      <p className="font-medium">Plan Features</p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{subscription.plan.description || "Access to premium features"}</p>
+                  </div>
+                  <div className="rounded-lg border p-4 bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="p-1.5 rounded-full bg-white text-black/70 dark:bg-black/50 dark:text-white/70">
+                        <Building className="h-4 w-4" />
+                      </div>
+                      <p className="font-medium">User Capacity</p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{subscription.plan.rangeOfUsers} users</p>
+                  </div>
+                  <div className="rounded-lg border p-4 bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="p-1.5 rounded-full bg-white text-black/70 dark:bg-black/50 dark:text-white/70">
+                        <CreditCard className="h-4 w-4" />
+                      </div>
+                      <p className="font-medium">Billing</p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">${subscription.plan.price}/month per plan</p>
+                  </div>
                 </div>
               </div>
             ) : (
-              <div className="text-center py-6 bg-neutral-50 dark:bg-neutral-700/30 rounded-xl border border-neutral-200 dark:border-neutral-700">
-                <div className="w-16 h-16 bg-neutral-100 dark:bg-neutral-800 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <ShieldCheck className="h-8 w-8 text-neutral-400 dark:text-neutral-500" />
+              <div className="text-center py-8 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
+                <div className="w-16 h-16 bg-white dark:bg-black/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <ShieldCheck className="h-8 w-8 text-orange-500" />
                 </div>
-                <p className="text-neutral-600 dark:text-neutral-400">No active subscription found for your company.</p>
+                <p className="text-muted-foreground mb-4">No active subscription found for your company.</p>
+                <Button onClick={handleUpgradeClick} className="bg-orange-500 hover:bg-orange-600 text-white">
+                  Get Started
+                </Button>
               </div>
             )}
           </CardContent>
         </Card>
-      </motion.div>
 
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.3 }} id="upgrade-section">
-        <Card className="overflow-hidden border border-neutral-200 dark:border-neutral-700 shadow-md bg-white dark:bg-neutral-800 rounded-xl">
-          <CardHeader className="pb-3 bg-gradient-to-r from-orange-500/10 to-orange-600/10 border-b border-neutral-200 dark:border-neutral-700">
-            <CardTitle className="text-xl text-orange-700 dark:text-orange-400">Upgrade Subscription</CardTitle>
+        {/* Upgrade Subscription Card */}
+        <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
+          <div className="h-1 w-full bg-orange-500"></div>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2">
+              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              Upgrade Subscription
+            </CardTitle>
             <CardDescription>Upgrade your plan to access more features and increase user limits</CardDescription>
           </CardHeader>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4">
             <AnimatePresence mode="wait">
               {!showUpgrade ? (
                 <motion.div key="upgrade-button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  <Button
-                    onClick={handleUpgradeClick}
-                    className="bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 transition-all rounded-xl font-semibold px-5 py-2.5 h-auto"
-                  >
-                    Upgrade Subscription
-                    <ChevronRight className="ml-2 h-4 w-4" />
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button onClick={handleUpgradeClick} className="bg-orange-500 hover:bg-orange-600 text-white font-semibold gap-2">
+                        <Sparkles className="h-4 w-4" />
+                        Upgrade Subscription
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>View available plans and upgrade options</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </motion.div>
               ) : (
                 <motion.div
@@ -355,7 +450,7 @@ export default function AccountSubscription() {
                         <Button
                           variant="outline"
                           onClick={handleBackToPlans}
-                          className="mb-4 flex items-center gap-1 border-orange-200 dark:border-orange-800 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                          className="mb-4 flex items-center gap-1 border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
                         >
                           <ChevronLeft className="h-4 w-4 mr-1" />
                           Back to plans
@@ -369,19 +464,49 @@ export default function AccountSubscription() {
             </AnimatePresence>
           </CardContent>
         </Card>
-      </motion.div>
 
-      {showUpgrade && (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="fixed bottom-6 right-6">
-          <Button
-            onClick={scrollToTop}
-            size="icon"
-            className="rounded-full bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg hover:shadow-xl w-12 h-12"
-          >
-            <ArrowUp className="h-5 w-5" />
-          </Button>
-        </motion.div>
-      )}
-    </div>
+        {/* Quick summary card */}
+        <Card className="border dark:border-white/10">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Subscription Benefits</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Premium Support</p>
+                <p className="text-sm font-medium">24/7 Access</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Data Storage</p>
+                <p className="text-sm font-medium">Unlimited</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Feature Updates</p>
+                <p className="text-sm font-medium">Priority Access</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {showUpgrade && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="fixed bottom-6 right-6">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={scrollToTop}
+                  size="icon"
+                  className="rounded-full bg-orange-500 hover:bg-orange-600 text-white shadow-lg hover:shadow-xl w-12 h-12"
+                >
+                  <ArrowUp className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">
+                <p>Scroll to top</p>
+              </TooltipContent>
+            </Tooltip>
+          </motion.div>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }

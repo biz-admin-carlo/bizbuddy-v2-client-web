@@ -96,7 +96,7 @@ export default function DashboardLayout({ children }) {
           <Sidebar isSidebarOpen={isSidebarOpen} closeSidebar={() => setIsSidebarOpen(false)} />
 
           {/* MAIN CONTENT */}
-          <div className="bg-white dark:bg-neutral-900 min-h-screen p-6">{children}</div>
+          <div className="bg-white dark:bg-black min-h-screen">{children}</div>
         </div>
       </motion.div>
     </AnimatePresence>

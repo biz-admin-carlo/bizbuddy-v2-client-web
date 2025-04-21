@@ -61,7 +61,7 @@ export default function NavBar() {
   const { token } = useAuthStore();
   const pathname = usePathname();
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-t from-neutral-100 dark:from-neutral-900 to-white dark:to-black px-4 md:px-6 py-1 shadow-md dark:shadow-neutral-800">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-t from-white dark:from-black to-white dark:to-black px-4 md:px-6 py-1  border-b">
       <div className="mx-auto max-w-7xl md:px-4 px-2">
         <div className="hidden md:flex items-center justify-between h-14">
           <Link href="/">

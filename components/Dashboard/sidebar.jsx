@@ -28,9 +28,17 @@ const originalFeaturesItems = [
     id: "time-keeping",
     label: "Time Keeping",
     children: [
-      { id: "my-time-log", label: "My Time Logs" },
-      { id: "my-shift-schedule", label: "My Shift Schedule" },
       { id: "my-punch", label: "Punch" },
+      { id: "my-time-log", label: "Timecard" },
+      { id: "my-shift-schedule", label: "Schedule" },
+    ],
+  },
+  {
+    id: "leaves",
+    label: "Leaves",
+    children: [
+      { id: "my-leave-requests", label: "Request Leaves" },
+      { id: "my-leave-approvals", label: "Approved Leaves" },
     ],
   },
   {
@@ -51,7 +59,16 @@ const originalSettingsItems = [
     label: "Employees",
     children: [
       { id: "manage-employees", label: "Employees" },
+      { id: "manage-leave-requests", label: "Leave Requests" },
+    ],
+  },
+  {
+    id: "shifts",
+    label: "Shifts & Locations",
+    children: [
+      { id: "manage-shifts", label: "Shifts" },
       { id: "manage-shift-schedules", label: "Shift Schedules" },
+      { id: "manage-locations", label: "Locations" },
     ],
   },
   {
@@ -93,7 +110,6 @@ function getFeaturesWithLock(items, subscriptionPlan) {
 
 function getSettingsWithLock(items, subscriptionPlan, role) {
   let updated = items;
-  // Example lock for "free" plan
   if (subscriptionPlan === "free") {
     updated = items.map((group) => {
       if (group.id === "account") {
@@ -149,8 +165,8 @@ function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle 
   return (
     <li className="mb-1">
       <button
-        className="flex justify-between items-center w-full px-3 py-2 rounded-md 
-                   hover:bg-neutral-200 dark:hover:bg-neutral-700 transition"
+        className="flex justify-between items-center w-full px-3 py-2 rounded-md mb-2
+                   hover:bg-neutral-100 dark:hover:bg-neutral-900 transition text-base"
         onClick={() => onToggle(item.id)}
       >
         <span>{item.label}</span>
@@ -176,9 +192,9 @@ function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle 
                       if (!child.locked) onNavigate(route);
                     }}
                     disabled={child.locked}
-                    className={`flex items-center justify-between w-full text-left 
-                                px-3 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-600 
-                                ${isActive ? "font-semibold bg-white dark:bg-neutral-900" : ""} 
+                    className={`flex items-center justify-between w-full text-left rounded-md mb-1
+                                px-3 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-900 
+                                ${isActive ? "font-semibold bg-neutral-100 dark:bg-neutral-900" : ""} 
                                 ${child.locked ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                   >
                     {child.label}
@@ -283,7 +299,7 @@ export default function ResponsiveSidebar({ isSidebarOpen, closeSidebar }) {
     <div
       className={`
         fixed top-0 left-0 z-50 w-64 h-screen 
-        bg-gradient-to-r from-neutral-100 dark:from-black to-white dark:to-neutral-900
+        bg-gradient-to-r from-white dark:from-black to-white dark:to-black
         border-r border-neutral-200 dark:border-neutral-700
         transform transition-transform duration-300 ease-in-out
         ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}

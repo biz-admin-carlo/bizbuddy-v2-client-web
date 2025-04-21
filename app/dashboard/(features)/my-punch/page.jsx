@@ -1,10 +1,10 @@
-import TemporaryPage from "@/components/Dashboard/temporary-page";
+import MyPunch from "@/components/Dashboard/DashboardContent/Features/MyPunch";
 import React from "react";
 
 export default function MyPunchPage() {
   return (
     <div>
-      <TemporaryPage />
+      <MyPunch />
     </div>
   );
 }

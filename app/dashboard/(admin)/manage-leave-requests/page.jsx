@@ -1,10 +1,10 @@
-import TemporaryPage from "@/components/Dashboard/temporary-page";
+import ManageLeaveRequests from "@/components/Dashboard/DashboardContent/Settings/Admin/ManageLeaveRequests";
 import React from "react";
 
 export default function ManageLeaveRequestsPage() {
   return (
     <div>
-      <TemporaryPage />
+      <ManageLeaveRequests />
     </div>
   );
 }
