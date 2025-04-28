@@ -1,5 +1,15 @@
 "use client";
 
+/* ───────────────────────────────────────────────────────────────────────────
+   ManageLocations
+   • list / create / edit / delete geofenced locations
+   • assign & remove users
+   • NEW FEATURES
+     1) “Use Current Location” button in Create-Location dialog
+     2) “Use Current Location” button in Edit-Location dialog
+     3) Live device-location status badge below the page heading
+   ────────────────────────────────────────────────────────────────────────── */
+
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import {
@@ -16,6 +26,7 @@ import {
   Filter,
   AlertCircle,
   UserCheck,
+  Loader2,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
@@ -32,7 +43,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 /* ────────────────────────────────────
-   1.  React‑Leaflet (loaded client‑side)
+   1.  React-Leaflet (client-side only)
    ──────────────────────────────────── */
 const MapContainer = dynamic(() => import("react-leaflet").then((m) => m.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import("react-leaflet").then((m) => m.TileLayer), { ssr: false });
@@ -40,7 +51,7 @@ const Marker = dynamic(() => import("react-leaflet").then((m) => m.Marker), { ss
 const Circle = dynamic(() => import("react-leaflet").then((m) => m.Circle), { ssr: false });
 const useMapEvents = dynamic(() => import("react-leaflet").then((m) => m.useMapEvents), { ssr: false });
 
-/*  Load Leaflet's CSS + patch default marker URLs  */
+/*  Load Leaflet’s CSS + patch default marker URLs  */
 if (typeof window !== "undefined") {
   import("leaflet/dist/leaflet.css");
   import("leaflet/dist/images/marker-icon.png");
@@ -56,13 +67,31 @@ if (typeof window !== "undefined") {
 }
 
 /* ────────────────────────────────────
-   2.  LocationPicker (map field)
+   2.  Tiny helper – browser geolocation
+   ──────────────────────────────────── */
+function getBrowserLocation() {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined" || !("geolocation" in navigator)) {
+      return resolve({ latitude: null, longitude: null });
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) =>
+        resolve({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+        }),
+      () => resolve({ latitude: null, longitude: null }),
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  });
+}
+
+/* ────────────────────────────────────
+   3.  LocationPicker (map input field)
    ──────────────────────────────────── */
 function LocationPicker({ lat, lng, radius, onChange }) {
-  /*  Memoised centre  */
   const position = useMemo(() => [Number.parseFloat(lat) || 14.5995, Number.parseFloat(lng) || 120.9842], [lat, lng]);
 
-  /*  Map click handler  */
   function MapEvents() {
     useMapEvents({
       click(e) {
@@ -75,9 +104,8 @@ function LocationPicker({ lat, lng, radius, onChange }) {
     return null;
   }
 
-  /*  crypto.randomUUID() forces React to un‑mount / re‑mount the map,
-      preventing the "Map container is already initialized" error when
-      a dialog is reopened (esp. in React 18 Strict‑Mode).              */
+  /*  crypto.randomUUID() ensures un-mount / re-mount to avoid
+      “Map container is already initialized” in strict-mode  */
   const mapKey = useMemo(() => (typeof crypto !== "undefined" ? crypto.randomUUID() : Date.now()), []);
 
   return (
@@ -87,7 +115,15 @@ function LocationPicker({ lat, lng, radius, onChange }) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://osm.org/copyright">OpenStreetMap</a> contributors'
         />
-        <Circle center={position} radius={Number.parseInt(radius || 500, 10)} pathOptions={{ color: "#f97316", fillColor: "#f97316", fillOpacity: 0.2 }} />
+        <Circle
+          center={position}
+          radius={Number.parseInt(radius || 500, 10)}
+          pathOptions={{
+            color: "#f97316",
+            fillColor: "#f97316",
+            fillOpacity: 0.2,
+          }}
+        />
         <Marker
           position={position}
           draggable
@@ -108,19 +144,40 @@ function LocationPicker({ lat, lng, radius, onChange }) {
 }
 
 /* ────────────────────────────────────
-   3.  Main component
+   4.  Main component
    ──────────────────────────────────── */
 function ManageLocations() {
   const { token } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-  /*  ───── State – data ───── */
+  /*  Device-location status (header badge)  */
+  const [deviceLoc, setDeviceLoc] = useState({
+    latitude: null,
+    longitude: null,
+  });
+  const [deviceLocLoading, setDeviceLocLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    setDeviceLocLoading(true);
+    getBrowserLocation().then((loc) => {
+      if (mounted) {
+        setDeviceLoc(loc);
+        setDeviceLocLoading(false);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  /*  ───── Data state ───── */
   const [locations, setLocations] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  /*  ───── State – create dialog ───── */
+  /*  ───── Create dialog ───── */
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({
     name: "",
@@ -129,8 +186,9 @@ function ManageLocations() {
     radius: "500",
   });
   const [createLoading, setCreateLoading] = useState(false);
+  const [useLocLoadingCreate, setUseLocLoadingCreate] = useState(false);
 
-  /*  ───── State – edit dialog ───── */
+  /*  ───── Edit dialog ───── */
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({
     id: null,
@@ -140,13 +198,14 @@ function ManageLocations() {
     radius: "500",
   });
   const [editLoading, setEditLoading] = useState(false);
+  const [useLocLoadingEdit, setUseLocLoadingEdit] = useState(false);
 
-  /*  ───── State – delete confirm ───── */
+  /*  ───── Delete confirm ───── */
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [locationToDelete, setLocationToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  /*  ───── State – users dialog ───── */
+  /*  ───── Users dialog ───── */
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [assignedUsers, setAssignedUsers] = useState([]);
@@ -155,11 +214,14 @@ function ManageLocations() {
   const [userActionLoading, setUserActionLoading] = useState(false);
   const [loadingUserId, setLoadingUserId] = useState(null);
 
-  /*  ───── State – filters / sort ───── */
+  /*  ───── Filters / sort ───── */
   const [filters, setFilters] = useState({ name: "" });
-  const [sortConfig, setSortConfig] = useState({ key: "name", direction: "ascending" });
+  const [sortConfig, setSortConfig] = useState({
+    key: "name",
+    direction: "ascending",
+  });
 
-  /* ───── Fetch locations & users on mount / token change ───── */
+  /* ───── Fetch data on mount ───── */
   useEffect(() => {
     if (!token) return;
     fetchLocations();
@@ -167,8 +229,8 @@ function ManageLocations() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  /*  ───────────────────────────────────
-      4.  Data‑fetching helpers
+  /* ───────────────────────────────────
+      5.  Data-fetch helpers
       ─────────────────────────────────── */
   async function fetchLocations() {
     setLoading(true);
@@ -185,19 +247,6 @@ function ManageLocations() {
     }
     setLoading(false);
   }
-
-  const refreshData = async () => {
-    setRefreshing(true);
-    try {
-      await Promise.all([fetchLocations(), fetchUsers()]);
-      toast.message("Data refreshed successfully");
-    } catch (err) {
-      console.error(err);
-      toast.message("Failed to refresh data");
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   async function fetchUsers() {
     try {
@@ -229,8 +278,21 @@ function ManageLocations() {
     }
   }
 
-  /*  ───────────────────────────────────
-      5.  Utilities – filter & sort
+  const refreshData = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([fetchLocations(), fetchUsers()]);
+      toast.message("Data refreshed successfully");
+    } catch (err) {
+      console.error(err);
+      toast.message("Failed to refresh data");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  /* ───────────────────────────────────
+      6.  Helpers – filter & sort
       ─────────────────────────────────── */
   function getFilteredAndSorted() {
     const data = locations.filter((l) => l.name.toLowerCase().includes(filters.name.toLowerCase()));
@@ -254,10 +316,10 @@ function ManageLocations() {
     return data;
   }
 
-  /*  ───────────────────────────────────
-      6.  CRUD Actions
+  /* ───────────────────────────────────
+      7.  CRUD – create / edit / delete
       ─────────────────────────────────── */
-  /* --- Create --- */
+  /* --- Create helpers --- */
   function openCreate() {
     setCreateForm({
       name: "",
@@ -266,6 +328,23 @@ function ManageLocations() {
       radius: "500",
     });
     setShowCreateModal(true);
+  }
+
+  async function handleUseCurrentLocationCreate() {
+    setUseLocLoadingCreate(true);
+    const loc = await getBrowserLocation();
+    setUseLocLoadingCreate(false);
+
+    if (loc.latitude && loc.longitude) {
+      setCreateForm((p) => ({
+        ...p,
+        latitude: loc.latitude.toFixed(6),
+        longitude: loc.longitude.toFixed(6),
+      }));
+      toast.message("Coordinates filled from device location.");
+    } else {
+      toast.message("Location unavailable – enable location services and try again.");
+    }
   }
 
   async function handleCreate() {
@@ -299,7 +378,7 @@ function ManageLocations() {
     }
   }
 
-  /* --- Edit --- */
+  /* --- Edit helpers --- */
   function openEdit(loc) {
     setEditForm({
       id: loc.id,
@@ -309,6 +388,23 @@ function ManageLocations() {
       radius: String(loc.radius ?? 500),
     });
     setShowEditModal(true);
+  }
+
+  async function handleUseCurrentLocationEdit() {
+    setUseLocLoadingEdit(true);
+    const loc = await getBrowserLocation();
+    setUseLocLoadingEdit(false);
+
+    if (loc.latitude && loc.longitude) {
+      setEditForm((p) => ({
+        ...p,
+        latitude: loc.latitude.toFixed(6),
+        longitude: loc.longitude.toFixed(6),
+      }));
+      toast.message("Coordinates filled from device location.");
+    } else {
+      toast.message("Location unavailable – enable location services and try again.");
+    }
   }
 
   async function handleSaveEdit() {
@@ -343,7 +439,7 @@ function ManageLocations() {
     }
   }
 
-  /* --- Delete --- */
+  /* --- Delete helpers --- */
   function openDelete(id, name) {
     setLocationToDelete({ id, name });
     setShowDeleteModal(true);
@@ -371,7 +467,7 @@ function ManageLocations() {
     }
   }
 
-  /* --- Users (assign / remove) --- */
+  /* --- Users helpers --- */
   async function openUsers(loc) {
     setCurrentLocation(loc);
     const assigned = await fetchAssignedUsers(loc.id);
@@ -437,13 +533,13 @@ function ManageLocations() {
   }
 
   /* ───────────────────────────────────
-      7.  Render
+      8.  Render
       ─────────────────────────────────── */
   return (
     <div className="max-w-7xl mx-auto p-4 space-y-8">
       <Toaster position="top-center" />
 
-      {/* ────────── Header + Create ────────── */}
+      {/* ────────── Header + actions ────────── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
@@ -451,8 +547,50 @@ function ManageLocations() {
             Manage Locations
           </h2>
           <p className="text-muted-foreground mt-1">Create and manage geofenced locations for your organization</p>
+
+          {/* device-location badge */}
+          <div className="mt-2">
+            {deviceLocLoading ? (
+              <Badge variant="outline" className="animate-pulse">
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                Locating…
+              </Badge>
+            ) : deviceLoc.latitude ? (
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="outline" className="text-orange-600 dark:text-orange-400 hover:bg-black/5 dark:hover:bg-white/5 cursor-help">
+                      <MapPin className="h-3 w-3 mr-1" />
+                      Location Available
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>
+                      Device coordinates:&nbsp;
+                      {deviceLoc.latitude.toFixed(5)}, {deviceLoc.longitude.toFixed(5)}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="outline" className="text-red-600 dark:text-red-400 hover:bg-black/5 dark:hover:bg-white/5 cursor-help">
+                      <AlertCircle className="h-3 w-3 mr-1" />
+                      Location Unavailable
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Enable browser location services to use this feature</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
         </div>
 
+        {/* action buttons */}
         <div className="flex gap-2">
           <TooltipProvider delayDuration={300}>
             <Tooltip>
@@ -481,7 +619,7 @@ function ManageLocations() {
               </Button>
             </DialogTrigger>
 
-            {/* ── Create Dialog (wider) ── */}
+            {/* ───────────────── Create dialog ───────────────── */}
             <DialogContent className="max-w-xl border-2 dark:border-white/10">
               <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
               <DialogHeader>
@@ -495,6 +633,7 @@ function ManageLocations() {
               </DialogHeader>
 
               <div className="space-y-4 py-4">
+                {/* map picker */}
                 <LocationPicker
                   lat={createForm.latitude}
                   lng={createForm.longitude}
@@ -508,6 +647,19 @@ function ManageLocations() {
                   }
                 />
 
+                {/* use current location */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUseCurrentLocationCreate}
+                  disabled={useLocLoadingCreate}
+                  className="mb-2 border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                >
+                  {useLocLoadingCreate ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MapPin className="h-4 w-4 mr-2" />}
+                  Use Current Location
+                </Button>
+
+                {/* name */}
                 <div className="grid grid-cols-4 items-center gap-4 text-sm">
                   <label className="text-right font-medium" htmlFor="name">
                     Location Name
@@ -526,6 +678,7 @@ function ManageLocations() {
                   />
                 </div>
 
+                {/* latitude / longitude */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid grid-cols-4 items-center gap-4 text-sm">
                     <label className="text-right font-medium" htmlFor="latitude">
@@ -561,6 +714,7 @@ function ManageLocations() {
                   </div>
                 </div>
 
+                {/* radius */}
                 <div className="grid grid-cols-4 items-center gap-4 text-sm">
                   <label className="text-right font-medium" htmlFor="radius">
                     Radius (m)
@@ -645,6 +799,8 @@ function ManageLocations() {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Sort by:</span>
+
+              {/* sort – name */}
               <TooltipProvider delayDuration={300}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -670,6 +826,7 @@ function ManageLocations() {
                 </Tooltip>
               </TooltipProvider>
 
+              {/* sort – radius */}
               <TooltipProvider delayDuration={300}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -699,7 +856,7 @@ function ManageLocations() {
         </CardContent>
       </Card>
 
-      {/* ────────── Table ────────── */}
+      {/* ────────── Locations table ────────── */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500"></div>
         <CardHeader className="pb-2">
@@ -709,7 +866,7 @@ function ManageLocations() {
             </div>
             Locations
           </CardTitle>
-          <CardDescription>Manage your organization's geofenced locations</CardDescription>
+          <CardDescription>Manage your organization’s geofenced locations</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="rounded-md border">
@@ -758,24 +915,13 @@ function ManageLocations() {
                     .fill(0)
                     .map((_, i) => (
                       <TableRow key={i}>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-20 ml-auto" />
-                        </TableCell>
+                        {Array(6)
+                          .fill(0)
+                          .map((__, j) => (
+                            <TableCell key={j}>
+                              <Skeleton className="h-6 w-full" />
+                            </TableCell>
+                          ))}
                       </TableRow>
                     ))
                 ) : getFilteredAndSorted().length ? (
@@ -895,7 +1041,7 @@ function ManageLocations() {
         </CardContent>
       </Card>
 
-      {/* ────────── Edit Dialog (wider) ────────── */}
+      {/* ────────── Edit dialog ────────── */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
         <DialogContent className="max-w-xl border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
@@ -916,6 +1062,18 @@ function ManageLocations() {
               radius={editForm.radius}
               onChange={({ lat, lng }) => setEditForm((p) => ({ ...p, latitude: lat, longitude: lng }))}
             />
+
+            {/* use current location for edit */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUseCurrentLocationEdit}
+              disabled={useLocLoadingEdit}
+              className="mb-2 border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+            >
+              {useLocLoadingEdit ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MapPin className="h-4 w-4 mr-2" />}
+              Use Current Location
+            </Button>
 
             <div className="grid grid-cols-4 items-center gap-4 text-sm">
               <label className="text-right font-medium" htmlFor="e-name">
@@ -994,7 +1152,7 @@ function ManageLocations() {
         </DialogContent>
       </Dialog>
 
-      {/* ────────── Users Dialog ────────── */}
+      {/* ────────── Users dialog ────────── */}
       <Dialog open={showUsersModal} onOpenChange={setShowUsersModal}>
         <DialogContent className="max-w-2xl border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
@@ -1117,7 +1275,7 @@ function ManageLocations() {
         </DialogContent>
       </Dialog>
 
-      {/* ────────── Delete Confirm ────────── */}
+      {/* ────────── Delete confirm ────────── */}
       <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
         <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
           <div className="h-1 w-full bg-red-500 -mt-6 mb-4"></div>

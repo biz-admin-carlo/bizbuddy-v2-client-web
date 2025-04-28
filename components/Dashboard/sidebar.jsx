@@ -4,20 +4,16 @@ import React, { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 
-// Example store for auth tokens
 import useAuthStore from "@/store/useAuthStore";
 
-// lucide-react icons
 import { Menu as MenuIcon, X as CloseIcon, Lock, ChevronDown, ChevronUp } from "lucide-react";
 
-// Example UI components
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-/* ------------------------------------------------------------------
-  1) Sample data for demonstration
------------------------------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/* 1) Static menu definitions (base lists — role/plan logic below)     */
+/* ------------------------------------------------------------------ */
 const originalFeaturesItems = [
   {
     id: "overview",
@@ -59,6 +55,7 @@ const originalSettingsItems = [
     label: "Employees",
     children: [
       { id: "manage-employees", label: "Employees" },
+      { id: "manage-timelogs", label: "Timelogs" },
       { id: "manage-leave-requests", label: "Leave Requests" },
     ],
   },
@@ -81,12 +78,11 @@ const originalSettingsItems = [
   },
 ];
 
-/* ------------------------------------------------------------------
-  2) Example locking logic: Lock/unlock sub-items based on plan
------------------------------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/* 2) Lock / unlock helpers                                            */
+/* ------------------------------------------------------------------ */
 function getFeaturesWithLock(items, subscriptionPlan) {
   if (subscriptionPlan === "free") {
-    // Lock everything except "my-time-log" and "my-punch" (example)
     const allowedIds = new Set(["my-time-log", "my-punch"]);
     return items.map((group) => ({
       ...group,
@@ -97,7 +93,6 @@ function getFeaturesWithLock(items, subscriptionPlan) {
       })),
     }));
   }
-  // Otherwise, fully unlocked
   return items.map((group) => ({
     ...group,
     children: group.children.map((child) => ({
@@ -109,7 +104,9 @@ function getFeaturesWithLock(items, subscriptionPlan) {
 }
 
 function getSettingsWithLock(items, subscriptionPlan, role) {
-  let updated = items;
+  let updated;
+
+  /* ---------- plan-based locking ---------- */
   if (subscriptionPlan === "free") {
     updated = items.map((group) => {
       if (group.id === "account") {
@@ -132,7 +129,6 @@ function getSettingsWithLock(items, subscriptionPlan, role) {
       };
     });
   } else {
-    // everything unlocked
     updated = items.map((group) => ({
       ...group,
       children: group.children.map((child) => ({
@@ -143,24 +139,37 @@ function getSettingsWithLock(items, subscriptionPlan, role) {
     }));
   }
 
-  // Example role-based filtering
-  switch (role?.toLowerCase()) {
-    case "superadmin":
-      return updated;
-    case "admin":
-      // maybe remove some items
-      return updated.filter((g) => g.id !== "some-other-group");
-    case "employee":
-      // only "account"
-      return updated.filter((g) => g.id === "account");
-    default:
-      return updated;
+  /* ---------- role-based filtering ---------- */
+  const lowerRole = role?.toLowerCase();
+
+  if (lowerRole === "superadmin") {
+    updated = [
+      ...updated,
+      {
+        id: "companies",
+        label: "Companies",
+        children: [
+          {
+            id: "manage-companies",
+            label: "Manage Companies",
+            locked: false,
+            requiredPlan: null,
+          },
+        ],
+      },
+    ];
+  } else if (lowerRole === "admin") {
+    updated = updated.filter((g) => g.id !== "some-other-group");
+  } else if (lowerRole === "employee") {
+    updated = updated.filter((g) => g.id === "account");
   }
+
+  return updated;
 }
 
-/* ------------------------------------------------------------------
-  3) Collapsible sub-menu (Framer Motion expand/collapse)
------------------------------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/* 3) Collapsible nav item                                             */
+/* ------------------------------------------------------------------ */
 function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle }) {
   return (
     <li className="mb-1">
@@ -215,9 +224,9 @@ function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle 
   );
 }
 
-/* ------------------------------------------------------------------
-  4) User info in the sidebar header
------------------------------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/* 4) Sidebar header (user info)                                       */
+/* ------------------------------------------------------------------ */
 function SidebarUserInfo({ profileData, subscriptionPlan }) {
   const userObj = profileData?.user || {};
   const userProfile = profileData?.profile || {};
@@ -245,9 +254,9 @@ function SidebarUserInfo({ profileData, subscriptionPlan }) {
   );
 }
 
-/* ------------------------------------------------------------------
-  5) Main Sidebar: includes the close button (X) for mobile
------------------------------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/* 5) Main responsive sidebar                                          */
+/* ------------------------------------------------------------------ */
 export default function ResponsiveSidebar({ isSidebarOpen, closeSidebar }) {
   const { token } = useAuthStore();
   const router = useRouter();
@@ -257,7 +266,7 @@ export default function ResponsiveSidebar({ isSidebarOpen, closeSidebar }) {
   const [subscriptionPlan, setSubscriptionPlan] = useState("free");
   const [openDropdown, setOpenDropdown] = useState(null);
 
-  // Fetch user profile
+  /* ---------- fetch profile ---------- */
   useEffect(() => {
     if (token) {
       fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/account/profile`, {
@@ -275,12 +284,12 @@ export default function ResponsiveSidebar({ isSidebarOpen, closeSidebar }) {
     }
   }, [token]);
 
-  // Build locked/unlocked menus
-  const featuresItems = getFeaturesWithLock(originalFeaturesItems, subscriptionPlan);
+  /* ---------- build menus ---------- */
   const role = profileData?.user?.role || "employee";
+  const featuresItems = getFeaturesWithLock(originalFeaturesItems, subscriptionPlan);
   const settingsItems = getSettingsWithLock(originalSettingsItems, subscriptionPlan, role);
 
-  // Navigation
+  /* ---------- navigation helpers ---------- */
   const onNavigate = (route) => {
     if (closeSidebar) closeSidebar();
     router.push(route);
@@ -290,10 +299,7 @@ export default function ResponsiveSidebar({ isSidebarOpen, closeSidebar }) {
     setOpenDropdown(openDropdown === id ? null : id);
   };
 
-  if (!token || !profileData) {
-    // not loaded or no user => return nothing or a fallback
-    return null;
-  }
+  if (!token || !profileData) return null;
 
   return (
     <div
@@ -306,15 +312,12 @@ export default function ResponsiveSidebar({ isSidebarOpen, closeSidebar }) {
         md:translate-x-0 md:static md:h-auto
       `}
     >
-      {/* 
-        The backdrop if you want to click outside to close – 
-        only display on mobile and only if open
-      */}
+      {/* backdrop for mobile */}
       {isSidebarOpen && <div className="absolute inset-0 bg-black/30 block md:hidden" onClick={closeSidebar} />}
 
-      {/* The actual scrollable sidebar content */}
+      {/* sidebar content */}
       <div className="relative z-10 flex flex-col h-full overflow-y-auto">
-        {/* Close button (X) for mobile */}
+        {/* close button (mobile) */}
         {isSidebarOpen && (
           <button
             onClick={closeSidebar}
@@ -324,10 +327,10 @@ export default function ResponsiveSidebar({ isSidebarOpen, closeSidebar }) {
           </button>
         )}
 
-        {/* 1) Header: user info */}
+        {/* user header */}
         <SidebarUserInfo profileData={profileData} subscriptionPlan={subscriptionPlan} />
 
-        {/* 2) Features menu */}
+        {/* dashboard section */}
         <div className="px-3 py-3">
           <h2 className="mb-2 px-2 text-sm font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Dashboard</h2>
           <ul className="space-y-1">
@@ -344,7 +347,7 @@ export default function ResponsiveSidebar({ isSidebarOpen, closeSidebar }) {
           </ul>
         </div>
 
-        {/* 3) Settings menu */}
+        {/* settings section */}
         <div className="px-3 py-3">
           <h2 className="mb-2 px-2 text-sm font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Settings</h2>
           <ul className="space-y-1">
