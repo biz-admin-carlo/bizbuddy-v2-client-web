@@ -4,12 +4,26 @@
 /**
  * ManageTimelogs (Admin UI)
  * -------------------------------------------------
- * ➊ date-only column removed (Time-In / Time-Out already hold full local datetime)
- * ➋ Time-In / Time-Out now use local timezone «YYYY-MM-DD HH:MM» (24 h)
+ * • multi-employee filter, CSV export, etc.
+ * • now shows Device-In / Device-Out and Location-In / Location-Out
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Clock, Filter, RefreshCw, Download, ChevronUp, ChevronDown, Search, Calendar, Users, CheckCircle2, Check } from "lucide-react";
+import {
+  Clock,
+  Filter,
+  RefreshCw,
+  Download,
+  ChevronUp,
+  ChevronDown,
+  Search,
+  Calendar,
+  Users,
+  CheckCircle2,
+  Check,
+  MapPin,
+  Smartphone,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
@@ -28,8 +42,8 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 
 /* ───────────────────────── helpers ───────────────────────── */
 
-/* local datetime – no commas (“YYYY-MM-DD HH:MM”) */
 const fmtLocalDateTime = (d) => {
+  if (!d) return "—";
   const x = new Date(d);
   const Y = x.getFullYear();
   const M = String(x.getMonth() + 1).padStart(2, "0");
@@ -45,18 +59,46 @@ const coffeeMinutes = (arr = []) => arr.reduce((m, b) => (b.start && b.end ? m +
 
 const lunchMinutes = (l) => (l && l.start && l.end ? ((new Date(l.end) - new Date(l.start)) / 60000).toFixed(0) : 0);
 
-/* CSV builder – Date column removed, local datetime used */
+const fmtDevice = (d) => {
+  if (!d) return "—";
+  if (typeof d === "string") return d;
+  if (d.model) return d.model;
+  return JSON.stringify(d);
+};
+
+const fmtLoc = (loc) =>
+  loc && loc.latitude != null && loc.longitude != null ? `${Number(loc.latitude).toFixed(5)}, ${Number(loc.longitude).toFixed(5)}` : "—";
+
+/* CSV (new columns added) */
 const buildCSV = (rows) => {
-  const header = ["Employee", "Email", "Department", "Time In", "Time Out", "Hours", "Coffee (min)", "Lunch (min)", "Status"];
+  const header = [
+    "Employee",
+    "Email",
+    "Department",
+    "Time In",
+    "Time Out",
+    "Hours",
+    "Coffee (min)",
+    "Lunch (min)",
+    "Device In",
+    "Device Out",
+    "Location In",
+    "Location Out",
+    "Status",
+  ];
   const body = rows.map((r) => [
     `"${r.employeeName}"`,
     `"${r.email}"`,
     `"${r.department}"`,
     fmtLocalDateTime(r.timeIn),
-    r.timeOut ? fmtLocalDateTime(r.timeOut) : "",
+    fmtLocalDateTime(r.timeOut),
     diffHours(r.timeIn, r.timeOut),
     r.coffeeMins,
     r.lunchMins,
+    fmtDevice(r.deviceIn),
+    fmtDevice(r.deviceOut),
+    fmtLoc(r.locIn),
+    fmtLoc(r.locOut),
     r.status,
   ]);
   return [header, ...body].map((l) => l.join(",")).join("\r\n");
@@ -89,9 +131,12 @@ function ManageTimelogs() {
   });
 
   /* sorting */
-  const [sortConfig, setSortConfig] = useState({ key: "date", direction: "descending" });
+  const [sortConfig, setSortConfig] = useState({
+    key: "date",
+    direction: "descending",
+  });
 
-  /* ───────────────────────── fetches (unchanged) ───────────────────────── */
+  /* ───────────────────────── fetches ───────────────────────── */
   useEffect(() => {
     if (!token) return;
     fetchEmployees();
@@ -107,7 +152,9 @@ function ManageTimelogs() {
 
   async function fetchProfile() {
     try {
-      const res = await fetch(`${API_URL}/api/account/profile`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_URL}/api/account/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const j = await res.json();
       if (res.ok && j.data?.company?.name) setCompanyName(j.data.company.name.replace(/\s+/g, "_"));
     } catch (e) {
@@ -117,7 +164,9 @@ function ManageTimelogs() {
 
   async function fetchEmployees() {
     try {
-      const res = await fetch(`${API_URL}/api/employee?all=1`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_URL}/api/employee?all=1`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const j = await res.json();
       if (res.ok) setEmployees(j.data || []);
     } catch (e) {
@@ -127,7 +176,9 @@ function ManageTimelogs() {
 
   async function fetchDepartments() {
     try {
-      const res = await fetch(`${API_URL}/api/departments`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_URL}/api/departments`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const j = await res.json();
       if (res.ok) setDepartments(j.data || []);
     } catch (e) {
@@ -144,7 +195,9 @@ function ManageTimelogs() {
       if (filters.to) qs.append("to", filters.to);
       if (filters.status !== "all") qs.append("status", filters.status);
       if (filters.employeeIds.length === 1 && filters.employeeIds[0] !== "all") qs.append("employeeId", filters.employeeIds[0]);
-      const res = await fetch(`${API_URL}/api/timelogs?${qs.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_URL}/api/timelogs?${qs.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const j = await res.json();
       if (res.ok) {
         const enriched = (j.data || []).map((t) => ({
@@ -168,7 +221,7 @@ function ManageTimelogs() {
     setRefreshing(false);
   };
 
-  /* ───────────────────────── filtering + sort (unchanged) ───────────────────────── */
+  /* ───────────────────────── filtering + sort ───────────────────────── */
   const displayed = useMemo(() => {
     let data = [...timelogs];
     if (!filters.employeeIds.includes("all")) data = data.filter((t) => filters.employeeIds.includes(t.userId));
@@ -204,7 +257,7 @@ function ManageTimelogs() {
     return data;
   }, [timelogs, filters.employeeIds, filters.search, sortConfig]);
 
-  /* ───────────────────────── CSV export (name unchanged) ───────────────────────── */
+  /* ───────────────────────── CSV export ───────────────────────── */
   const exportCSV = () => {
     if (!displayed.length) return toast.message("No rows to export");
     const d = new Date();
@@ -212,7 +265,9 @@ function ManageTimelogs() {
     const fileName = `${companyName || "Timelogs"}_${today}.csv`;
     setExporting(true);
     try {
-      const blob = new Blob([buildCSV(displayed)], { type: "text/csv;charset=utf-8;" });
+      const blob = new Blob([buildCSV(displayed)], {
+        type: "text/csv;charset=utf-8;",
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -227,7 +282,7 @@ function ManageTimelogs() {
     setExporting(false);
   };
 
-  /* ───────────────────────── multi-employee popover (unchanged) ───────────────────────── */
+  /* ───────────────────────── multi-employee popover ───────────────────────── */
   const MultiEmployeeSelect = () => {
     const allChecked = filters.employeeIds.includes("all");
     const toggle = (id) => {
@@ -255,7 +310,7 @@ function ManageTimelogs() {
           <div className="max-h-64 overflow-y-auto pr-1">
             {employees.map((e) => {
               const id = e.id;
-              const name = `${e.profile?.firstName || ""} ${e.profile?.lastName || ""}`.trim() || e.email;
+              const name = (`${e.profile?.firstName || ""} ${e.profile?.lastName || ""}`.trim() || e.email).slice(0, 38) || "Unnamed";
               const checked = filters.employeeIds.includes(id);
               return (
                 <div key={id} className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer" onClick={() => toggle(id)}>
@@ -276,7 +331,7 @@ function ManageTimelogs() {
     <div className="max-w-7xl mx-auto p-4 space-y-8">
       <Toaster position="top-center" />
 
-      {/* Header (unchanged) */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
@@ -323,7 +378,7 @@ function ManageTimelogs() {
         </div>
       </div>
 
-      {/* Filters (unchanged except popover component) */}
+      {/* Filters */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
@@ -401,7 +456,7 @@ function ManageTimelogs() {
         </CardContent>
       </Card>
 
-      {/* ───────── table (Date column removed) ───────── */}
+      {/* Table */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2 flex justify-between items-start">
@@ -470,6 +525,22 @@ function ManageTimelogs() {
                   </TableHead>
                   <TableHead>Coffee&nbsp;(min)</TableHead>
                   <TableHead>Lunch&nbsp;(min)</TableHead>
+                  <TableHead>
+                    <Smartphone className="h-4 w-4" />
+                    &nbsp;In
+                  </TableHead>
+                  <TableHead>
+                    <Smartphone className="h-4 w-4" />
+                    &nbsp;Out
+                  </TableHead>
+                  <TableHead>
+                    <MapPin className="h-4 w-4" />
+                    &nbsp;In
+                  </TableHead>
+                  <TableHead>
+                    <MapPin className="h-4 w-4" />
+                    &nbsp;Out
+                  </TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -478,7 +549,7 @@ function ManageTimelogs() {
                 {loading ? (
                   [...Array(6)].map((_, i) => (
                     <TableRow key={i}>
-                      {Array(7)
+                      {Array(11)
                         .fill(0)
                         .map((__, j) => (
                           <TableCell key={j}>
@@ -505,10 +576,14 @@ function ManageTimelogs() {
                           </div>
                         </TableCell>
                         <TableCell>{fmtLocalDateTime(t.timeIn)}</TableCell>
-                        <TableCell>{t.timeOut ? fmtLocalDateTime(t.timeOut) : "—"}</TableCell>
+                        <TableCell>{fmtLocalDateTime(t.timeOut)}</TableCell>
                         <TableCell>{diffHours(t.timeIn, t.timeOut)}</TableCell>
                         <TableCell>{t.coffeeMins}</TableCell>
                         <TableCell>{t.lunchMins}</TableCell>
+                        <TableCell>{fmtDevice(t.deviceIn)}</TableCell>
+                        <TableCell>{fmtDevice(t.deviceOut)}</TableCell>
+                        <TableCell>{fmtLoc(t.locIn)}</TableCell>
+                        <TableCell>{fmtLoc(t.locOut)}</TableCell>
                         <TableCell>
                           {t.status === "active" ? (
                             <Badge className="bg-orange-500 hover:bg-orange-600 text-white">Active</Badge>
@@ -524,7 +599,7 @@ function ManageTimelogs() {
                   </AnimatePresence>
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-28 text-center">
+                    <TableCell colSpan={11} className="h-28 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
                         <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                           <Clock className="h-8 w-8 text-orange-500/50" />
