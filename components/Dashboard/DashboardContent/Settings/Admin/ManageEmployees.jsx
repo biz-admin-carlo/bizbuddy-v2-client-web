@@ -1,4 +1,13 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
+
+/**
+ * ManageEmployees
+ * -------------------------------------------------
+ * • Full CRUD for employees
+ * • Filters, sorting, pagination-ready layout
+ * • NEW: CSV export of the current (filtered + sorted) table
+ */
 
 import { useEffect, useState } from "react";
 import {
@@ -16,11 +25,13 @@ import {
   Building,
   Mail,
   UserCog,
+  Download, // ← NEW
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
-import useAuthStore from "@/store/useAuthStore";
 import { motion, AnimatePresence } from "framer-motion";
+import useAuthStore from "@/store/useAuthStore";
 
+/* shadcn/ui */
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -31,21 +42,34 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+/* ───────────────────────── CSV helper ───────────────────────── */
+const buildCSV = (rows) => {
+  const header = ["Name", "Email", "Department", "Role"];
+  const body = rows.map((e) => [
+    `"${`${e.profile?.firstName || ""} ${e.profile?.lastName || ""}`.trim()}"`,
+    `"${e.email}"`,
+    `"${e.department?.name || ""}"`,
+    `"${e.role}"`,
+  ]);
+  return [header, ...body].map((l) => l.join(",")).join("\r\n");
+};
+
+/* ───────────────────────── component ───────────────────────── */
 function ManageEmployees() {
   const { token } = useAuthStore();
 
-  // CORE DATA
+  /* ───── core data ───── */
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
 
-  // UI/STATE
+  /* ───── ui / state ───── */
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false); // NEW
   const [error, setError] = useState("");
 
-  // CREATE - show/hide modal
+  /* create modal */
   const [showCreateModal, setShowCreateModal] = useState(false);
-  // CREATE form fields
   const [createForm, setCreateForm] = useState({
     firstName: "",
     lastName: "",
@@ -56,9 +80,8 @@ function ManageEmployees() {
   });
   const [createLoading, setCreateLoading] = useState(false);
 
-  // EDIT - show/hide modal
+  /* edit modal */
   const [showEditModal, setShowEditModal] = useState(false);
-  // EDIT form fields
   const [editForm, setEditForm] = useState({
     id: null,
     firstName: "",
@@ -70,25 +93,27 @@ function ManageEmployees() {
   });
   const [editLoading, setEditLoading] = useState(false);
 
-  // DELETE - show/hide confirmation
+  /* delete modal */
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [employeeToDelete, setEmployeeToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // SORTING
-  const [sortConfig, setSortConfig] = useState({ key: "name", direction: "ascending" });
+  /* sorting */
+  const [sortConfig, setSortConfig] = useState({
+    key: "name",
+    direction: "ascending",
+  });
 
-  // FILTERING
+  /* filters */
   const [filters, setFilters] = useState({
     name: "",
     department: "",
     role: "",
   });
 
-  // The base URL for your BizBuddy API
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-  // 1) Fetch employees & departments
+  /* ───────────────────────── data fetch ───────────────────────── */
   useEffect(() => {
     if (token) {
       fetchEmployees();
@@ -119,19 +144,6 @@ function ManageEmployees() {
     setLoading(false);
   }
 
-  async function refreshData() {
-    setRefreshing(true);
-    try {
-      await Promise.all([fetchEmployees(), fetchDepartments()]);
-      toast.message("Data refreshed successfully");
-    } catch (err) {
-      console.error(err);
-      toast.message("Failed to refresh data");
-    } finally {
-      setRefreshing(false);
-    }
-  }
-
   async function fetchDepartments() {
     try {
       const res = await fetch(`${API_URL}/api/departments`, {
@@ -149,7 +161,20 @@ function ManageEmployees() {
     }
   }
 
-  // 2) FILTERS
+  async function refreshData() {
+    setRefreshing(true);
+    try {
+      await Promise.all([fetchEmployees(), fetchDepartments()]);
+      toast.message("Data refreshed successfully");
+    } catch (err) {
+      console.error(err);
+      toast.message("Failed to refresh data");
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  /* ───────────────────────── filters + sort ───────────────────────── */
   function handleFilterChange(field, value) {
     setFilters({ ...filters, [field]: value });
   }
@@ -158,25 +183,18 @@ function ManageEmployees() {
     setFilters({ name: "", department: "", role: "" });
   }
 
-  // 3) SORT
   function requestSort(key) {
     let direction = "ascending";
-    if (sortConfig.key === key && sortConfig.direction === "ascending") {
-      direction = "descending";
-    }
+    if (sortConfig.key === key && sortConfig.direction === "ascending") direction = "descending";
     setSortConfig({ key, direction });
   }
 
   function getFilteredAndSortedEmployees() {
-    // Filter
+    /* ---- filtering ---- */
     const filtered = employees.filter((emp) => {
-      // fullName from first + last
       const fullName = `${emp.profile?.firstName || ""} ${emp.profile?.lastName || ""}`.trim().toLowerCase();
 
-      // department name
       const deptName = emp.department?.name?.toLowerCase() || "";
-
-      // role
       const role = (emp.role || "").toLowerCase();
 
       const matchesName = !filters.name || fullName.includes(filters.name.toLowerCase());
@@ -186,16 +204,14 @@ function ManageEmployees() {
       return matchesName && matchesDept && matchesRole;
     });
 
-    // Sort
+    /* ---- sorting ---- */
     if (sortConfig.key) {
       filtered.sort((a, b) => {
         let aVal, bVal;
 
         if (sortConfig.key === "name") {
-          const aName = `${a.profile?.firstName || ""} ${a.profile?.lastName || ""}`.trim().toLowerCase();
-          const bName = `${b.profile?.firstName || ""} ${b.profile?.lastName || ""}`.trim().toLowerCase();
-          aVal = aName;
-          bVal = bName;
+          aVal = `${a.profile?.firstName || ""} ${a.profile?.lastName || ""}`.trim().toLowerCase();
+          bVal = `${b.profile?.firstName || ""} ${b.profile?.lastName || ""}`.trim().toLowerCase();
         } else if (sortConfig.key === "email") {
           aVal = (a.email || "").toLowerCase();
           bVal = (b.email || "").toLowerCase();
@@ -216,7 +232,38 @@ function ManageEmployees() {
     return filtered;
   }
 
-  // 4) CREATE
+  /* ───────────────────────── CSV export ───────────────────────── */
+  const exportCSV = () => {
+    const rows = getFilteredAndSortedEmployees();
+    if (!rows.length) {
+      toast.message("No employees to export");
+      return;
+    }
+    setExporting(true);
+    try {
+      const today = new Date();
+      const fileDate = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
+
+      const fileName = `Employees_${fileDate}.csv`;
+      const blob = new Blob([buildCSV(rows)], {
+        type: "text/csv;charset=utf-8;",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.message("CSV exported");
+    } catch (e) {
+      console.error(e);
+      toast.message("Export failed");
+    }
+    setExporting(false);
+  };
+
+  /* ───────────────────────── CRUD helpers (create / edit / delete) ───────────────────────── */
+  /* --- create helpers (unchanged) --- */
   function handleOpenCreateModal() {
     setCreateForm({
       firstName: "",
@@ -239,7 +286,7 @@ function ManageEmployees() {
     setError("");
     try {
       const payload = {
-        username: `${createForm.firstName}.${createForm.lastName}`.toLowerCase(), // or however you want
+        username: `${createForm.firstName}.${createForm.lastName}`.toLowerCase(),
         email: createForm.email,
         password: createForm.password,
         firstName: createForm.firstName,
@@ -271,15 +318,14 @@ function ManageEmployees() {
     }
   }
 
-  // 5) EDIT
+  /* --- edit helpers (unchanged) --- */
   function handleEditEmployee(emp) {
-    // We fill the form with existing data
     setEditForm({
       id: emp.id,
       firstName: emp.profile?.firstName || "",
       lastName: emp.profile?.lastName || "",
       email: emp.email || "",
-      password: "", // optional (if not changed, remain empty)
+      password: "",
       role: emp.role || "employee",
       departmentId: emp.department?.id || "",
     });
@@ -296,7 +342,7 @@ function ManageEmployees() {
     try {
       const payload = {
         email: editForm.email,
-        password: editForm.password ? editForm.password : undefined, // only if not empty
+        password: editForm.password ? editForm.password : undefined,
         firstName: editForm.firstName,
         lastName: editForm.lastName,
         role: editForm.role,
@@ -326,7 +372,7 @@ function ManageEmployees() {
     }
   }
 
-  // 6) DELETE
+  /* --- delete helpers (unchanged) --- */
   function handleDeleteEmployee(emp) {
     setEmployeeToDelete(emp);
     setShowDeleteModal(true);
@@ -346,7 +392,6 @@ function ManageEmployees() {
       const data = await res.json();
       if (res.ok) {
         toast.message(data.message || "Employee deleted successfully");
-        // remove from local state
         setEmployees((prev) => prev.filter((e) => e.id !== employeeToDelete.id));
       } else {
         toast.message(data.error || "Failed to delete employee");
@@ -361,9 +406,9 @@ function ManageEmployees() {
     }
   }
 
-  // Role badge helper
+  /* role badge helper (unchanged) */
   const getRoleBadge = (role) => {
-    switch (role?.toLowerCase()) {
+    switch ((role || "").toLowerCase()) {
       case "admin":
         return (
           <Badge className="bg-purple-500 hover:bg-purple-600 text-white">
@@ -388,11 +433,12 @@ function ManageEmployees() {
     }
   };
 
+  /* ───────────────────────── render ───────────────────────── */
   return (
     <div className="max-w-7xl mx-auto p-4 space-y-8">
       <Toaster position="top-center" />
 
-      {/* Header + Create */}
+      {/* ───── header + buttons ───── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
@@ -403,6 +449,7 @@ function ManageEmployees() {
         </div>
 
         <div className="flex gap-2">
+          {/* refresh */}
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -416,19 +463,38 @@ function ManageEmployees() {
                   <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>
-                <p>Refresh data</p>
-              </TooltipContent>
+              <TooltipContent>Refresh data</TooltipContent>
             </Tooltip>
           </TooltipProvider>
 
+          {/* CSV export */}
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={exportCSV}
+                  disabled={exporting || !getFilteredAndSortedEmployees().length}
+                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                >
+                  <Download className={`h-4 w-4 ${exporting ? "animate-spin" : ""}`} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Export CSV</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {/* create employee dialog trigger */}
           <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
             <DialogTrigger asChild>
-              <Button onClick={handleOpenCreateModal} className="bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-semibold">
+              <Button className="bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-semibold">
                 <UserPlus className="mr-2 h-4 w-4" />
                 Create Employee
               </Button>
             </DialogTrigger>
+
+            {/* ---------- Create Employee Modal ---------- */}
             <DialogContent className="border-2 dark:border-white/10">
               <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
               <DialogHeader>
@@ -440,9 +506,11 @@ function ManageEmployees() {
                 </DialogTitle>
                 <DialogDescription>Add a new employee to your organization</DialogDescription>
               </DialogHeader>
+
+              {/* --- form --- */}
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
-                  {/* First Name */}
+                  {/* first name */}
                   <div className="space-y-2">
                     <label htmlFor="create-firstName" className="text-sm font-medium">
                       First Name
@@ -450,16 +518,12 @@ function ManageEmployees() {
                     <Input
                       id="create-firstName"
                       value={createForm.firstName}
-                      onChange={(e) =>
-                        setCreateForm({
-                          ...createForm,
-                          firstName: e.target.value,
-                        })
-                      }
+                      onChange={(e) => setCreateForm({ ...createForm, firstName: e.target.value })}
                       placeholder="Enter first name"
                     />
                   </div>
-                  {/* Last Name */}
+
+                  {/* last name */}
                   <div className="space-y-2">
                     <label htmlFor="create-lastName" className="text-sm font-medium">
                       Last Name
@@ -467,17 +531,13 @@ function ManageEmployees() {
                     <Input
                       id="create-lastName"
                       value={createForm.lastName}
-                      onChange={(e) =>
-                        setCreateForm({
-                          ...createForm,
-                          lastName: e.target.value,
-                        })
-                      }
+                      onChange={(e) => setCreateForm({ ...createForm, lastName: e.target.value })}
                       placeholder="Enter last name"
                     />
                   </div>
                 </div>
-                {/* Email */}
+
+                {/* email */}
                 <div className="space-y-2">
                   <label htmlFor="create-email" className="text-sm font-medium">
                     Email
@@ -490,7 +550,8 @@ function ManageEmployees() {
                     placeholder="Enter email address"
                   />
                 </div>
-                {/* Password */}
+
+                {/* password */}
                 <div className="space-y-2">
                   <label htmlFor="create-password" className="text-sm font-medium">
                     Password
@@ -503,8 +564,9 @@ function ManageEmployees() {
                     placeholder="Enter password"
                   />
                 </div>
+
                 <div className="grid grid-cols-2 gap-4">
-                  {/* Role */}
+                  {/* role */}
                   <div className="space-y-2">
                     <label htmlFor="create-role" className="text-sm font-medium">
                       Role
@@ -520,20 +582,13 @@ function ManageEmployees() {
                       </SelectContent>
                     </Select>
                   </div>
-                  {/* Department */}
+
+                  {/* department */}
                   <div className="space-y-2">
                     <label htmlFor="create-dept" className="text-sm font-medium">
                       Department
                     </label>
-                    <Select
-                      value={createForm.departmentId}
-                      onValueChange={(value) =>
-                        setCreateForm({
-                          ...createForm,
-                          departmentId: value,
-                        })
-                      }
-                    >
+                    <Select value={createForm.departmentId} onValueChange={(value) => setCreateForm({ ...createForm, departmentId: value })}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select department" />
                       </SelectTrigger>
@@ -549,6 +604,7 @@ function ManageEmployees() {
                   </div>
                 </div>
               </div>
+
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowCreateModal(false)}>
                   Cancel
@@ -576,7 +632,7 @@ function ManageEmployees() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* ───── filters card (unchanged) ───── */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500"></div>
         <CardHeader className="pb-2">
@@ -584,12 +640,14 @@ function ManageEmployees() {
             <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
               <Filter className="h-5 w-5" />
             </div>
-            Search & Filter
+            Search &amp; Filter
           </CardTitle>
           <CardDescription>Find employees by name, department, or role</CardDescription>
         </CardHeader>
+
         <CardContent>
           <div className="flex flex-wrap gap-3 mb-4">
+            {/* ---- name filter ---- */}
             <div className="flex-1 min-w-[200px]">
               <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg-white/5">
                 <Search className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -606,6 +664,8 @@ function ManageEmployees() {
                 )}
               </div>
             </div>
+
+            {/* ---- department filter ---- */}
             <div className="flex-1 min-w-[200px]">
               <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg-white/5">
                 <Building className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -622,8 +682,10 @@ function ManageEmployees() {
                 )}
               </div>
             </div>
+
+            {/* ---- role filter ---- */}
             <div className="flex-1 min-w-[200px]">
-              <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg-white/5">
+              <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg:white/5">
                 <UserCog className="h-4 w-4 mr-2 text-muted-foreground" />
                 <Input
                   placeholder="Filter by role"
@@ -640,12 +702,16 @@ function ManageEmployees() {
             </div>
           </div>
 
+          {/* row: count + sort buttons */}
           <div className="flex justify-between items-center">
             <div className="text-sm text-muted-foreground">
               Showing {getFilteredAndSortedEmployees().length} of {employees.length} employees
             </div>
+
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Sort by:</span>
+
+              {/* name sort */}
               <TooltipProvider delayDuration={300}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -653,19 +719,18 @@ function ManageEmployees() {
                       variant="outline"
                       size="sm"
                       onClick={() => requestSort("name")}
-                      className={`${sortConfig.key === "name" ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}`}
+                      className={sortConfig.key === "name" ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
                     >
                       Name{" "}
                       {sortConfig.key === "name" &&
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Sort by employee name</p>
-                  </TooltipContent>
+                  <TooltipContent>Sort by employee name</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
 
+              {/* role sort */}
               <TooltipProvider delayDuration={300}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -673,16 +738,14 @@ function ManageEmployees() {
                       variant="outline"
                       size="sm"
                       onClick={() => requestSort("role")}
-                      className={`${sortConfig.key === "role" ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}`}
+                      className={sortConfig.key === "role" ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
                     >
                       Role{" "}
                       {sortConfig.key === "role" &&
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Sort by role</p>
-                  </TooltipContent>
+                  <TooltipContent>Sort by role</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
@@ -690,7 +753,7 @@ function ManageEmployees() {
         </CardContent>
       </Card>
 
-      {/* EMPLOYEES TABLE */}
+      {/* ───── employees table ───── */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500"></div>
         <CardHeader className="pb-2">
@@ -702,11 +765,13 @@ function ManageEmployees() {
           </CardTitle>
           <CardDescription>Manage your organization's employees</CardDescription>
         </CardHeader>
+
         <CardContent className="p-0">
           <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
+                  {/* name */}
                   <TableHead className="cursor-pointer" onClick={() => requestSort("name")}>
                     <div className="flex items-center">
                       Name{" "}
@@ -714,6 +779,8 @@ function ManageEmployees() {
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </div>
                   </TableHead>
+
+                  {/* email */}
                   <TableHead className="cursor-pointer" onClick={() => requestSort("email")}>
                     <div className="flex items-center">
                       Email{" "}
@@ -721,6 +788,8 @@ function ManageEmployees() {
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </div>
                   </TableHead>
+
+                  {/* role */}
                   <TableHead className="cursor-pointer" onClick={() => requestSort("role")}>
                     <div className="flex items-center">
                       Role{" "}
@@ -728,6 +797,8 @@ function ManageEmployees() {
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </div>
                   </TableHead>
+
+                  {/* department */}
                   <TableHead className="cursor-pointer" onClick={() => requestSort("department")}>
                     <div className="flex items-center">
                       Department{" "}
@@ -735,33 +806,29 @@ function ManageEmployees() {
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </div>
                   </TableHead>
+
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
+                {/* ---- loading skeletons ---- */}
                 {loading ? (
                   Array(5)
                     .fill(0)
-                    .map((_, i) => (
-                      <TableRow key={i}>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-20 ml-auto" />
-                        </TableCell>
+                    .map((_, idx) => (
+                      <TableRow key={idx}>
+                        {Array(5)
+                          .fill(0)
+                          .map((__, j) => (
+                            <TableCell key={j}>
+                              <Skeleton className="h-6 w-full" />
+                            </TableCell>
+                          ))}
                       </TableRow>
                     ))
-                ) : getFilteredAndSortedEmployees().length > 0 ? (
+                ) : getFilteredAndSortedEmployees().length ? (
+                  /* ---- normal rows ---- */
                   <AnimatePresence>
                     {getFilteredAndSortedEmployees().map((emp) => {
                       const fullName = `${emp.profile?.firstName || ""} ${emp.profile?.lastName || ""}`.trim();
@@ -772,21 +839,28 @@ function ManageEmployees() {
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, height: 0 }}
                           transition={{ duration: 0.2 }}
-                          className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                          className="border-b transition-colors hover:bg-muted/50"
                         >
+                          {/* name */}
                           <TableCell className="font-medium">
                             <div className="flex items-center">
                               <div className="w-2 h-2 rounded-full bg-orange-500 mr-2"></div>
                               <span className="capitalize">{fullName}</span>
                             </div>
                           </TableCell>
+
+                          {/* email */}
                           <TableCell>
                             <div className="flex items-center">
                               <Mail className="h-3 w-3 mr-1 text-orange-500" />
                               {emp.email}
                             </div>
                           </TableCell>
+
+                          {/* role badge */}
                           <TableCell>{getRoleBadge(emp.role)}</TableCell>
+
+                          {/* department */}
                           <TableCell>
                             {emp.department ? (
                               <Badge
@@ -800,8 +874,11 @@ function ManageEmployees() {
                               <span className="text-muted-foreground text-sm">—</span>
                             )}
                           </TableCell>
+
+                          {/* actions */}
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
+                              {/* edit */}
                               <TooltipProvider delayDuration={300}>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -814,12 +891,11 @@ function ManageEmployees() {
                                       <Edit3 className="h-4 w-4" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Edit employee</p>
-                                  </TooltipContent>
+                                  <TooltipContent>Edit employee</TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
 
+                              {/* delete */}
                               <TooltipProvider delayDuration={300}>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -832,9 +908,7 @@ function ManageEmployees() {
                                       <Trash2 className="h-4 w-4" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Delete employee</p>
-                                  </TooltipContent>
+                                  <TooltipContent>Delete employee</TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
                             </div>
@@ -844,6 +918,7 @@ function ManageEmployees() {
                     })}
                   </AnimatePresence>
                 ) : (
+                  /* ---- empty state ---- */
                   <TableRow>
                     <TableCell colSpan={5} className="h-32 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
