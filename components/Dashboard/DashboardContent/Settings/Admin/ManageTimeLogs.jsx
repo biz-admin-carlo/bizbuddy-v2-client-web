@@ -581,10 +581,10 @@ function ManageTimelogs() {
                         <TableCell>{t.coffeeMins}</TableCell>
                         <TableCell>{t.lunchMins}</TableCell>
                         <TableCell>
-                          {fmtDevice(t.deviceIn.manufacturer)}, {fmtDevice(t.deviceIn.deviceName)}
+                          {fmtDevice(t.deviceIn?.manufacturer)}, {fmtDevice(t.deviceIn?.deviceName)}
                         </TableCell>
                         <TableCell>
-                          {fmtDevice(t.deviceOut.manufacturer)}, {fmtDevice(t.deviceOut.deviceName)}
+                          {fmtDevice(t.deviceOut?.manufacturer)}, {fmtDevice(t.deviceOut?.deviceName)}
                         </TableCell>
                         <TableCell>{fmtLoc(t.locIn)}</TableCell>
                         <TableCell>{fmtLoc(t.locOut)}</TableCell>
