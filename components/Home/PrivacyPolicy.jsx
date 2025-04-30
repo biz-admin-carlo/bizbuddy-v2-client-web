@@ -17,7 +17,8 @@ const policyItems = [
     value: "intro",
     title: "Privacy Policy Overview",
     content: `
-This Privacy Policy explains how [Your Company Name] (“we”, “our”, or “us”) collects, uses, stores, and protects your data when you use our cloud-based timekeeping and payroll website and mobile application (collectively, the “Services”).`,
+This Privacy Policy outlines how MyBizBuddy.co, a platform developed and owned by BizSolutions LLC ("we", "our", or "us"), collects, uses, stores, and protects your information when you use our cloud-based timekeeping and payroll services via our website and mobile application (collectively, the “Services”).
+By accessing or using our Services, you agree to the practices described in this policy.`,
   },
   {
     value: "information",
