@@ -1,11 +1,12 @@
 /* --------------------------------------------------------------------------
- *  PrivacyPolicy.tsx
+ *  PrivacyPolicy.jsx
  *  Collapsible Privacy Policy page (Framer-motion + shadcn/ui Accordion)
  * ------------------------------------------------------------------------*/
 
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 
@@ -84,7 +85,7 @@ You may:
 • Withdraw consent for optional data (e.g., biometrics)  
 • Object to certain processing activities  
 
-Submit requests via email: [Insert Email Address].`,
+Submit requests via email: info@bizsolutions.us`,
   },
   {
     value: "cookies",
@@ -109,31 +110,53 @@ Our Services are not intended for individuals under 16. We do not knowingly coll
     content: `
 We may update this policy periodically. Changes will appear here with a new effective date. Review this page regularly.`,
   },
+  /* ---- Contact section with live links ---- */
   {
     value: "contact",
     title: "9. Contact Us",
-    content: `
-[Your Company Name]  
-[Your Business Address]  
-Email: [Insert Email Address]  
-Phone: [Insert Phone Number]`,
+    content: (
+      <div className="space-y-2">
+        <p>BizSolutions&nbsp;LLC</p>
+        <p>
+          <Link
+            href="https://www.google.com/maps/search/?api=1&query=20289+Stevens+Creek+Boulevard+%231039+Cupertino+California+95014"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-orange-500 underline"
+          >
+            20289&nbsp;Stevens&nbsp;Creek&nbsp;Boulevard&nbsp;#1039
+            <br />
+            Cupertino,&nbsp;CA&nbsp;95014&nbsp;USA
+          </Link>
+        </p>
+        <p>
+          Email:&nbsp;
+          <a href="mailto:info@bizsolutions.us" className="text-orange-500 underline">
+            info@bizsolutions.us
+          </a>
+        </p>
+        <p>
+          Website:&nbsp;
+          <Link href="https://mybizbuddy.co" target="_blank" rel="noopener noreferrer" className="text-orange-500 underline">
+            mybizbuddy.co
+          </Link>
+        </p>
+      </div>
+    ),
   },
 ];
 
 /* --------------------------- Framer-motion variants -----------------------*/
 const containerVariants = {
   hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 },
-  },
+  visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
 };
 const itemVariants = {
   hidden: { y: 20, opacity: 0 },
   visible: { y: 0, opacity: 1 },
 };
 
-/* ------------------------------ Component ---------------------------------*/
+/* ------------------------------ Component -------------------------------- */
 export default function PrivacyPolicy() {
   return (
     <motion.section className="py-10 md:py-10 px-4 mx-auto w-full max-w-7xl" initial="hidden" animate="visible" variants={containerVariants}>
@@ -147,7 +170,9 @@ export default function PrivacyPolicy() {
             <motion.div key={`policy-${item.value}-${i}`} variants={itemVariants}>
               <AccordionItem value={item.value} className="border-b last:border-b-0">
                 <AccordionTrigger className="py-4 px-2 text-left">{item.title}</AccordionTrigger>
-                <AccordionContent className="px-2 pb-4 whitespace-pre-line">{item.content}</AccordionContent>
+                <AccordionContent className="px-2 pb-4">
+                  {typeof item.content === "string" ? <span className="whitespace-pre-line">{item.content}</span> : item.content}
+                </AccordionContent>
               </AccordionItem>
             </motion.div>
           ))}

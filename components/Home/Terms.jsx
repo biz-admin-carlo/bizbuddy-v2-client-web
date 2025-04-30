@@ -1,27 +1,24 @@
 /* --------------------------------------------------------------------------
- *  Terms.tsx
- *  A collapsible, animated “Terms & Conditions” page built the same way as
- *  your existing FAQ component (Framer-motion + shadcn/ui Accordion).
+ *  Terms.jsx  – Collapsible “Terms & Conditions” page
+ *  Built with Framer-motion + shadcn/ui Accordion
  * ------------------------------------------------------------------------*/
 
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 
 /* --------------------------------------------------------------------------
- *  Every accordion section below has:
- *    • value   – unique key for shadcn Accordion
- *    • title   – heading shown in the trigger
- *    • content – full section text (whitespace preserved via `pre-line`)
+ *  Accordion sections (complete list, no shortcuts)
  * ------------------------------------------------------------------------*/
 const termsItems = [
   {
     value: "intro",
     title: "Welcome to MyBizBuddy.co",
     content: `
-MyBizBuddy.co is a cloud-based timekeeping and payroll platform operated by BizSolutions LLC (“Company,” “we,” “us,” or “our”). 
+MyBizBuddy.co is a cloud-based time-keeping and payroll platform operated by BizSolutions LLC (“Company,” “we,” “us,” or “our”).
 By accessing our website, mobile application, or services (“Platform”), you agree to be bound by these Terms and Conditions (“Terms”).`,
   },
   {
@@ -48,7 +45,7 @@ a. Account Registration
    You must register an account with accurate information and keep your credentials secure.
 
 b. Authorized Use  
-   The Platform may be used only for lawful timekeeping, payroll, and workforce-management purposes. You are responsible for all activity under your account.
+   The Platform may be used only for lawful time-keeping, payroll, and workforce-management purposes. You are responsible for all activity under your account.
 
 c. User Content  
    You retain ownership of your data but grant us a limited license to process, store, and display it as necessary to deliver the service.`,
@@ -65,7 +62,7 @@ We handle all personal and payroll information in accordance with our Privacy Po
     content: `
 a. Uptime Commitment – We target 99.9 % uptime but cannot guarantee uninterrupted service.  
 b. Maintenance – Planned updates are scheduled during off-peak hours with prior notice where possible.  
-c. Technical Support – Available 9 AM – 6 PM PST, Monday–Friday, via help-desk or [Insert Support Email].`,
+c. Technical Support – Available 9 AM – 6 PM PST, Monday–Friday, via help-desk or info@bizsolutions.us.`,
   },
   {
     value: "termination",
@@ -108,29 +105,52 @@ These Terms are governed by the laws of the State of California. Any dispute wil
   {
     value: "contact",
     title: "11. Contact Information",
-    content: `
-BizSolutions LLC  
-20289 Stevens Creek Boulevard #1039  
-Cupertino, California 95014 USA  
-Email: [Insert Support Email]  
-Website: https://mybizbuddy.co`,
+    /* --------------------------------------------------------------------
+     *  Interactive links – address (Google Maps), email (mailto), website
+     * ------------------------------------------------------------------*/
+    content: (
+      <div className="space-y-2">
+        <p>BizSolutions&nbsp;LLC</p>
+        <p>
+          <Link
+            href="https://www.google.com/maps/search/?api=1&query=20289+Stevens+Creek+Boulevard+%231039+Cupertino+California+95014"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-orange-600 underline"
+          >
+            20289&nbsp;Stevens&nbsp;Creek&nbsp;Boulevard&nbsp;#1039
+            <br />
+            Cupertino,&nbsp;CA&nbsp;95014&nbsp;USA
+          </Link>
+        </p>
+        <p>
+          Email:&nbsp;
+          <a href="mailto:info@bizsolutions.us" className="text-orange-600 underline">
+            info@bizsolutions.us
+          </a>
+        </p>
+        <p>
+          Website:&nbsp;
+          <Link href="https://mybizbuddy.co" target="_blank" rel="noopener noreferrer" className="text-orange-600 underline">
+            mybizbuddy.co
+          </Link>
+        </p>
+      </div>
+    ),
   },
 ];
 
-/* --------------------------- Framer-motion variants -----------------------*/
+/* --------------------------- Framer-motion variants ----------------------*/
 const containerVariants = {
   hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 },
-  },
+  visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
 };
 const itemVariants = {
   hidden: { y: 20, opacity: 0 },
   visible: { y: 0, opacity: 1 },
 };
 
-/* ------------------------------ Component ---------------------------------*/
+/* ------------------------------ Component --------------------------------*/
 export default function Terms() {
   return (
     <motion.section className="py-10 md:py-10 px-4 mx-auto w-full max-w-7xl" initial="hidden" animate="visible" variants={containerVariants}>
@@ -139,13 +159,14 @@ export default function Terms() {
       </motion.h2>
 
       <motion.div className="flex flex-col items-center mt-10 max-w-3xl mx-auto" variants={containerVariants}>
-        {/* Accordion: each numbered section collapses/expands */}
         <Accordion type="single" collapsible className="w-full">
           {termsItems.map((term, i) => (
             <motion.div key={`term-${term.value}-${i}`} variants={itemVariants}>
               <AccordionItem value={term.value} className="border-b last:border-b-0">
                 <AccordionTrigger className="py-4 px-2 text-left">{term.title}</AccordionTrigger>
-                <AccordionContent className="px-2 pb-4 whitespace-pre-line">{term.content}</AccordionContent>
+                <AccordionContent className="px-2 pb-4">
+                  {typeof term.content === "string" ? <span className="whitespace-pre-line">{term.content}</span> : term.content}
+                </AccordionContent>
               </AccordionItem>
             </motion.div>
           ))}
