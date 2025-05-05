@@ -5,7 +5,10 @@
  * ManageTimelogs (Admin UI)
  * -------------------------------------------------
  * • multi-employee filter, CSV export, etc.
- * • now shows Device-In / Device-Out and Location-In / Location-Out
+ * • shows Device-In / Device-Out and Location-In / Location-Out
+ * • NEW:
+ *    – first column shows Timelog **ID**
+ *    – CSV export now mirrors exactly what the table displays
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -28,7 +31,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
 
-/* shadcn/ui */
+/* ────────── shadcn/ui imports ────────── */
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -40,7 +43,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 
-/* ───────────────────────── helpers ───────────────────────── */
+/* ───────────────────────── helper functions ───────────────────────── */
 
 const fmtLocalDateTime = (d) => {
   if (!d) return "—";
@@ -69,9 +72,12 @@ const fmtDevice = (d) => {
 const fmtLoc = (loc) =>
   loc && loc.latitude != null && loc.longitude != null ? `${Number(loc.latitude).toFixed(5)}, ${Number(loc.longitude).toFixed(5)}` : "—";
 
-/* CSV (new columns added) */
+/* ────────── CSV helper (mirrors table) ────────── */
+const wrap = (v) => `"${String(v).replace(/"/g, '""')}"`;
+
 const buildCSV = (rows) => {
   const header = [
+    "ID",
     "Employee",
     "Email",
     "Department",
@@ -85,23 +91,31 @@ const buildCSV = (rows) => {
     "Location In",
     "Location Out",
     "Status",
-  ];
-  const body = rows.map((r) => [
-    `"${r.employeeName}"`,
-    `"${r.email}"`,
-    `"${r.department}"`,
-    fmtLocalDateTime(r.timeIn),
-    fmtLocalDateTime(r.timeOut),
-    diffHours(r.timeIn, r.timeOut),
-    r.coffeeMins,
-    r.lunchMins,
-    fmtDevice(r.deviceIn),
-    fmtDevice(r.deviceOut),
-    fmtLoc(r.locIn),
-    fmtLoc(r.locOut),
-    r.status,
-  ]);
-  return [header, ...body].map((l) => l.join(",")).join("\r\n");
+  ].map(wrap);
+
+  const body = rows.map((r) => {
+    const deviceIn = `${fmtDevice(r.deviceIn?.manufacturer)}, ${fmtDevice(r.deviceIn?.deviceName)}`;
+    const deviceOut = `${fmtDevice(r.deviceOut?.manufacturer)}, ${fmtDevice(r.deviceOut?.deviceName)}`;
+
+    return [
+      r.id,
+      r.employeeName,
+      r.email,
+      r.department || "—",
+      fmtLocalDateTime(r.timeIn),
+      fmtLocalDateTime(r.timeOut),
+      diffHours(r.timeIn, r.timeOut),
+      r.coffeeMins,
+      r.lunchMins,
+      deviceIn,
+      deviceOut,
+      fmtLoc(r.locIn),
+      fmtLoc(r.locOut),
+      r.status.charAt(0).toUpperCase() + r.status.slice(1),
+    ].map(wrap);
+  });
+
+  return [header, ...body].map((row) => row.join(",")).join("\r\n");
 };
 
 /* ───────────────────────── component ───────────────────────── */
@@ -147,7 +161,6 @@ function ManageTimelogs() {
   useEffect(() => {
     if (!token) return;
     fetchTimelogs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, filters.departmentId, filters.from, filters.to, filters.status]);
 
   async function fetchProfile() {
@@ -195,6 +208,7 @@ function ManageTimelogs() {
       if (filters.to) qs.append("to", filters.to);
       if (filters.status !== "all") qs.append("status", filters.status);
       if (filters.employeeIds.length === 1 && filters.employeeIds[0] !== "all") qs.append("employeeId", filters.employeeIds[0]);
+
       const res = await fetch(`${API_URL}/api/timelogs?${qs.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -224,11 +238,14 @@ function ManageTimelogs() {
   /* ───────────────────────── filtering + sort ───────────────────────── */
   const displayed = useMemo(() => {
     let data = [...timelogs];
+
     if (!filters.employeeIds.includes("all")) data = data.filter((t) => filters.employeeIds.includes(t.userId));
+
     if (filters.search) {
       const q = filters.search.toLowerCase();
       data = data.filter((t) => t.employeeName?.toLowerCase().includes(q) || t.email?.toLowerCase().includes(q));
     }
+
     if (sortConfig.key) {
       data.sort((a, b) => {
         let aVal, bVal;
@@ -259,12 +276,16 @@ function ManageTimelogs() {
 
   /* ───────────────────────── CSV export ───────────────────────── */
   const exportCSV = () => {
-    if (!displayed.length) return toast.message("No rows to export");
-    const d = new Date();
-    const today = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-    const fileName = `${companyName || "Timelogs"}_${today}.csv`;
+    if (!displayed.length) {
+      toast.message("No rows to export");
+      return;
+    }
     setExporting(true);
     try {
+      const d = new Date();
+      const today = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+      const fileName = `${companyName || "Timelogs"}_${today}.csv`;
+
       const blob = new Blob([buildCSV(displayed)], {
         type: "text/csv;charset=utf-8;",
       });
@@ -285,14 +306,18 @@ function ManageTimelogs() {
   /* ───────────────────────── multi-employee popover ───────────────────────── */
   const MultiEmployeeSelect = () => {
     const allChecked = filters.employeeIds.includes("all");
+
     const toggle = (id) => {
       if (id === "all") return setFilters({ ...filters, employeeIds: ["all"] });
+
       let list = filters.employeeIds.filter((x) => x !== "all");
       list = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
       if (!list.length) list = ["all"];
       setFilters({ ...filters, employeeIds: list });
     };
+
     const label = allChecked ? "All employees" : `${filters.employeeIds.length} selected`;
+
     return (
       <Popover>
         <PopoverTrigger asChild>
@@ -331,7 +356,7 @@ function ManageTimelogs() {
     <div className="max-w-7xl mx-auto p-4 space-y-8">
       <Toaster position="top-center" />
 
-      {/* Header */}
+      {/* ---------------- HEADER ---------------- */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
@@ -342,6 +367,7 @@ function ManageTimelogs() {
         </div>
 
         <div className="flex gap-2">
+          {/* refresh */}
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -359,6 +385,7 @@ function ManageTimelogs() {
             </Tooltip>
           </TooltipProvider>
 
+          {/* CSV export */}
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -378,7 +405,7 @@ function ManageTimelogs() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* ---------------- FILTERS CARD ---------------- */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
@@ -456,7 +483,7 @@ function ManageTimelogs() {
         </CardContent>
       </Card>
 
-      {/* Table */}
+      {/* ---------------- TIMELAGS TABLE ---------------- */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2 flex justify-between items-start">
@@ -477,6 +504,10 @@ function ManageTimelogs() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {/* ID column (not sortable) */}
+                  <TableHead className="w-[220px]">ID</TableHead>
+
+                  {/* Employee */}
                   <TableHead
                     className="cursor-pointer"
                     onClick={() =>
@@ -492,6 +523,8 @@ function ManageTimelogs() {
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </div>
                   </TableHead>
+
+                  {/* Time In */}
                   <TableHead
                     className="cursor-pointer"
                     onClick={() =>
@@ -507,7 +540,10 @@ function ManageTimelogs() {
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </div>
                   </TableHead>
+
                   <TableHead>Time&nbsp;Out</TableHead>
+
+                  {/* Hours */}
                   <TableHead
                     className="cursor-pointer"
                     onClick={() =>
@@ -523,6 +559,7 @@ function ManageTimelogs() {
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </div>
                   </TableHead>
+
                   <TableHead>Coffee&nbsp;(min)</TableHead>
                   <TableHead>Lunch&nbsp;(min)</TableHead>
                   <TableHead>
@@ -549,7 +586,7 @@ function ManageTimelogs() {
                 {loading ? (
                   [...Array(6)].map((_, i) => (
                     <TableRow key={i}>
-                      {Array(11)
+                      {Array(12)
                         .fill(0)
                         .map((__, j) => (
                           <TableCell key={j}>
@@ -569,17 +606,27 @@ function ManageTimelogs() {
                         transition={{ duration: 0.2 }}
                         className="border-b transition-colors hover:bg-muted/50"
                       >
+                        {/* ID */}
+                        <TableCell className="font-mono text-xs text-orange-500">{t.id}</TableCell>
+
+                        {/* Employee */}
                         <TableCell>
                           <div className="flex items-center gap-1">
                             <Users className="h-3 w-3 text-orange-500" />
                             {t.employeeName}
                           </div>
                         </TableCell>
+
+                        {/* Time In / Out */}
                         <TableCell>{fmtLocalDateTime(t.timeIn)}</TableCell>
                         <TableCell>{fmtLocalDateTime(t.timeOut)}</TableCell>
+
+                        {/* Hours / breaks */}
                         <TableCell>{diffHours(t.timeIn, t.timeOut)}</TableCell>
                         <TableCell>{t.coffeeMins}</TableCell>
                         <TableCell>{t.lunchMins}</TableCell>
+
+                        {/* Device / Location */}
                         <TableCell>
                           {fmtDevice(t.deviceIn?.manufacturer)}, {fmtDevice(t.deviceIn?.deviceName)}
                         </TableCell>
@@ -588,6 +635,8 @@ function ManageTimelogs() {
                         </TableCell>
                         <TableCell>{fmtLoc(t.locIn)}</TableCell>
                         <TableCell>{fmtLoc(t.locOut)}</TableCell>
+
+                        {/* Status */}
                         <TableCell>
                           {t.status === "active" ? (
                             <Badge className="bg-orange-500 hover:bg-orange-600 text-white">Active</Badge>
@@ -603,7 +652,7 @@ function ManageTimelogs() {
                   </AnimatePresence>
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={11} className="h-28 text-center">
+                    <TableCell colSpan={12} className="h-28 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
                         <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                           <Clock className="h-8 w-8 text-orange-500/50" />

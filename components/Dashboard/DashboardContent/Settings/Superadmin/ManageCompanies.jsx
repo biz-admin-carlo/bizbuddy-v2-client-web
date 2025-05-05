@@ -1,12 +1,20 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 /**
- * ManageCompanies (Super-Admin UI)
+ * ManageCompanies – Super-Admin page
  * -------------------------------------------------
- *  • list companies
- *  • edit / delete
- *  • show current subscription start & expiry
- *  • optional country / currency / language via dropdowns
+ *  TABLE COLUMNS:
+ *    1. Company ID  (monospace)
+ *    2. Company Name
+ *    3. Country
+ *    4. Currency
+ *    5. Language
+ *    6. Start Date (from active sub, else latest)
+ *    7. Expiration (same sub)
+ *    8. Actions
+ *
+ *  Company-Details modal logic is unchanged.
  */
 
 import { useEffect, useState } from "react";
@@ -26,13 +34,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { motion, AnimatePresence } from "framer-motion";
 
 /* ------------------------------------------------------------------ */
-/*  Dropdown options (extend freely)                                   */
+/*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 const COUNTRY_OPTS = ["Philippines", "United States", "Canada", "Japan"];
 const CURRENCY_OPTS = ["PHP", "USD", "CAD", "JPY", "EUR"];
 const LANGUAGE_OPTS = ["English", "Filipino", "Japanese", "French"];
-
-/* blank form template */
 const BLANK_FORM = {
   name: "",
   country: null,
@@ -40,11 +46,10 @@ const BLANK_FORM = {
   language: null,
 };
 
-/* tiny helpers */
 const arrow = (on, dir) => (on ? dir === "ascending" ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" /> : null);
 
 /* ------------------------------------------------------------------ */
-/*  Component                                                         */
+/*  Component                                                          */
 /* ------------------------------------------------------------------ */
 function ManageCompanies() {
   const { token } = useAuthStore();
@@ -67,10 +72,11 @@ function ManageCompanies() {
   const [sort, setSort] = useState({ key: "name", direction: "ascending" });
   const [filterName, setFilterName] = useState("");
 
-  /* ---------------- fetch list ---------------- */
+  /* ------------------------------------------------------------------ */
+  /*  Fetch list                                                         */
+  /* ------------------------------------------------------------------ */
   useEffect(() => {
     if (token) fetchCompanies();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   async function fetchCompanies() {
@@ -80,24 +86,22 @@ function ManageCompanies() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
-      if (res.ok) {
-        const mapped = (json.data || []).map((c) => {
-          const sub = c.Subscription?.length ? c.Subscription[0] : null;
-          return {
-            ...c,
-            startDate: sub?.startDate || null,
-            endDate: sub?.endDate || null,
-          };
-        });
-        setCompanies(mapped);
-      } else toast.error(json.message || "Failed to load companies");
+      if (res.ok) setCompanies(json.data || []);
+      else toast.error(json.message || "Failed to load companies");
     } catch {
       toast.error("Network error");
     }
     setLoading(false);
   }
 
-  /* ---------------- sort / filter ---------------- */
+  /* ------------------------------------------------------------------ */
+  /*  Helpers                                                            */
+  /* ------------------------------------------------------------------ */
+  const firstRelevantSub = (subs) => {
+    if (!subs?.length) return null;
+    return subs.find((s) => s.active) || subs.slice().sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())[0];
+  };
+
   const requestSort = (key) => {
     setSort((p) => ({
       key,
@@ -117,7 +121,6 @@ function ManageCompanies() {
     });
   };
 
-  /* ---------------- dropdown helper ---------------- */
   const renderSelect = (form, setForm, field, opts) => (
     <div className="grid grid-cols-4 items-center gap-4">
       <label htmlFor={`edit-${field}`} className="text-right font-medium text-sm capitalize">
@@ -139,10 +142,9 @@ function ManageCompanies() {
     </div>
   );
 
-  /* ---------------- submit (edit) ---------------- */
+  /* ---------------- submitEdit / confirmDelete / openDetails ---------- */
   async function submitEdit() {
     const data = { ...editForm };
-
     ["country", "currency", "language"].forEach((f) => {
       if (data[f] === "none") data[f] = null;
     });
@@ -158,7 +160,6 @@ function ManageCompanies() {
         body: JSON.stringify(data),
       });
       const json = await res.json();
-
       if (res.ok) {
         toast.success("Company updated");
         setShowEdit(false);
@@ -170,7 +171,6 @@ function ManageCompanies() {
     setSubmitting(false);
   }
 
-  /* ---------------- delete ---------------- */
   async function confirmDelete() {
     if (!deleteId) return;
     setSubmitting(true);
@@ -191,7 +191,6 @@ function ManageCompanies() {
     setSubmitting(false);
   }
 
-  /* ---------------- details ---------------- */
   async function openDetails(id) {
     setShowDetails(true);
     setDetails(null);
@@ -210,24 +209,24 @@ function ManageCompanies() {
   }
 
   /* ------------------------------------------------------------------ */
-  /*  RENDER                                                            */
+  /*  RENDER                                                             */
   /* ------------------------------------------------------------------ */
   return (
     <div className="max-w-7xl mx-auto p-4 space-y-8">
-      {/* toast area */}
       <Toaster position="top-center" />
 
-      {/* ================= HEADER ================= */}
+      {/* ---------------- HEADER ---------------- */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-            <Building2 className="h-7 w-7 text-orange-500" /> Manage Companies
+            <Building2 className="h-7 w-7 text-orange-500" />
+            Manage Companies
           </h2>
           <p className="text-muted-foreground mt-1">Update tenant companies, subscriptions & payments</p>
         </div>
       </div>
 
-      {/* ================= SEARCH / FILTER ================= */}
+      {/* ---------------- SEARCH / FILTER CARD ---------------- */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
@@ -287,7 +286,7 @@ function ManageCompanies() {
         </CardContent>
       </Card>
 
-      {/* ================= TABLE ================= */}
+      {/* ---------------- COMPANIES TABLE ---------------- */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
@@ -304,18 +303,31 @@ function ManageCompanies() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {["name", "country", "currency", "language", "start", "expires"].map((h) => (
-                    <TableHead
-                      key={h}
-                      className={h === "start" || h === "expires" ? "" : "cursor-pointer"}
-                      onClick={() => (h === "start" ? requestSort("startDate") : h === "expires" ? requestSort("endDate") : requestSort(h))}
-                    >
-                      <div className="flex items-center capitalize">
-                        {h === "start" ? "Start Date" : h === "expires" ? "Expiration" : h}
-                        {arrow(sort.key === (h === "start" ? "startDate" : h === "expires" ? "endDate" : h), sort.direction)}
-                      </div>
-                    </TableHead>
-                  ))}
+                  <TableHead>ID</TableHead>
+                  {["name", "country", "currency", "language", "start", "expires"].map((h) => {
+                    const isSortable = ["name", "country", "currency", "language"].includes(h);
+                    const sortKey = h === "start" ? "startDate" : h === "expires" ? "endDate" : h;
+                    return (
+                      <TableHead
+                        key={h}
+                        className={isSortable || h === "start" || h === "expires" ? "cursor-pointer" : ""}
+                        onClick={
+                          h === "start"
+                            ? () => requestSort("startDate")
+                            : h === "expires"
+                            ? () => requestSort("endDate")
+                            : isSortable
+                            ? () => requestSort(h)
+                            : undefined
+                        }
+                      >
+                        <div className="flex items-center capitalize">
+                          {h === "start" ? "Start Date" : h === "expires" ? "Expiration" : h}
+                          {isSortable || h === "start" || h === "expires" ? arrow(sort.key === sortKey, sort.direction) : null}
+                        </div>
+                      </TableHead>
+                    );
+                  })}
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -324,7 +336,7 @@ function ManageCompanies() {
                 {loading ? (
                   [...Array(5)].map((_, i) => (
                     <TableRow key={i}>
-                      {Array(7)
+                      {Array(8)
                         .fill(null)
                         .map((__, j) => (
                           <TableCell key={j}>
@@ -335,98 +347,98 @@ function ManageCompanies() {
                   ))
                 ) : listed().length ? (
                   <AnimatePresence>
-                    {listed().map((c) => (
-                      <motion.tr
-                        key={c.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
-                      >
-                        <TableCell className="font-medium capitalize">{c.name}</TableCell>
-                        <TableCell className="capitalize">{c.country || "—"}</TableCell>
-                        <TableCell>{c.currency || "—"}</TableCell>
-                        <TableCell>{c.language || "—"}</TableCell>
-                        <TableCell>{c.startDate ? new Date(c.startDate).toLocaleDateString() : "—"}</TableCell>
-                        <TableCell>{c.endDate ? new Date(c.endDate).toLocaleDateString() : "—"}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            {/* details */}
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => openDetails(c.id)}
-                                    className="text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                                  >
-                                    <CreditCard className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>View details</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
+                    {listed().map((c) => {
+                      const sub = firstRelevantSub(c.Subscription);
+                      const startDate = sub?.startDate ? new Date(sub.startDate).toLocaleDateString() : "—";
+                      const endDate = sub?.endDate ? new Date(sub.endDate).toLocaleDateString() : "—";
+                      return (
+                        <motion.tr
+                          key={c.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                        >
+                          <TableCell className="text-sm font-mono text-orange-700 dark:text-orange-400">{c.id}</TableCell>
+                          <TableCell className="font-medium capitalize">{c.name}</TableCell>
+                          <TableCell className="capitalize">{c.country || "—"}</TableCell>
+                          <TableCell>{c.currency || "—"}</TableCell>
+                          <TableCell>{c.language || "—"}</TableCell>
+                          <TableCell>{startDate}</TableCell>
+                          <TableCell>{endDate}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              {/* details */}
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => openDetails(c.id)}
+                                      className="text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                                    >
+                                      <CreditCard className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>View details</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
 
-                            {/* edit */}
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setEditForm({
-                                        ...c,
-                                        country: c.country ?? "none",
-                                        currency: c.currency ?? "none",
-                                        language: c.language ?? "none",
-                                      });
-                                      setShowEdit(true);
-                                    }}
-                                    className="text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                                  >
-                                    <Edit3 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Edit company</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
+                              {/* edit */}
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setEditForm({
+                                          ...c,
+                                          country: c.country ?? "none",
+                                          currency: c.currency ?? "none",
+                                          language: c.language ?? "none",
+                                        });
+                                        setShowEdit(true);
+                                      }}
+                                      className="text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                                    >
+                                      <Edit3 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Edit company</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
 
-                            {/* delete */}
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setDeleteId(c.id);
-                                      setShowDelete(true);
-                                    }}
-                                    className="text-red-500 hover:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Delete company</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </TableCell>
-                      </motion.tr>
-                    ))}
+                              {/* delete */}
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setDeleteId(c.id);
+                                        setShowDelete(true);
+                                      }}
+                                      className="text-red-500 hover:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Delete company</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                          </TableCell>
+                        </motion.tr>
+                      );
+                    })}
                   </AnimatePresence>
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-32 text-center">
+                    <TableCell colSpan={8} className="h-32 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
                         <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                           <Building2 className="h-8 w-8 text-orange-500/50" />
@@ -447,46 +459,7 @@ function ManageCompanies() {
         </CardContent>
       </Card>
 
-      {/* ================= EDIT MODAL ================= */}
-      <Dialog open={showEdit} onOpenChange={setShowEdit}>
-        <DialogContent className="border-2 dark:border-white/10 max-w-lg">
-          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
-                <Edit3 className="h-5 w-5" />
-              </div>
-              Edit Company
-            </DialogTitle>
-            <DialogDescription>Update company information</DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-4">
-            {/* name (read-only) */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="edit-name" className="text-right font-medium text-sm">
-                Name
-              </label>
-              <Input id="edit-name" className="col-span-3 bg-muted/40 border-dashed opacity-60 cursor-not-allowed" value={editForm.name} disabled />
-            </div>
-
-            {renderSelect(editForm, setEditForm, "country", COUNTRY_OPTS)}
-            {renderSelect(editForm, setEditForm, "currency", CURRENCY_OPTS)}
-            {renderSelect(editForm, setEditForm, "language", LANGUAGE_OPTS)}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEdit(false)}>
-              Cancel
-            </Button>
-            <Button onClick={submitEdit} disabled={submitting} className="bg-orange-500 hover:bg-orange-600 text-white">
-              {submitting ? "Saving…" : "Save Changes"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ================= DELETE MODAL ================= */}
+      {/* ---------------- DELETE MODAL ---------------- */}
       <Dialog open={showDelete} onOpenChange={setShowDelete}>
         <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
           <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
@@ -519,7 +492,7 @@ function ManageCompanies() {
         </DialogContent>
       </Dialog>
 
-      {/* ================= DETAILS MODAL ================= */}
+      {/* ---------------- DETAILS MODAL ---------------- */}
       <Dialog open={showDetails} onOpenChange={setShowDetails}>
         <DialogContent className="max-w-2xl border-2 dark:border-white/10 overflow-y-auto max-h-[90vh]">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -538,6 +511,7 @@ function ManageCompanies() {
               <section className="space-y-1 mb-6">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                   <Building2 className="h-5 w-5" /> {details.name}
+                  <span className="text-sm font-mono text-orange-600">({details.id})</span>
                 </h3>
                 {details.country && <p className="text-sm text-muted-foreground">Country: {details.country}</p>}
                 {details.currency && <p className="text-sm text-muted-foreground">Currency: {details.currency}</p>}
@@ -552,12 +526,14 @@ function ManageCompanies() {
                 {details.Subscription?.length ? (
                   <ul className="space-y-2">
                     {details.Subscription.map((sub) => (
-                      <li key={sub.id} className="flex items-center gap-2 text-sm">
+                      <li key={sub.id} className="flex items-start gap-2 text-sm">
                         <Badge className="bg-orange-500/20 text-orange-700 dark:text-orange-400">
-                          {sub.plan?.name ?? "Plan"} ({sub.active ? "Active" : "Expired"})
+                          {sub.plan?.name ?? "Plan"} {sub.active ? "(Active)" : "(Expired)"}
                         </Badge>
                         <span className="text-muted-foreground">
                           {new Date(sub.startDate).toLocaleDateString()} –{sub.endDate ? ` ${new Date(sub.endDate).toLocaleDateString()}` : " —"}
+                          {sub.plan?.rangeOfUsers ? ` • ${sub.plan.rangeOfUsers} users` : ""}
+                          {sub.plan?.price ? ` • $${sub.plan.price.toLocaleString()}` : ""}
                         </span>
                       </li>
                     ))}
@@ -570,6 +546,44 @@ function ManageCompanies() {
           ) : (
             <p className="text-muted-foreground">No details loaded.</p>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ---------------- EDIT MODAL ---------------- */}
+      <Dialog open={showEdit} onOpenChange={setShowEdit}>
+        <DialogContent className="border-2 dark:border-white/10 max-w-lg">
+          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
+                <Edit3 className="h-5 w-5" />
+              </div>
+              Edit Company
+            </DialogTitle>
+            <DialogDescription>Update company information</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="edit-name" className="text-right font-medium text-sm">
+                Name
+              </label>
+              <Input id="edit-name" className="col-span-3 bg-muted/40 border-dashed opacity-60 cursor-not-allowed" value={editForm.name} disabled />
+            </div>
+
+            {renderSelect(editForm, setEditForm, "country", COUNTRY_OPTS)}
+            {renderSelect(editForm, setEditForm, "currency", CURRENCY_OPTS)}
+            {renderSelect(editForm, setEditForm, "language", LANGUAGE_OPTS)}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEdit(false)}>
+              Cancel
+            </Button>
+            <Button onClick={submitEdit} disabled={submitting} className="bg-orange-500 hover:bg-orange-600 text-white">
+              {submitting ? "Saving…" : "Save Changes"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

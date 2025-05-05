@@ -613,7 +613,7 @@ function ManageLocations() {
 
           <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
             <DialogTrigger asChild>
-              <Button onClick={openCreate} className="bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-semibold">
+              <Button onClick={openCreate} className="bg-orange-500 hover:bg-orange-600 text-white font-semibold">
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Create Location
               </Button>
