@@ -34,7 +34,7 @@ function SignInLink() {
   return (
     <Link
       href="/sign-in"
-      className="py-2.5 px-4 font-semibold text-white rounded-xl text-sm bg-gradient-to-r from-orange-500 to-orange-600 hover:bg-orange-600 transition-colors ease-in-out"
+      className="py-2.5 px-4 font-semibold text-white rounded-lg text-sm bg-gradient-to-r from-orange-500 to-orange-600 hover:bg-orange-600 transition-colors ease-in-out"
     >
       Sign in
     </Link>
@@ -84,7 +84,7 @@ export default function NavBar() {
               {!token ? (
                 <Link
                   href="/sign-in"
-                  className="py-2 px-4 font-semibold text-white rounded-xl text-sm bg-gradient-to-r from-orange-500 to-orange-600 hover:bg-orange-600 transition-colors ease-in-out"
+                  className="py-2 px-4 font-semibold text-white rounded-lg text-sm bg-gradient-to-r from-orange-500 to-orange-600 hover:bg-orange-600 transition-colors ease-in-out"
                 >
                   Sign in
                 </Link>

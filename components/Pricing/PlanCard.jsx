@@ -123,7 +123,7 @@ export default function PriceCard({ plan }) {
       </div>
       <motion.button
         onClick={handleChoosePlan}
-        className="mt-6 w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold py-2 px-4 rounded-xl transition-all ease-in-out duration-200"
+        className="mt-6 w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold py-2 px-4 rounded-lg transition-all ease-in-out duration-200"
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
       >
