@@ -10,10 +10,24 @@
  *      – Supervisor row first (labelled)
  *      – Member rows beneath
  *      – Columns: Full Name | Email
+ * • NEW: Refresh button to reload all data
  */
 
 import { useEffect, useState } from "react";
-import { Trash2, Edit3, PlusCircle, ChevronDown, ChevronUp, Search, Building, Users, UserCheck, AlertCircle, Download } from "lucide-react";
+import {
+  Trash2,
+  Edit3,
+  PlusCircle,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  Building,
+  Users,
+  UserCheck,
+  AlertCircle,
+  Download,
+  RefreshCw, // ← added
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
@@ -59,6 +73,7 @@ function ManageDepartments() {
   /* ---------------- ui state ---------------- */
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false); // ← added
 
   /* create modal */
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -148,7 +163,17 @@ function ManageDepartments() {
   };
 
   /* ------------------------------------------------------------------- */
-  /*  Re-compute userCounts whenever data changes                        */
+  /*  Refresh helper                                                     */
+  /* ------------------------------------------------------------------- */
+  const refreshData = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchDepartments(), fetchAllUsers()]);
+    toast.message("Data refreshed");
+    setRefreshing(false);
+  };
+
+  /* ------------------------------------------------------------------- */
+  /*  Re-compute userCounts whenever data changes                         */
   /* ------------------------------------------------------------------- */
   useEffect(() => {
     if (!departments.length) return;
@@ -391,6 +416,24 @@ function ManageDepartments() {
         </div>
 
         <div className="flex gap-2">
+          {/* refresh */}
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={refreshData}
+                  disabled={refreshing}
+                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                >
+                  <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Refresh data</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
           {/* CSV export */}
           <TooltipProvider delayDuration={300}>
             <Tooltip>
@@ -499,7 +542,7 @@ function ManageDepartments() {
             <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
               <Search className="h-5 w-5" />
             </div>
-            Search & Filter
+            Search &amp; Filter
           </CardTitle>
           <CardDescription>Find departments by name or supervisor</CardDescription>
         </CardHeader>

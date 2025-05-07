@@ -8,7 +8,8 @@
  * • shows Device-In / Device-Out and Location-In / Location-Out
  * • NEW:
  *    – first column shows Timelog **ID**
- *    – CSV export now mirrors exactly what the table displays
+ *    – CSV export mirrors exactly what the table displays
+ *    – Location cells open Google Maps with the lat/long
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -413,7 +414,7 @@ function ManageTimelogs() {
             <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
               <Filter className="h-5 w-5" />
             </div>
-            Search &amp; Filter
+            Search & Filter
           </CardTitle>
           <CardDescription>Filter timelogs by employee, date or status</CardDescription>
         </CardHeader>
@@ -633,8 +634,38 @@ function ManageTimelogs() {
                         <TableCell>
                           {fmtDevice(t.deviceOut?.manufacturer)}, {fmtDevice(t.deviceOut?.deviceName)}
                         </TableCell>
-                        <TableCell>{fmtLoc(t.locIn)}</TableCell>
-                        <TableCell>{fmtLoc(t.locOut)}</TableCell>
+
+                        {/* Location In (clickable if coords exist) */}
+                        <TableCell>
+                          {t.locIn && t.locIn.latitude != null && t.locIn.longitude != null ? (
+                            <a
+                              href={`https://www.google.com/maps?q=${t.locIn.latitude},${t.locIn.longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-orange-500 hover:underline"
+                            >
+                              {fmtLoc(t.locIn)}
+                            </a>
+                          ) : (
+                            fmtLoc(t.locIn)
+                          )}
+                        </TableCell>
+
+                        {/* Location Out (clickable if coords exist) */}
+                        <TableCell>
+                          {t.locOut && t.locOut.latitude != null && t.locOut.longitude != null ? (
+                            <a
+                              href={`https://www.google.com/maps?q=${t.locOut.latitude},${t.locOut.longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-orange-500 hover:underline"
+                            >
+                              {fmtLoc(t.locOut)}
+                            </a>
+                          ) : (
+                            fmtLoc(t.locOut)
+                          )}
+                        </TableCell>
 
                         {/* Status */}
                         <TableCell>

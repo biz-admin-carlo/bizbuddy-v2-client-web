@@ -112,7 +112,7 @@ const Footer = () => {
                   <input
                     type="text"
                     id="name"
-                    className="w-full dark:bg-neutral-800 bg-white p-2 text-sm pl-3 rounded-xl border-none focus:outline-none focus:ring-0 focus:border-none"
+                    className="w-full dark:bg-neutral-800 bg-white p-2 text-sm pl-3 rounded-lg dark:border-2 border-input focus:border-2 focus:outline-none focus:ring-0 focus:border-orange-500"
                     required
                     placeholder="Your name"
                   />
@@ -121,12 +121,12 @@ const Footer = () => {
                   <input
                     type="email"
                     id="email"
-                    className="w-full dark:bg-neutral-800 bg-white p-2 text-sm pl-3 rounded-xl border-none focus:outline-none focus:ring-0 focus:border-none"
+                    className="w-full dark:bg-neutral-800 bg-white p-2 text-sm pl-3 rounded-lg dark:border-2 border-input focus:border-2 focus:outline-none focus:ring-0 focus:border-orange-500"
                     required
                     placeholder="Your email"
                   />
                 </div>
-                <button type="submit" className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl text-white p-2.5 text-sm font-bold w-full">
+                <button type="submit" className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg text-white p-2.5 text-sm font-bold w-full">
                   <span className="flex items-center justify-center">
                     <span className="mr-2">Subscribe</span>
                     <FiArrowRight className="w-5 h-5" />

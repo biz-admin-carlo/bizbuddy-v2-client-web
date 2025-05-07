@@ -101,7 +101,7 @@ export default function Contact() {
                     placeholder="Subject"
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
-                    className="border-none p-2 pl-3 bg-white dark:bg-neutral-800"
+                    className=" p-2 pl-3 bg-white dark:bg-neutral-800 "
                     required
                   />
 
@@ -118,7 +118,7 @@ export default function Contact() {
                   {/* Send Button */}
                   <Button
                     type="submit"
-                    className="py-3 px-4 w-full font-semibold text-white rounded-xl text-sm bg-gradient-to-r from-orange-500 to-orange-600"
+                    className="py-3 px-4 w-full font-semibold text-white rounded-lg text-sm bg-gradient-to-r from-orange-500 to-orange-600"
                   >
                     <span className="flex items-center justify-center">
                       <span className="mr-2">Send Message</span>

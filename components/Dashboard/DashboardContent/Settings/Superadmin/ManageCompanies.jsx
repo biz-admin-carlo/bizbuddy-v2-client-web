@@ -15,10 +15,24 @@
  *    8. Actions
  *
  *  Company-Details modal logic is unchanged.
+ *  NEW FEATURES:
+ *    • Refresh button
+ *    • CSV export of current table rows
  */
 
 import { useEffect, useState } from "react";
-import { Building2, Edit3, Trash2, ChevronUp, ChevronDown, Search, CreditCard, AlertCircle } from "lucide-react";
+import {
+  Building2,
+  Edit3,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+  Search,
+  CreditCard,
+  AlertCircle,
+  RefreshCw, // ← ADDED
+  Download, // ← ADDED
+} from "lucide-react";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
 
@@ -49,6 +63,28 @@ const BLANK_FORM = {
 const arrow = (on, dir) => (on ? dir === "ascending" ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" /> : null);
 
 /* ------------------------------------------------------------------ */
+/*  CSV helper                                                         */
+/* ------------------------------------------------------------------ */
+const buildCSV = (rows) => {
+  const header = ["ID", "Name", "Country", "Currency", "Language", "Start Date", "Expiration"];
+  const body = rows.map((c) => {
+    const sub = firstRelevantSub(c.Subscription);
+    const start = sub?.startDate ? new Date(sub.startDate).toISOString() : "";
+    const end = sub?.endDate ? new Date(sub.endDate).toISOString() : "";
+    return [`"${c.id}"`, `"${c.name}"`, `"${c.country || ""}"`, `"${c.currency || ""}"`, `"${c.language || ""}"`, `"${start}"`, `"${end}"`];
+  });
+  return [header, ...body].map((l) => l.join(",")).join("\r\n");
+};
+
+/* ------------------------------------------------------------------ */
+/*  firstRelevantSub (hoisted so CSV helper can use it)                */
+/* ------------------------------------------------------------------ */
+function firstRelevantSub(subs) {
+  if (!subs?.length) return null;
+  return subs.find((s) => s.active) || subs.slice().sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())[0];
+}
+
+/* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 function ManageCompanies() {
@@ -71,6 +107,10 @@ function ManageCompanies() {
 
   const [sort, setSort] = useState({ key: "name", direction: "ascending" });
   const [filterName, setFilterName] = useState("");
+
+  /* NEW state */
+  const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   /* ------------------------------------------------------------------ */
   /*  Fetch list                                                         */
@@ -95,13 +135,40 @@ function ManageCompanies() {
   }
 
   /* ------------------------------------------------------------------ */
+  /*  NEW helpers: refresh + CSV export                                  */
+  /* ------------------------------------------------------------------ */
+  async function refreshData() {
+    setRefreshing(true);
+    await fetchCompanies();
+    toast.message("Data refreshed");
+    setRefreshing(false);
+  }
+
+  function exportCSV() {
+    const rows = listed();
+    if (!rows.length) return toast.message("No rows to export");
+    setExporting(true);
+    try {
+      const d = new Date();
+      const date = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+      const blob = new Blob([buildCSV(rows)], {
+        type: "text/csv;charset=utf-8;",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Companies_${date}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.message("CSV exported");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
   /*  Helpers                                                            */
   /* ------------------------------------------------------------------ */
-  const firstRelevantSub = (subs) => {
-    if (!subs?.length) return null;
-    return subs.find((s) => s.active) || subs.slice().sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())[0];
-  };
-
   const requestSort = (key) => {
     setSort((p) => ({
       key,
@@ -112,6 +179,8 @@ function ManageCompanies() {
   const listed = () => {
     const filtered = companies.filter((c) => (filterName ? c.name.toLowerCase().includes(filterName.toLowerCase()) : true));
     if (!sort.key) return filtered;
+
+    /* simple value sort (same logic as original) */
     return [...filtered].sort((a, b) => {
       const aVal = (a[sort.key] ?? "").toString().toLowerCase();
       const bVal = (b[sort.key] ?? "").toString().toLowerCase();
@@ -223,6 +292,45 @@ function ManageCompanies() {
             Manage Companies
           </h2>
           <p className="text-muted-foreground mt-1">Update tenant companies, subscriptions & payments</p>
+        </div>
+
+        {/* NEW: buttons */}
+        <div className="flex gap-2">
+          {/* refresh */}
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={refreshData}
+                  disabled={refreshing}
+                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                >
+                  <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Refresh data</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {/* CSV export */}
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={exportCSV}
+                  disabled={exporting || !listed().length}
+                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                >
+                  <Download className={`h-4 w-4 ${exporting ? "animate-spin" : ""}`} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Export CSV</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
 
