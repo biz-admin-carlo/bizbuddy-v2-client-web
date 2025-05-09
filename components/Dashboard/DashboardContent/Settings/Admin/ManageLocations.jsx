@@ -1,13 +1,14 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 /* ───────────────────────────────────────────────────────────────────────────
    ManageLocations
    • list / create / edit / delete geofenced locations
    • assign & remove users
-   • NEW FEATURES
-     1) “Use Current Location” button in Create-Location dialog
-     2) “Use Current Location” button in Edit-Location dialog
-     3) Live device-location status badge below the page heading
+   • NEW (2025-05-09)
+       – High-accuracy browser geolocation (±50 m or best within 20 s)
+       – “View Map” button in each table row (opens Google Maps centered on
+         that location)
    ────────────────────────────────────────────────────────────────────────── */
 
 import { useEffect, useMemo, useState } from "react";
@@ -27,17 +28,20 @@ import {
   AlertCircle,
   UserCheck,
   Loader2,
+  ExternalLink,
+  Info,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
-import useAuthStore from "@/store/useAuthStore";
 import { motion, AnimatePresence } from "framer-motion";
+import useAuthStore from "@/store/useAuthStore";
 
+/* ────────── shadcn/ui components ────────── */
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -67,22 +71,41 @@ if (typeof window !== "undefined") {
 }
 
 /* ────────────────────────────────────
-   2.  Tiny helper – browser geolocation
+   2.  High-accuracy browser-location helper
    ──────────────────────────────────── */
-function getBrowserLocation() {
+function getPreciseBrowserLocation({ desiredAccuracy = 50, timeoutMs = 20000 } = {}) {
   return new Promise((resolve) => {
     if (typeof window === "undefined" || !("geolocation" in navigator)) {
-      return resolve({ latitude: null, longitude: null });
+      return resolve({ latitude: null, longitude: null, accuracy: null });
     }
-    navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        resolve({
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-        }),
-      () => resolve({ latitude: null, longitude: null }),
-      { enableHighAccuracy: true, timeout: 8000 }
+
+    let settled = false;
+    let lastCoords = null;
+    const opts = {
+      enableHighAccuracy: true,
+      timeout: timeoutMs,
+      maximumAge: 0,
+    };
+
+    const finish = (coords) => {
+      if (settled) return;
+      settled = true;
+      navigator.geolocation.clearWatch(watcher);
+      clearTimeout(failTimer);
+      resolve(coords);
+    };
+
+    const watcher = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        lastCoords = { latitude, longitude, accuracy };
+        if (accuracy <= desiredAccuracy) finish(lastCoords);
+      },
+      () => finish({ latitude: null, longitude: null, accuracy: null }),
+      opts
     );
+
+    const failTimer = setTimeout(() => finish(lastCoords || { latitude: null, longitude: null, accuracy: null }), timeoutMs + 2000);
   });
 }
 
@@ -104,8 +127,6 @@ function LocationPicker({ lat, lng, radius, onChange }) {
     return null;
   }
 
-  /*  crypto.randomUUID() ensures un-mount / re-mount to avoid
-      “Map container is already initialized” in strict-mode  */
   const mapKey = useMemo(() => (typeof crypto !== "undefined" ? crypto.randomUUID() : Date.now()), []);
 
   return (
@@ -115,25 +136,14 @@ function LocationPicker({ lat, lng, radius, onChange }) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://osm.org/copyright">OpenStreetMap</a> contributors'
         />
-        <Circle
-          center={position}
-          radius={Number.parseInt(radius || 500, 10)}
-          pathOptions={{
-            color: "#f97316",
-            fillColor: "#f97316",
-            fillOpacity: 0.2,
-          }}
-        />
+        <Circle center={position} radius={Number.parseInt(radius || 500, 10)} pathOptions={{ color: "#f97316", fillColor: "#f97316", fillOpacity: 0.2 }} />
         <Marker
           position={position}
           draggable
           eventHandlers={{
             dragend: (e) => {
               const p = e.target.getLatLng();
-              onChange({
-                lat: p.lat.toFixed(6),
-                lng: p.lng.toFixed(6),
-              });
+              onChange({ lat: p.lat.toFixed(6), lng: p.lng.toFixed(6) });
             },
           }}
         />
@@ -150,17 +160,18 @@ function ManageLocations() {
   const { token } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-  /*  Device-location status (header badge)  */
+  /*  Device-location badge  */
   const [deviceLoc, setDeviceLoc] = useState({
     latitude: null,
     longitude: null,
+    accuracy: null,
   });
   const [deviceLocLoading, setDeviceLocLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
     setDeviceLocLoading(true);
-    getBrowserLocation().then((loc) => {
+    getPreciseBrowserLocation().then((loc) => {
       if (mounted) {
         setDeviceLoc(loc);
         setDeviceLocLoading(false);
@@ -238,11 +249,11 @@ function ManageLocations() {
       const res = await fetch(`${API_URL}/api/location`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
-      if (res.ok) setLocations(data.data || []);
-      else toast.message(data.error || "Failed to fetch locations.");
-    } catch (err) {
-      console.error(err);
+      const j = await res.json();
+      if (res.ok) setLocations(j.data || []);
+      else toast.message(j.error || "Failed to fetch locations.");
+    } catch (e) {
+      console.error(e);
       toast.message("Failed to fetch locations.");
     }
     setLoading(false);
@@ -253,11 +264,11 @@ function ManageLocations() {
       const res = await fetch(`${API_URL}/api/employee`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
-      if (res.ok) setUsers(data.data || []);
-      else toast.message(data.error || "Failed to fetch users.");
-    } catch (err) {
-      console.error(err);
+      const j = await res.json();
+      if (res.ok) setUsers(j.data || []);
+      else toast.message(j.error || "Failed to fetch users.");
+    } catch (e) {
+      console.error(e);
       toast.message("Failed to fetch users.");
     }
   }
@@ -267,12 +278,12 @@ function ManageLocations() {
       const res = await fetch(`${API_URL}/api/location/${locationId}/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
-      if (res.ok) return data.data || [];
-      toast.message(data.error || "Failed to fetch assigned users.");
+      const j = await res.json();
+      if (res.ok) return j.data || [];
+      toast.message(j.error || "Failed to fetch assigned users.");
       return [];
-    } catch (err) {
-      console.error(err);
+    } catch (e) {
+      console.error(e);
       toast.message("Failed to fetch assigned users.");
       return [];
     }
@@ -283,12 +294,11 @@ function ManageLocations() {
     try {
       await Promise.all([fetchLocations(), fetchUsers()]);
       toast.message("Data refreshed successfully");
-    } catch (err) {
-      console.error(err);
+    } catch (e) {
+      console.error(e);
       toast.message("Failed to refresh data");
-    } finally {
-      setRefreshing(false);
     }
+    setRefreshing(false);
   };
 
   /* ───────────────────────────────────
@@ -332,7 +342,7 @@ function ManageLocations() {
 
   async function handleUseCurrentLocationCreate() {
     setUseLocLoadingCreate(true);
-    const loc = await getBrowserLocation();
+    const loc = await getPreciseBrowserLocation();
     setUseLocLoadingCreate(false);
 
     if (loc.latitude && loc.longitude) {
@@ -341,14 +351,17 @@ function ManageLocations() {
         latitude: loc.latitude.toFixed(6),
         longitude: loc.longitude.toFixed(6),
       }));
-      toast.message("Coordinates filled from device location.");
+      toast.message(`Coordinates set (±${Math.round(loc.accuracy)} m).`);
     } else {
       toast.message("Location unavailable – enable location services and try again.");
     }
   }
 
   async function handleCreate() {
-    if (!createForm.name.trim()) return toast.message("Name required.");
+    if (!createForm.name.trim()) {
+      toast.message("Name required.");
+      return;
+    }
     setCreateLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/location/create`, {
@@ -364,18 +377,17 @@ function ManageLocations() {
           radius: Number.parseInt(createForm.radius, 10) || 500,
         }),
       });
-      const data = await res.json();
+      const j = await res.json();
       if (res.ok) {
-        toast.message(data.message || "Location created.");
+        toast.message(j.message || "Location created.");
         setShowCreateModal(false);
         fetchLocations();
-      } else toast.message(data.error || "Failed to create location.");
-    } catch (err) {
-      console.error(err);
+      } else toast.message(j.error || "Failed to create location.");
+    } catch (e) {
+      console.error(e);
       toast.message("Failed to create location.");
-    } finally {
-      setCreateLoading(false);
     }
+    setCreateLoading(false);
   }
 
   /* --- Edit helpers --- */
@@ -392,16 +404,15 @@ function ManageLocations() {
 
   async function handleUseCurrentLocationEdit() {
     setUseLocLoadingEdit(true);
-    const loc = await getBrowserLocation();
+    const loc = await getPreciseBrowserLocation();
     setUseLocLoadingEdit(false);
-
     if (loc.latitude && loc.longitude) {
       setEditForm((p) => ({
         ...p,
         latitude: loc.latitude.toFixed(6),
         longitude: loc.longitude.toFixed(6),
       }));
-      toast.message("Coordinates filled from device location.");
+      toast.message(`Coordinates set (±${Math.round(loc.accuracy)} m).`);
     } else {
       toast.message("Location unavailable – enable location services and try again.");
     }
@@ -409,7 +420,10 @@ function ManageLocations() {
 
   async function handleSaveEdit() {
     const { id, name, latitude, longitude, radius } = editForm;
-    if (!name.trim()) return toast.message("Name required.");
+    if (!name.trim()) {
+      toast.message("Name required.");
+      return;
+    }
     setEditLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/location/update/${id}`, {
@@ -425,18 +439,17 @@ function ManageLocations() {
           radius: Number.parseInt(radius, 10) || 500,
         }),
       });
-      const data = await res.json();
+      const j = await res.json();
       if (res.ok) {
-        toast.message(data.message || "Location updated.");
+        toast.message(j.message || "Location updated.");
         setShowEditModal(false);
         fetchLocations();
-      } else toast.message(data.error || "Failed to update location.");
-    } catch (err) {
-      console.error(err);
+      } else toast.message(j.error || "Failed to update location.");
+    } catch (e) {
+      console.error(e);
       toast.message("Failed to update location.");
-    } finally {
-      setEditLoading(false);
     }
+    setEditLoading(false);
   }
 
   /* --- Delete helpers --- */
@@ -453,18 +466,17 @@ function ManageLocations() {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
+      const j = await res.json();
       if (res.ok) {
-        toast.message(data.message || "Location deleted.");
+        toast.message(j.message || "Location deleted.");
         setLocations((prev) => prev.filter((l) => l.id !== locationToDelete.id));
-      } else toast.message(data.error || "Failed to delete location.");
-    } catch (err) {
-      console.error(err);
+      } else toast.message(j.error || "Failed to delete location.");
+    } catch (e) {
+      console.error(e);
       toast.message("Failed to delete location.");
-    } finally {
-      setShowDeleteModal(false);
-      setDeleteLoading(false);
     }
+    setShowDeleteModal(false);
+    setDeleteLoading(false);
   }
 
   /* --- Users helpers --- */
@@ -490,20 +502,19 @@ function ManageLocations() {
         },
         body: JSON.stringify({ userIds: [selectedUserId] }),
       });
-      const data = await res.json();
+      const j = await res.json();
       if (res.ok) {
-        toast.message(data.message || "User assigned.");
+        toast.message(j.message || "User assigned.");
         const added = availableUsers.find((u) => u.id === selectedUserId);
         setAssignedUsers((prev) => [...prev, added]);
         setAvailableUsers((prev) => prev.filter((u) => u.id !== selectedUserId));
         setSelectedUserId("");
-      } else toast.message(data.error || "Failed to assign user.");
-    } catch (err) {
-      console.error(err);
+      } else toast.message(j.error || "Failed to assign user.");
+    } catch (e) {
+      console.error(e);
       toast.message("Failed to assign user.");
-    } finally {
-      setUserActionLoading(false);
     }
+    setUserActionLoading(false);
   }
 
   async function removeUser(userId) {
@@ -517,19 +528,18 @@ function ManageLocations() {
         },
         body: JSON.stringify({ userIds: [userId] }),
       });
-      const data = await res.json();
+      const j = await res.json();
       if (res.ok) {
-        toast.message(data.message || "User removed.");
+        toast.message(j.message || "User removed.");
         const removed = assignedUsers.find((u) => u.id === userId);
         setAssignedUsers((prev) => prev.filter((u) => u.id !== userId));
         setAvailableUsers((prev) => [...prev, removed]);
-      } else toast.message(data.error || "Failed to remove user.");
-    } catch (err) {
-      console.error(err);
+      } else toast.message(j.error || "Failed to remove user.");
+    } catch (e) {
+      console.error(e);
       toast.message("Failed to remove user.");
-    } finally {
-      setLoadingUserId(null);
     }
+    setLoadingUserId(null);
   }
 
   /* ───────────────────────────────────
@@ -567,7 +577,8 @@ function ManageLocations() {
                   <TooltipContent>
                     <p>
                       Device coordinates:&nbsp;
-                      {deviceLoc.latitude.toFixed(5)}, {deviceLoc.longitude.toFixed(5)}
+                      {deviceLoc.latitude.toFixed(5)}, {deviceLoc.longitude.toFixed(5)} (±
+                      {Math.round(deviceLoc.accuracy)} m)
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -638,14 +649,15 @@ function ManageLocations() {
                   lat={createForm.latitude}
                   lng={createForm.longitude}
                   radius={createForm.radius}
-                  onChange={({ lat, lng }) =>
-                    setCreateForm((p) => ({
-                      ...p,
-                      latitude: lat,
-                      longitude: lng,
-                    }))
-                  }
+                  onChange={({ lat, lng }) => setCreateForm((p) => ({ ...p, latitude: lat, longitude: lng }))}
                 />
+                {/* guidance banner */}
+                <div className="flex items-start gap-2 text-sm bg-black/5 dark:bg-white/5 rounded-md p-3">
+                  <Info className="h-4 w-4 text-orange-500 shrink-0 mt-0.5" />
+                  <span>
+                    <b>Heads-up:</b> browser autofill can be imprecise.&nbsp; Drag the orange pin on the map to position the location exactly.
+                  </span>
+                </div>
 
                 {/* use current location */}
                 <Button
@@ -660,7 +672,7 @@ function ManageLocations() {
                 </Button>
 
                 {/* name */}
-                <div className="grid grid-cols-4 items-center gap-4 text-sm">
+                <div className="grid:grid-cols-4 items-center gap-4 text-sm">
                   <label className="text-right font-medium" htmlFor="name">
                     Location Name
                   </label>
@@ -668,12 +680,7 @@ function ManageLocations() {
                     id="name"
                     className="col-span-3"
                     value={createForm.name}
-                    onChange={(e) =>
-                      setCreateForm((p) => ({
-                        ...p,
-                        name: e.target.value,
-                      }))
-                    }
+                    onChange={(e) => setCreateForm((p) => ({ ...p, name: e.target.value }))}
                     placeholder="Enter location name"
                   />
                 </div>
@@ -688,12 +695,7 @@ function ManageLocations() {
                       id="latitude"
                       className="col-span-3"
                       value={createForm.latitude}
-                      onChange={(e) =>
-                        setCreateForm((p) => ({
-                          ...p,
-                          latitude: e.target.value,
-                        }))
-                      }
+                      onChange={(e) => setCreateForm((p) => ({ ...p, latitude: e.target.value }))}
                     />
                   </div>
                   <div className="grid grid-cols-4 items-center gap-4 text-sm">
@@ -724,12 +726,7 @@ function ManageLocations() {
                     type="number"
                     className="col-span-3"
                     value={createForm.radius}
-                    onChange={(e) =>
-                      setCreateForm((p) => ({
-                        ...p,
-                        radius: e.target.value,
-                      }))
-                    }
+                    onChange={(e) => setCreateForm((p) => ({ ...p, radius: e.target.value }))}
                   />
                 </div>
               </div>
@@ -749,7 +746,7 @@ function ManageLocations() {
                           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                         ></path>
                       </svg>
-                      Creating...
+                      Creating…
                     </span>
                   ) : (
                     <span>Create Location</span>
@@ -763,7 +760,7 @@ function ManageLocations() {
 
       {/* ────────── Filters ────────── */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500"></div>
+        <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
             <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
@@ -815,14 +812,12 @@ function ManageLocations() {
                       }
                       className={`${sortConfig.key === "name" ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}`}
                     >
-                      Name{" "}
+                      Name
                       {sortConfig.key === "name" &&
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Sort by location name</p>
-                  </TooltipContent>
+                  <TooltipContent>Sort by location name</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
 
@@ -841,14 +836,12 @@ function ManageLocations() {
                       }
                       className={`${sortConfig.key === "radius" ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}`}
                     >
-                      Radius{" "}
+                      Radius
                       {sortConfig.key === "radius" &&
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Sort by radius size</p>
-                  </TooltipContent>
+                  <TooltipContent>Sort by radius size</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
@@ -858,7 +851,7 @@ function ManageLocations() {
 
       {/* ────────── Locations table ────────── */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500"></div>
+        <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
             <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
@@ -873,6 +866,7 @@ function ManageLocations() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {/* sortable columns */}
                   <TableHead
                     className="cursor-pointer"
                     onClick={() =>
@@ -883,7 +877,7 @@ function ManageLocations() {
                     }
                   >
                     <div className="flex items-center">
-                      Name{" "}
+                      Name
                       {sortConfig.key === "name" &&
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </div>
@@ -900,22 +894,24 @@ function ManageLocations() {
                     }
                   >
                     <div className="flex items-center">
-                      Radius (m){" "}
+                      Radius (m)
                       {sortConfig.key === "radius" &&
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </div>
                   </TableHead>
                   <TableHead>Users</TableHead>
+                  <TableHead className="text-center">Map</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
                 {loading ? (
                   Array(5)
                     .fill(0)
                     .map((_, i) => (
                       <TableRow key={i}>
-                        {Array(6)
+                        {Array(7)
                           .fill(0)
                           .map((__, j) => (
                             <TableCell key={j}>
@@ -928,6 +924,7 @@ function ManageLocations() {
                   <AnimatePresence>
                     {getFilteredAndSorted().map((loc) => {
                       const assigned = loc.LocationRestriction?.filter((r) => r.restrictionStatus).length || 0;
+                      const mapUrl = `https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`;
                       return (
                         <motion.tr
                           key={loc.id}
@@ -935,11 +932,11 @@ function ManageLocations() {
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, height: 0 }}
                           transition={{ duration: 0.2 }}
-                          className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                          className="border-b transition-colors hover:bg-muted/50"
                         >
                           <TableCell className="font-medium">
                             <div className="flex items-center">
-                              <div className="w-2 h-2 rounded-full bg-orange-500 mr-2"></div>
+                              <div className="w-2 h-2 rounded-full bg-orange-500 mr-2" />
                               <span className="capitalize">{loc.name}</span>
                             </div>
                           </TableCell>
@@ -957,6 +954,27 @@ function ManageLocations() {
                               {assigned}
                             </Badge>
                           </TableCell>
+
+                          {/* Map button */}
+                          <TableCell className="text-center">
+                            <TooltipProvider delayDuration={300}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => window.open(mapUrl, "_blank", "noopener")}
+                                    className="text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                                  >
+                                    <ExternalLink className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Open in Google Maps</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableCell>
+
+                          {/* action buttons */}
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
                               <TooltipProvider delayDuration={300}>
@@ -971,9 +989,7 @@ function ManageLocations() {
                                       <Edit3 className="h-4 w-4" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Edit location</p>
-                                  </TooltipContent>
+                                  <TooltipContent>Edit location</TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
 
@@ -989,9 +1005,7 @@ function ManageLocations() {
                                       <Users2 className="h-4 w-4" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Manage users</p>
-                                  </TooltipContent>
+                                  <TooltipContent>Manage users</TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
 
@@ -1007,9 +1021,7 @@ function ManageLocations() {
                                       <Trash2 className="h-4 w-4" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Delete location</p>
-                                  </TooltipContent>
+                                  <TooltipContent>Delete location</TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
                             </div>
@@ -1020,7 +1032,7 @@ function ManageLocations() {
                   </AnimatePresence>
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-32 text-center">
+                    <TableCell colSpan={7} className="h-32 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
                         <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                           <MapPin className="h-8 w-8 text-orange-500/50" />
@@ -1044,7 +1056,7 @@ function ManageLocations() {
       {/* ────────── Edit dialog ────────── */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
         <DialogContent className="max-w-xl border-2 dark:border-white/10">
-          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
+          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
@@ -1062,8 +1074,13 @@ function ManageLocations() {
               radius={editForm.radius}
               onChange={({ lat, lng }) => setEditForm((p) => ({ ...p, latitude: lat, longitude: lng }))}
             />
-
-            {/* use current location for edit */}
+            {/* guidance banner */}
+            <div className="flex items-start gap-2 text-sm bg-black/5 dark:bg-white/5 rounded-md p-3">
+              <Info className="h-4 w-4 text-orange-500 shrink-0 mt-0.5" />
+              <span>
+                <b>Heads-up:</b> browser autofill can be imprecise.&nbsp; Drag the orange pin on the map to position the location exactly.
+              </span>
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -1142,7 +1159,7 @@ function ManageLocations() {
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     ></path>
                   </svg>
-                  Saving...
+                  Saving…
                 </span>
               ) : (
                 <span>Save Changes</span>
@@ -1155,7 +1172,7 @@ function ManageLocations() {
       {/* ────────── Users dialog ────────── */}
       <Dialog open={showUsersModal} onOpenChange={setShowUsersModal}>
         <DialogContent className="max-w-2xl border-2 dark:border-white/10">
-          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
+          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
@@ -1197,12 +1214,12 @@ function ManageLocations() {
                           >
                             {loadingUserId === u.id ? (
                               <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                 <path
                                   className="opacity-75"
                                   fill="currentColor"
                                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                ></path>
+                                />
                               </svg>
                             ) : (
                               <Trash2 className="h-4 w-4" />
@@ -1251,14 +1268,14 @@ function ManageLocations() {
                 {userActionLoading ? (
                   <span className="flex items-center">
                     <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path
                         className="opacity-75"
                         fill="currentColor"
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      ></path>
+                      />
                     </svg>
-                    Adding...
+                    Adding…
                   </span>
                 ) : (
                   <span>Add User</span>
@@ -1278,7 +1295,7 @@ function ManageLocations() {
       {/* ────────── Delete confirm ────────── */}
       <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
         <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
-          <div className="h-1 w-full bg-red-500 -mt-6 mb-4"></div>
+          <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="p-2 rounded-full bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400">
@@ -1310,14 +1327,14 @@ function ManageLocations() {
               {deleteLoading ? (
                 <span className="flex items-center">
                   <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path
                       className="opacity-75"
                       fill="currentColor"
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
+                    />
                   </svg>
-                  Deleting...
+                  Deleting…
                 </span>
               ) : (
                 <span>Delete Location</span>

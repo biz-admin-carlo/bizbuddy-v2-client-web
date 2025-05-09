@@ -1,7 +1,8 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { PlusCircle, Edit3, Trash2, ChevronUp, ChevronDown, Search, Calendar, AlertCircle, RefreshCw, XCircle, Filter, Users } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { PlusCircle, Edit3, Trash2, ChevronUp, ChevronDown, Search, Calendar, AlertCircle, RefreshCw, XCircle, Filter, Users, Check } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { RRule } from "rrule";
 import { format } from "date-fns";
@@ -17,8 +18,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
 
-/* ---------- helpers ---------- */
+/* ───────── helper constants ───────── */
 const DAY_OPTIONS = [
   { value: "MO", label: "MO" },
   { value: "TU", label: "TU" },
@@ -29,34 +31,133 @@ const DAY_OPTIONS = [
   { value: "SU", label: "SU" },
 ];
 
-// Add this mapping function near the top of the file, after the DAY_OPTIONS constant
+/* maps both letter codes and numeric codes (0–6) to names */
 const dayCodeToName = {
+  0: "Sun",
+  1: "Mon",
+  2: "Tue",
+  3: "Wed",
+  4: "Thu",
+  5: "Fri",
+  6: "Sat",
+  0: "Sun",
+  1: "Mon",
+  2: "Tue",
+  3: "Wed",
+  4: "Thu",
+  5: "Fri",
+  6: "Sat",
+  SU: "Sun",
   MO: "Mon",
-  TU: "Tues",
+  TU: "Tue",
   WE: "Wed",
-  TH: "Thurs",
+  TH: "Thu",
   FR: "Fri",
   SA: "Sat",
-  SU: "Sun",
 };
 
+/* ───────── util: safe RRule builder ───────── */
 function buildRRule(byday, dtStartISO) {
+  const weekdays = byday.map((d) => RRule[d]).filter(Boolean);
+  if (!weekdays.length) return "";
   return new RRule({
     freq: RRule.WEEKLY,
-    byweekday: byday.map((d) => RRule[d]),
+    byweekday: weekdays,
     dtstart: new Date(dtStartISO),
   }).toString();
 }
 
+/* parseRRule: returns BYDAY list or numeric fallback */
 function parseRRule(rule) {
+  /* try official parser first */
   try {
     const r = RRule.fromString(rule);
     return (r.options.byweekday || []).map((w) => w.toString().slice(0, 2));
   } catch {
+    /* fallback: extract BYDAY=… manually */
+    const m = rule.match(/BYDAY=([^;]+)/i);
+    if (m) return m[1].split(",").map((s) => s.trim());
     return [];
   }
 }
 
+/* ───────── hook: click-outside to close popover ───────── */
+function useClickOutside(cb) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const h = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) cb();
+    };
+    document.addEventListener("mousedown", h);
+    document.addEventListener("touchstart", h);
+    return () => {
+      document.removeEventListener("mousedown", h);
+      document.removeEventListener("touchstart", h);
+    };
+  }, [cb]);
+  return ref;
+}
+
+/* ───────── component: multi or single user selector ───────── */
+function MultiUserSelect({ list, setList, users, singleSelect = false }) {
+  const selected = Array.isArray(list) ? list : [];
+  const [open, setOpen] = useState(false);
+  const ref = useClickOutside(() => setOpen(false));
+
+  const all = selected.length === 0;
+  const label = all ? "All users" : `${selected.length} selected`;
+
+  const pickAll = () => setList([]);
+  const toggleOne = (id) => {
+    let newArr;
+    if (singleSelect) {
+      newArr = selected.includes(id) ? [] : [id];
+    } else {
+      newArr = selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];
+    }
+    setList(newArr);
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <Button variant="outline" className="w-full justify-between" onClick={() => setOpen((o) => !o)}>
+        {label}
+        <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+      </Button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-64 rounded-md border bg-popover p-2 shadow-lg space-y-1">
+          {/* All-users row */}
+          <div className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer select-none" onClick={pickAll}>
+            <Checkbox checked={all} />
+            <span>All users</span>
+            {all && <Check className="ml-auto h-4 w-4 text-orange-500" />}
+          </div>
+
+          {/* individual employees */}
+          <div className="max-h-64 overflow-y-auto pr-1">
+            {users.map((u) => {
+              const checked = selected.includes(u.id);
+              return (
+                <div
+                  key={u.id}
+                  className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer select-none"
+                  onClick={() => toggleOne(u.id)}
+                >
+                  <Checkbox checked={checked} />
+                  <span className="truncate">{u.email}</span>
+                  {checked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ───────── main component ───────── */
 function ManageShiftSchedules() {
   const { token } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -74,8 +175,7 @@ function ManageShiftSchedules() {
     byday: ["MO", "TU", "WE", "TH", "FR"],
     startDate: format(new Date(), "yyyy-MM-dd"),
     endDate: "",
-    assignedToAll: true,
-    assignedUserId: "",
+    assignedUserIds: [],
   });
 
   const [showEdit, setShowEdit] = useState(false);
@@ -86,12 +186,14 @@ function ManageShiftSchedules() {
   const [actionLoading, setActionLoading] = useState(false);
 
   const [filters, setFilters] = useState({ name: "" });
-  const [sortConfig, setSortConfig] = useState({ key: "startDate", direction: "descending" });
+  const [sortConfig, setSortConfig] = useState({
+    key: "startDate",
+    direction: "descending",
+  });
 
-  /* ---------- fetch ---------- */
+  /* ---------- fetch all core data ---------- */
   useEffect(() => {
     if (token) fetchAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   async function fetchAll() {
@@ -104,7 +206,7 @@ function ManageShiftSchedules() {
         fetch(`${API_URL}/api/shifts`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${API_URL}/api/employee`, {
+        fetch(`${API_URL}/api/employee?all=1`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -124,19 +226,14 @@ function ManageShiftSchedules() {
 
   const refreshData = async () => {
     setRefreshing(true);
-    try {
-      await fetchAll();
-      toast.message("Data refreshed");
-    } catch (e) {
-      console.error(e);
-      toast.message("Failed to refresh data.");
-    }
+    await fetchAll();
     setRefreshing(false);
   };
 
-  /* ---------- helpers ---------- */
+  /* ---------- helper maps ---------- */
   const shiftMap = useMemo(() => Object.fromEntries(shifts.map((s) => [s.id, s.shiftName])), [shifts]);
 
+  /* ---------- filter + sort ---------- */
   function filteredSorted() {
     const data = schedules.filter((s) => shiftMap[s.shiftId]?.toLowerCase().includes(filters.name.toLowerCase()));
     if (sortConfig.key) {
@@ -165,44 +262,96 @@ function ManageShiftSchedules() {
       byday: ["MO", "TU", "WE", "TH", "FR"],
       startDate: format(new Date(), "yyyy-MM-dd"),
       endDate: "",
-      assignedToAll: true,
-      assignedUserId: "",
+      assignedUserIds: [],
     });
     setShowCreate(true);
+  }
+
+  async function createOneSchedule(payload) {
+    const res = await fetch(`${API_URL}/api/shiftschedules/create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const j = await res.json();
+      throw new Error(j.message || "create failed");
+    }
   }
 
   async function handleCreate() {
     if (!createForm.shiftId) return toast.message("Select shift template.");
     if (createForm.byday.length === 0) return toast.message("Select day(s).");
+
+    const rule = buildRRule(createForm.byday, `${createForm.startDate}T00:00:00Z`);
+    if (!rule) return toast.message("Select valid day(s).");
+
+    const targets = createForm.assignedUserIds;
     setActionLoading(true);
 
-    const payload = {
-      shiftId: createForm.shiftId,
-      recurrencePattern: buildRRule(createForm.byday, `${createForm.startDate}T00:00:00Z`),
-      startDate: createForm.startDate,
-      endDate: createForm.endDate || null,
-      assignedToAll: createForm.assignedToAll,
-      assignedUserId: createForm.assignedToAll ? null : createForm.assignedUserId,
-    };
-
     try {
-      const res = await fetch(`${API_URL}/api/shiftschedules/create`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (res.status === 201 || res.status === 200) {
-        toast.message(data.message || "Schedule created.");
-        setShowCreate(false);
-        fetchAll();
-      } else toast.message(data.error || "Failed to create schedule.");
+      if (targets.length === 0) {
+        /* assign to all */
+        const payload = {
+          shiftId: createForm.shiftId,
+          recurrencePattern: rule,
+          startDate: createForm.startDate,
+          endDate: createForm.endDate || null,
+          assignedToAll: true,
+          assignedUserId: null,
+        };
+        await createOneSchedule(payload);
+      } else if (targets.length === 1) {
+        /* single user */
+        const payload = {
+          shiftId: createForm.shiftId,
+          recurrencePattern: rule,
+          startDate: createForm.startDate,
+          endDate: createForm.endDate || null,
+          assignedToAll: false,
+          assignedUserId: targets[0],
+        };
+        await createOneSchedule(payload);
+      } else {
+        /* multiple → loop with progress toast */
+        const total = targets.length;
+        let done = 0;
+        const toastId = toast.loading(`Creating 0 / ${total} schedules…`, {
+          duration: Infinity,
+        });
+
+        for (const uid of targets) {
+          try {
+            const payload = {
+              shiftId: createForm.shiftId,
+              recurrencePattern: rule,
+              startDate: createForm.startDate,
+              endDate: createForm.endDate || null,
+              assignedToAll: false,
+              assignedUserId: uid,
+            };
+            await createOneSchedule(payload);
+            done++;
+            toast.loading(`Creating ${done} / ${total} schedules…`, {
+              id: toastId,
+              duration: Infinity,
+            });
+          } catch (e) {
+            toast.error(`Failed for user ${uid}: ${e.message}`);
+          }
+        }
+        toast.success(`Finished (${done}/${total})`, { id: toastId });
+      }
+
+      toast.message("Schedule(s) created.");
+      setShowCreate(false);
+      fetchAll();
     } catch (e) {
       console.error(e);
-      toast.message("Failed to create schedule.");
+      toast.message(e.message || "Failed to create schedule.");
     } finally {
       setActionLoading(false);
     }
@@ -216,28 +365,31 @@ function ManageShiftSchedules() {
       byday: parseRRule(sch.recurrencePattern),
       startDate: sch.startDate.slice(0, 10),
       endDate: sch.endDate?.slice(0, 10) || "",
-      assignedToAll: sch.assignedToAll,
-      assignedUserId: sch.assignedUserId || "",
+      assignedUserIds: sch.assignedToAll ? [] : [sch.assignedUserId].filter(Boolean),
     });
     setShowEdit(true);
   }
 
   async function handleSaveEdit() {
-    const { id, shiftId, byday, startDate, endDate, assignedToAll, assignedUserId } = editForm;
+    const { id, shiftId, byday, startDate, endDate, assignedUserIds } = editForm;
 
     if (!shiftId) return toast.message("Select shift template.");
     if (byday.length === 0) return toast.message("Select day(s).");
-    setActionLoading(true);
+    if (assignedUserIds.length > 1) return toast.message("Pick at most one user when editing.");
+
+    const rule = buildRRule(byday, `${startDate}T00:00:00Z`);
+    if (!rule) return toast.message("Select valid day(s).");
 
     const payload = {
       shiftId,
-      recurrencePattern: buildRRule(byday, `${startDate}T00:00:00Z`),
+      recurrencePattern: rule,
       startDate,
       endDate: endDate || null,
-      assignedToAll,
-      assignedUserId: assignedToAll ? null : assignedUserId,
+      assignedToAll: assignedUserIds.length === 0,
+      assignedUserId: assignedUserIds.length === 1 ? assignedUserIds[0] : null,
     };
 
+    setActionLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/shiftschedules/${id}`, {
         method: "PUT",
@@ -247,12 +399,12 @@ function ManageShiftSchedules() {
         },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
+      const j = await res.json();
       if (res.ok) {
-        toast.message(data.message || "Schedule updated.");
+        toast.message(j.message || "Schedule updated.");
         setShowEdit(false);
         fetchAll();
-      } else toast.message(data.error || "Failed to update schedule.");
+      } else toast.message(j.error || "Failed to update schedule.");
     } catch (e) {
       console.error(e);
       toast.message("Failed to update schedule.");
@@ -275,11 +427,11 @@ function ManageShiftSchedules() {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
+      const j = await res.json();
       if (res.ok) {
-        toast.message(data.message || "Schedule deleted.");
+        toast.message(j.message || "Schedule deleted.");
         setSchedules((p) => p.filter((s) => s.id !== scheduleToDelete.id));
-      } else toast.message(data.error || "Failed to delete schedule.");
+      } else toast.message(j.error || "Failed to delete schedule.");
     } catch (e) {
       console.error(e);
       toast.message("Failed to delete schedule.");
@@ -290,12 +442,12 @@ function ManageShiftSchedules() {
     }
   }
 
-  /* ---------- render ---------- */
+  /* ───────── render ───────── */
   return (
     <div className="max-w-7xl mx-auto p-4 space-y-8">
       <Toaster position="top-center" />
 
-      {/* header */}
+      {/* ---------- header ---------- */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
@@ -319,12 +471,11 @@ function ManageShiftSchedules() {
                   <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>
-                <p>Refresh data</p>
-              </TooltipContent>
+              <TooltipContent>Refresh data</TooltipContent>
             </Tooltip>
           </TooltipProvider>
 
+          {/* ---------- create dialog ---------- */}
           <Dialog open={showCreate} onOpenChange={setShowCreate}>
             <DialogTrigger asChild>
               <Button onClick={openCreate} className="bg-orange-500 hover:bg-orange-600 text-white font-semibold">
@@ -333,9 +484,8 @@ function ManageShiftSchedules() {
               </Button>
             </DialogTrigger>
 
-            {/* create dialog */}
             <DialogContent className="border-2 dark:border-white/10 max-w-xl">
-              <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
+              <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
@@ -346,6 +496,7 @@ function ManageShiftSchedules() {
                 <DialogDescription>Add a new recurring shift schedule</DialogDescription>
               </DialogHeader>
 
+              {/* ---------- create form ---------- */}
               <div className="space-y-4 py-4">
                 {/* shift template */}
                 <div className="grid grid-cols-4 items-center gap-4 text-sm">
@@ -364,7 +515,7 @@ function ManageShiftSchedules() {
                   </Select>
                 </div>
 
-                {/* days */}
+                {/* days buttons */}
                 <div className="grid grid-cols-4 items-start gap-4 text-sm">
                   <label className="text-right font-medium">Days</label>
                   <div className="col-span-3 flex flex-wrap gap-2">
@@ -403,70 +554,41 @@ function ManageShiftSchedules() {
                       type="date"
                       className="col-span-3"
                       value={createForm[field]}
-                      onChange={(e) => setCreateForm((p) => ({ ...p, [field]: e.target.value }))}
+                      onChange={(e) =>
+                        setCreateForm((p) => ({
+                          ...p,
+                          [field]: e.target.value,
+                        }))
+                      }
                     />
                   </div>
                 ))}
 
-                {/* assign to all */}
-                <div className="grid grid-cols-4 items-center gap-4 text-sm">
+                {/* assign multi users */}
+                <div className="grid grid-cols-4 items-start gap-4 text-sm">
                   <label className="text-right font-medium">Assign to</label>
                   <div className="col-span-3">
-                    <div className="flex items-center mb-2">
-                      <input
-                        type="checkbox"
-                        id="assignToAll"
-                        className="mr-2"
-                        checked={createForm.assignedToAll}
-                        onChange={(e) =>
-                          setCreateForm((p) => ({
-                            ...p,
-                            assignedToAll: e.target.checked,
-                          }))
-                        }
-                      />
-                      <label htmlFor="assignToAll" className="text-sm">
-                        Assign to all users
-                      </label>
-                    </div>
-                    {!createForm.assignedToAll && (
-                      <Select value={createForm.assignedUserId} onValueChange={(v) => setCreateForm((p) => ({ ...p, assignedUserId: v }))}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select user" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60">
-                          {users.map((u) => (
-                            <SelectItem key={u.id} value={String(u.id)}>
-                              {u.email}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
+                    <MultiUserSelect
+                      list={createForm.assignedUserIds}
+                      setList={(arr) =>
+                        setCreateForm((p) => ({
+                          ...p,
+                          assignedUserIds: arr,
+                        }))
+                      }
+                      users={users}
+                    />
                   </div>
                 </div>
               </div>
 
+              {/* footer */}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowCreate(false)}>
                   Cancel
                 </Button>
                 <Button onClick={handleCreate} disabled={actionLoading} className="bg-orange-500 hover:bg-orange-600 text-white">
-                  {actionLoading ? (
-                    <span className="flex items-center">
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                      </svg>
-                      Creating...
-                    </span>
-                  ) : (
-                    <span>Create Schedule</span>
-                  )}
+                  {actionLoading ? "Creating…" : "Create Schedule"}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -474,7 +596,7 @@ function ManageShiftSchedules() {
         </div>
       </div>
 
-      {/* filters and search */}
+      {/* ---------- filter card ---------- */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500"></div>
         <CardHeader className="pb-2">
@@ -531,9 +653,7 @@ function ManageShiftSchedules() {
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Sort by start date</p>
-                  </TooltipContent>
+                  <TooltipContent>Sort by start date</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
@@ -541,7 +661,7 @@ function ManageShiftSchedules() {
         </CardContent>
       </Card>
 
-      {/* table */}
+      {/* ---------- table ---------- */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500"></div>
         <CardHeader className="pb-2">
@@ -600,24 +720,13 @@ function ManageShiftSchedules() {
                     .fill(0)
                     .map((_, i) => (
                       <TableRow key={i}>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-20 ml-auto" />
-                        </TableCell>
+                        {Array(6)
+                          .fill(0)
+                          .map((__, j) => (
+                            <TableCell key={j}>
+                              <Skeleton className="h-6 w-full" />
+                            </TableCell>
+                          ))}
                       </TableRow>
                     ))
                 ) : filteredSorted().length ? (
@@ -633,7 +742,7 @@ function ManageShiftSchedules() {
                       >
                         <TableCell className="font-medium">
                           <div className="flex items-center">
-                            <div className="w-2 h-2 rounded-full bg-orange-500 mr-2"></div>
+                            <div className="w-2 h-2 rounded-full bg-orange-500 mr-2" />
                             {shiftMap[s.shiftId] || "—"}
                           </div>
                         </TableCell>
@@ -669,7 +778,7 @@ function ManageShiftSchedules() {
                               All users
                             </Badge>
                           ) : (
-                            <span className="text-sm">{users.find((u) => u.id === s.assignedUserId)?.email || "—"}</span>
+                            <span className="text-sm">1 user</span>
                           )}
                         </TableCell>
                         <TableCell className="text-right">
@@ -686,9 +795,7 @@ function ManageShiftSchedules() {
                                     <Edit3 className="h-4 w-4" />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Edit schedule</p>
-                                </TooltipContent>
+                                <TooltipContent>Edit schedule</TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
 
@@ -704,9 +811,7 @@ function ManageShiftSchedules() {
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Delete schedule</p>
-                                </TooltipContent>
+                                <TooltipContent>Delete schedule</TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                           </div>
@@ -737,10 +842,10 @@ function ManageShiftSchedules() {
         </CardContent>
       </Card>
 
-      {/* edit dialog */}
+      {/* ---------- edit dialog ---------- */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
         <DialogContent className="border-2 dark:border-white/10 max-w-xl">
-          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
+          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
@@ -751,6 +856,7 @@ function ManageShiftSchedules() {
             <DialogDescription>Update shift schedule information</DialogDescription>
           </DialogHeader>
 
+          {/* ---------- edit form ---------- */}
           <div className="space-y-4 py-4">
             {/* shift */}
             <div className="grid grid-cols-4 items-center gap-4 text-sm">
@@ -813,74 +919,36 @@ function ManageShiftSchedules() {
               </div>
             ))}
 
-            {/* assign */}
-            <div className="grid grid-cols-4 items-center gap-4 text-sm">
+            {/* assign (single select) */}
+            <div className="grid grid-cols-4 items-start gap-4 text-sm">
               <label className="text-right font-medium">Assign to</label>
               <div className="col-span-3">
-                <div className="flex items-center mb-2">
-                  <input
-                    type="checkbox"
-                    id="editAssignToAll"
-                    className="mr-2"
-                    checked={editForm.assignedToAll}
-                    onChange={(e) =>
-                      setEditForm((p) => ({
-                        ...p,
-                        assignedToAll: e.target.checked,
-                      }))
-                    }
-                  />
-                  <label htmlFor="editAssignToAll" className="text-sm">
-                    Assign to all users
-                  </label>
-                </div>
-                {!editForm.assignedToAll && (
-                  <Select value={editForm.assignedUserId} onValueChange={(v) => setEditForm((p) => ({ ...p, assignedUserId: v }))}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select user" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      {users.map((u) => (
-                        <SelectItem key={u.id} value={String(u.id)}>
-                          {u.email}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
+                <MultiUserSelect
+                  list={editForm.assignedUserIds}
+                  setList={(arr) => setEditForm((p) => ({ ...p, assignedUserIds: arr }))}
+                  users={users}
+                  singleSelect
+                />
               </div>
             </div>
           </div>
 
+          {/* footer */}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEdit(false)}>
               Cancel
             </Button>
             <Button onClick={handleSaveEdit} disabled={actionLoading} className="bg-orange-500 hover:bg-orange-600 text-white">
-              {actionLoading ? (
-                <span className="flex items-center">
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Saving...
-                </span>
-              ) : (
-                <span>Save Changes</span>
-              )}
+              {actionLoading ? "Saving…" : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* delete confirmation dialog */}
+      {/* ---------- delete dialog ---------- */}
       <Dialog open={showDelete} onOpenChange={setShowDelete}>
         <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
-          <div className="h-1 w-full bg-red-500 -mt-6 mb-4"></div>
+          <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="p-2 rounded-full bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400">
@@ -910,14 +978,13 @@ function ManageShiftSchedules() {
                 </div>
                 <div>
                   <span className="opacity-70">Assigned:</span>{" "}
-                  <span className="font-medium">
-                    {scheduleToDelete.assignedToAll ? "All users" : users.find((u) => u.id === scheduleToDelete.assignedUserId)?.email || "—"}
-                  </span>
+                  <span className="font-medium">{scheduleToDelete.assignedToAll ? "All users" : "1 user"}</span>
                 </div>
               </div>
             </div>
           )}
 
+          {/* footer */}
           <DialogFooter className="flex justify-between sm:justify-between">
             <Button
               variant="outline"
@@ -926,22 +993,8 @@ function ManageShiftSchedules() {
             >
               Cancel
             </Button>
-            <Button variant="destructive" onClick={confirmDelete} className="bg-red-500 hover:bg-red-600">
-              {actionLoading ? (
-                <span className="flex items-center">
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Deleting...
-                </span>
-              ) : (
-                <span>Delete Schedule</span>
-              )}
+            <Button variant="destructive" onClick={confirmDelete} disabled={actionLoading} className="bg-red-500 hover:bg-red-600">
+              {actionLoading ? "Deleting…" : "Delete Schedule"}
             </Button>
           </DialogFooter>
         </DialogContent>

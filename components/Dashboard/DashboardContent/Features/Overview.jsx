@@ -472,7 +472,13 @@ export default function OverviewDashboard() {
             </Button>
           ))}
         </div>
-        <Button variant="outline" size="icon" onClick={onRefresh} disabled={refreshing}>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={onRefresh}
+          disabled={refreshing}
+          className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+        >
           <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
         </Button>
       </div>
