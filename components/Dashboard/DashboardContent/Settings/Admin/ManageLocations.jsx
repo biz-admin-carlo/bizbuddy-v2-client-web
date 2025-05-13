@@ -631,7 +631,7 @@ function ManageLocations() {
             </DialogTrigger>
 
             {/* ───────────────── Create dialog ───────────────── */}
-            <DialogContent className="max-w-xl border-2 dark:border-white/10">
+            <DialogContent className="w-[90vw]  sm:max-w-lg     md:max-w-xl max-h-[90vh] overflow-y-auto  border-2 dark:border-white/10">
               <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
@@ -1055,7 +1055,7 @@ function ManageLocations() {
 
       {/* ────────── Edit dialog ────────── */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-xl border-2 dark:border-white/10">
+        <DialogContent className="w-[90vw]  sm:max-w-lg     md:max-w-xl max-h-[90vh] overflow-y-auto  border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1171,7 +1171,7 @@ function ManageLocations() {
 
       {/* ────────── Users dialog ────────── */}
       <Dialog open={showUsersModal} onOpenChange={setShowUsersModal}>
-        <DialogContent className="max-w-2xl border-2 dark:border-white/10">
+        <DialogContent className="w-[90vw] sm:max-w-lg md:max-w-xl max-h-[90vh] overflow-y-auto border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
