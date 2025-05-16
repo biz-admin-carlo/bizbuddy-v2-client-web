@@ -5,7 +5,7 @@
  * MyTimeLog — employee view
  * ------------------------------------------------------------
  * • Device-/Location-In/Out columns
- * • Coffee / Lunch minutes
+ * • Coffee / Lunch hours (decimal)
  * • CSV export
  * • Raw JSON view in Details dialog
  * • Handles:
@@ -42,12 +42,30 @@ const safeDate = (d) =>
 
 const safeTime = (d) => (d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—");
 
-const duration = (tin, tout) =>
-  !tin || !tout ? "—" : `${Math.floor((new Date(tout) - new Date(tin)) / 36e5)}h ${Math.floor(((new Date(tout) - new Date(tin)) % 36e5) / 60000)}m`;
+/* ------------- hours helpers (decimal) ------------- */
 
-const coffeeMinutes = (l = []) => l.reduce((m, b) => (b.start && b.end ? m + (new Date(b.end) - new Date(b.start)) / 60000 : m), 0).toFixed(0);
+const toHourString = (mins) => {
+  const h = mins / 60;
+  const s = parseFloat(h.toFixed(2)).toString(); // drop trailing zeros
+  return s.startsWith("0.") ? s.slice(1) : s; // ".5" instead of "0.5"
+};
 
-const lunchMinutes = (l) => (l && l.start && l.end ? ((new Date(l.end) - new Date(l.start)) / 60000).toFixed(0) : "0");
+const duration = (tin, tout) => {
+  if (!tin || !tout) return "—";
+  const diffMin = (new Date(tout) - new Date(tin)) / 60000;
+  return toHourString(diffMin);
+};
+
+const coffeeMinutes = (l = []) => {
+  const mins = l.reduce((m, b) => (b.start && b.end ? m + (new Date(b.end) - new Date(b.start)) / 60000 : m), 0);
+  return toHourString(mins);
+};
+
+const lunchMinutes = (l) => {
+  if (!l || !l.start || !l.end) return "0";
+  const mins = (new Date(l.end) - new Date(l.start)) / 60000;
+  return toHourString(mins);
+};
 
 /* ────────────── deep parse for JSON strings ────────────── */
 
@@ -155,9 +173,9 @@ const buildCSV = (rows) =>
       "Date",
       "Time In",
       "Time Out",
-      "Duration",
-      "Coffee (min)",
-      "Lunch (min)",
+      "Duration (h)",
+      "Coffee (h)",
+      "Lunch (h)",
       "Device In",
       "Device Out",
       "Location In",
@@ -471,9 +489,9 @@ const LogsTable = ({ loading, logs, onDetails, onDelete }) => (
               <TableHead>Date</TableHead>
               <TableHead>Time&nbsp;In</TableHead>
               <TableHead>Time&nbsp;Out</TableHead>
-              <TableHead>Duration</TableHead>
-              <TableHead>Coffee&nbsp;(min)</TableHead>
-              <TableHead>Lunch&nbsp;(min)</TableHead>
+              <TableHead>Duration&nbsp;(h)</TableHead>
+              <TableHead>Coffee&nbsp;(h)</TableHead>
+              <TableHead>Lunch&nbsp;(h)</TableHead>
               <TableHead>
                 <Smartphone className="h-4 w-4 inline-block mr-1" />
                 In
@@ -662,11 +680,11 @@ const DetailsDialog = ({ open, onOpenChange, selected }) => {
               value={selected.status ? <Badge className="bg-green-500 text-white">Active</Badge> : <Badge variant="outline">Completed</Badge>}
             />
             <Detail label="Date" value={safeDate(selected.timeIn)} />
-            <Detail label="Duration" value={duration(selected.timeIn, selected.timeOut)} />
+            <Detail label="Duration (h)" value={duration(selected.timeIn, selected.timeOut)} />
             <Detail label="Time In" value={safeTime(selected.timeIn)} />
             <Detail label="Time Out" value={safeTime(selected.timeOut)} />
-            <Detail label="Coffee (min)" value={selected.coffeeMins} />
-            <Detail label="Lunch (min)" value={selected.lunchMins} />
+            <Detail label="Coffee (h)" value={selected.coffeeMins} />
+            <Detail label="Lunch (h)" value={selected.lunchMins} />
             <Detail label="Device In" value={devIn} />
             <Detail label="Device Out" value={devOut} />
             <Detail

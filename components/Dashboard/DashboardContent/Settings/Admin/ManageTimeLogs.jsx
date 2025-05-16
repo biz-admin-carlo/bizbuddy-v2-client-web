@@ -46,11 +46,30 @@ const fmtLocalDateTime = (d) =>
       })
     : "—";
 
-const diffHours = (tin, tout) => (!tin || !tout ? "—" : ((new Date(tout) - new Date(tin)) / 36e5).toFixed(2));
+/* ---------- hour helpers (decimal) ---------- */
 
-const coffeeMinutes = (arr = []) => arr.reduce((m, b) => (b.start && b.end ? m + (new Date(b.end) - new Date(b.start)) / 60000 : m), 0).toFixed(0);
+const toHourString = (mins) => {
+  const h = mins / 60;
+  const s = parseFloat(h.toFixed(2)).toString();
+  return s.startsWith("0.") ? s.slice(1) : s;
+};
 
-const lunchMinutes = (l) => (l && l.start && l.end ? ((new Date(l.end) - new Date(l.start)) / 60000).toFixed(0) : 0);
+const diffHours = (tin, tout) => {
+  if (!tin || !tout) return "—";
+  const mins = (new Date(tout) - new Date(tin)) / 60000;
+  return toHourString(mins);
+};
+
+const coffeeMinutes = (arr = []) => {
+  const mins = arr.reduce((m, b) => (b.start && b.end ? m + (new Date(b.end) - new Date(b.start)) / 60000 : m), 0);
+  return toHourString(mins);
+};
+
+const lunchMinutes = (l) => {
+  if (!l || !l.start || !l.end) return "0";
+  const mins = (new Date(l.end) - new Date(l.start)) / 60000;
+  return toHourString(mins);
+};
 
 const fmtDevice = (d) => {
   if (!d) return "—";
@@ -75,8 +94,8 @@ const buildCSV = (rows) => {
     "Time In",
     "Time Out",
     "Hours",
-    "Coffee (min)",
-    "Lunch (min)",
+    "Coffee (h)",
+    "Lunch (h)",
     "Device In",
     "Device Out",
     "Location In",
@@ -550,8 +569,8 @@ function ManageTimelogs() {
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </div>
                   </TableHead>
-                  <TableHead>Coffee&nbsp;(min)</TableHead>
-                  <TableHead>Lunch&nbsp;(min)</TableHead>
+                  <TableHead>Coffee&nbsp;(h)</TableHead>
+                  <TableHead>Lunch&nbsp;(h)</TableHead>
                   <TableHead>
                     <Smartphone className="h-4 w-4" /> In
                   </TableHead>
