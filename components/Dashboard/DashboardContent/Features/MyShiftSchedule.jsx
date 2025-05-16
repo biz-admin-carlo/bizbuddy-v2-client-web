@@ -1,7 +1,9 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
 import { format, parseISO, isSameDay, isValid } from "date-fns";
+import Link from "next/link";
 import useAuthStore from "@/store/useAuthStore";
 import { toast, Toaster } from "sonner";
 import { CalendarIcon, Clock, ArrowRight } from "lucide-react";
@@ -18,14 +20,9 @@ function hoursBetween(startISO, endISO) {
   try {
     const start = new Date(startISO);
     const end = new Date(endISO);
-
-    // Check if dates are valid
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      return "N/A";
-    }
-
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return "N/A";
     let diff = end - start;
-    if (diff < 0) diff += 24 * 60 * 60 * 1000; // crosses midnight
+    if (diff < 0) diff += 24 * 60 * 60 * 1000;
     return (diff / 36e5).toFixed(2);
   } catch (err) {
     console.error("Error calculating hours:", err);
@@ -67,112 +64,49 @@ export default function MyShiftSchedule() {
   }, [token, API_URL]);
 
   /* ------------------ build helpers derived from fetched data ------------- */
-  // 1)  a Date[] containing one entry per day that has ≥1 shift
   const shiftDays = useMemo(() => {
     const uniq = new Set();
     allShifts.forEach((s) => {
-      try {
-        // Validate the date before parsing
-        if (!s.assignedDate) return;
-
-        // API returns ISO; we only care about the calendar date portion
-        const day = parseISO(s.assignedDate);
-
-        // Check if date is valid
-        if (isNaN(day.getTime())) return;
-
-        const key = format(day, "yyyy-MM-dd");
-        if (!uniq.has(key)) uniq.add(key);
-      } catch (err) {
-        console.error("Error processing shift date:", err);
-      }
+      if (!s.assignedDate) return;
+      const day = parseISO(s.assignedDate);
+      if (isNaN(day.getTime())) return;
+      uniq.add(format(day, "yyyy-MM-dd"));
     });
     return Array.from(uniq).map((d) => parseISO(d));
   }, [allShifts]);
 
-  // 2)  the list of shifts for the currently selected date
   const shiftsToday = useMemo(() => {
     return allShifts
       .filter((s) => {
-        try {
-          if (!s.assignedDate) return false;
-          const shiftDate = parseISO(s.assignedDate);
-
-          // Check if date is valid
-          if (isNaN(shiftDate.getTime())) return false;
-
-          return isSameDay(shiftDate, selectedDate);
-        } catch (err) {
-          console.error("Error filtering shifts:", err);
-          return false;
-        }
+        if (!s.assignedDate) return false;
+        const shiftDate = parseISO(s.assignedDate);
+        if (isNaN(shiftDate.getTime())) return false;
+        return isSameDay(shiftDate, selectedDate);
       })
-      .sort((a, b) => {
-        try {
-          const aTime = new Date(a.shift.startTime);
-          const bTime = new Date(b.shift.startTime);
-
-          // Check if dates are valid
-          if (isNaN(aTime.getTime()) || isNaN(bTime.getTime())) return 0;
-
-          return aTime - bTime;
-        } catch (err) {
-          return 0;
-        }
-      });
+      .sort((a, b) => new Date(a.shift.startTime) - new Date(b.shift.startTime));
   }, [allShifts, selectedDate]);
 
-  // 3) Get shift count for each day
   const shiftCountByDay = useMemo(() => {
     const counts = {};
     allShifts.forEach((s) => {
-      try {
-        if (!s.assignedDate) return;
-        const shiftDate = parseISO(s.assignedDate);
-
-        // Check if date is valid
-        if (isNaN(shiftDate.getTime())) return;
-
-        const key = format(shiftDate, "yyyy-MM-dd");
-        counts[key] = (counts[key] || 0) + 1;
-      } catch (err) {
-        console.error("Error counting shifts:", err);
-      }
+      if (!s.assignedDate) return;
+      const shiftDate = parseISO(s.assignedDate);
+      if (isNaN(shiftDate.getTime())) return;
+      const key = format(shiftDate, "yyyy-MM-dd");
+      counts[key] = (counts[key] || 0) + 1;
     });
     return counts;
   }, [allShifts]);
 
-  // Navigation function
   const goToToday = () => {
     setSelectedDate(new Date());
     setCurrentMonth(new Date());
   };
 
-  // Add a safe date formatter function
-  const safeFormat = (date, formatString) => {
-    try {
-      if (!date || isNaN(new Date(date).getTime())) {
-        return "Invalid date";
-      }
-      return format(date, formatString);
-    } catch (err) {
-      console.error("Error formatting date:", err);
-      return "Invalid date";
-    }
-  };
-
-  // Add a safe time formatter function
-  const safeTimeFormat = (dateString) => {
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) {
-        return "Invalid time";
-      }
-      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    } catch (err) {
-      console.error("Error formatting time:", err);
-      return "Invalid time";
-    }
+  const safeFormat = (date, fmtStr) => (isValid(date) ? format(date, fmtStr) : "Invalid date");
+  const safeTimeFormat = (s) => {
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? "Invalid time" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
   /* ------------------------------ rendering ------------------------------- */
@@ -180,7 +114,7 @@ export default function MyShiftSchedule() {
     <div className="max-w-7xl mx-auto space-y-8 p-4">
       <Toaster position="top-center" />
 
-      {/* ---------------------------- page title ---------------------------- */}
+      {/* ---------------------------- page title + nav ---------------------------- */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
@@ -189,20 +123,38 @@ export default function MyShiftSchedule() {
           </h2>
           <p className="text-muted-foreground mt-1">View and manage your upcoming shifts</p>
         </div>
-        <Button
-          onClick={goToToday}
-          variant="outline"
-          className="self-start border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-        >
-          <CalendarIcon className="h-4 w-4 mr-2" />
-          Today
-        </Button>
+
+        <div className="flex gap-2">
+          {/* navigation buttons */}
+          <Button variant="outline" className="flex items-center gap-1" asChild>
+            <Link href="/dashboard/my-punch">
+              <Clock className="h-4 w-4" />
+              Punch
+            </Link>
+          </Button>
+          <Button variant="outline" className="flex items-center gap-1" asChild>
+            <Link href="/dashboard/my-time-log">
+              <CalendarIcon className="h-4 w-4" />
+              Time&nbsp;Card
+            </Link>
+          </Button>
+
+          {/* today button */}
+          <Button
+            onClick={goToToday}
+            variant="outline"
+            className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+          >
+            <CalendarIcon className="h-4 w-4 mr-2" />
+            Today
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* ---------------------------- calendar ----------------------------- */}
         <Card className="lg:col-span-2 shadow-md border-2 dark:border-white/10 overflow-hidden">
-          <div className="h-1 w-full bg-orange-500"></div>
+          <div className="h-1 w-full bg-orange-500" />
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2">
               <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
@@ -223,29 +175,17 @@ export default function MyShiftSchedule() {
               components={{
                 DayContent: (props) => {
                   const day = props.date;
-                  let dayNumber;
-                  try {
-                    dayNumber = day.getDate();
-                  } catch (e) {
-                    return <div>?</div>;
-                  }
-                  let shiftCount = 0;
-                  try {
-                    if (isValid(day)) {
-                      const dateKey = format(day, "yyyy-MM-dd");
-                      shiftCount = shiftCountByDay[dateKey] || 0;
-                    }
-                  } catch (e) {
-                    console.error("Error in DayContent:", e);
-                  }
-                  const hasShifts = shiftCount > 0;
+                  const dayNumber = isValid(day) ? day.getDate() : "?";
+                  const dateKey = isValid(day) ? format(day, "yyyy-MM-dd") : "";
+                  const hasShifts = (shiftCountByDay[dateKey] || 0) > 0;
 
                   return (
                     <div
-                      className={`flex flex-col items-center justify-center h-full w-full m-1 rounded-md transition-colors
-                      ${hasShifts ? "bg-orange-500 text-white font-bold" : ""}`}
+                      className={`flex flex-col items-center justify-center h-full w-full m-1 rounded-md transition-colors ${
+                        hasShifts ? "bg-orange-500 text-white font-bold" : ""
+                      }`}
                     >
-                      <span className={`${hasShifts ? "mb-1" : ""}`}>{dayNumber}</span>
+                      <span className={hasShifts ? "mb-1" : ""}>{dayNumber}</span>
                     </div>
                   );
                 },
@@ -257,7 +197,7 @@ export default function MyShiftSchedule() {
 
         {/* --------------------------- daily shifts --------------------------- */}
         <Card className="shadow-md border-2 dark:border-white/10 overflow-hidden">
-          <div className="h-1 w-full bg-orange-500"></div>
+          <div className="h-1 w-full bg-orange-500" />
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2">
               <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
@@ -282,7 +222,7 @@ export default function MyShiftSchedule() {
                   >
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="font-semibold text-lg capitalize flex items-center">
-                        <div className="w-2 h-2 rounded-full bg-orange-500 mr-2"></div>
+                        <div className="w-2 h-2 rounded-full bg-orange-500 mr-2" />
                         {s.shift.shiftName}
                       </h3>
                       <Badge className="bg-orange-500 hover:bg-orange-600 text-white">{hoursBetween(s.shift.startTime, s.shift.endTime)} hrs</Badge>
@@ -309,9 +249,9 @@ export default function MyShiftSchedule() {
         </Card>
       </div>
 
-      {/* --------------------------- weekly overview --------------------------- */}
+      {/* --------------------------- shift details table --------------------------- */}
       <Card className="shadow-md border-2 dark:border-white/10 overflow-hidden">
-        <div className="h-1 w-full bg-orange-500"></div>
+        <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
             <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">

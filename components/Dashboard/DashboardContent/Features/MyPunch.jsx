@@ -1,9 +1,11 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import Link from "next/link";
 import useAuthStore from "@/store/useAuthStore";
 import { toast, Toaster } from "sonner";
-import { Clock, Coffee, Sandwich, MapPin, AlertCircle, Check, Timer, LogOut, LogIn, Loader2 } from "lucide-react";
+import { Clock, Coffee, Sandwich, MapPin, AlertCircle, Check, Timer, LogOut, LogIn, Loader2, Calendar } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -77,7 +79,7 @@ export default function MyPunch() {
     });
   }, []);
 
-  /* master interval (same as before) */
+  /* master interval */
   const intervalRef = useRef(null);
   useEffect(() => {
     if (isTimedIn) {
@@ -92,7 +94,7 @@ export default function MyPunch() {
     return () => clearInterval(intervalRef.current);
   }, [isTimedIn, coffeeActive, lunchActive, timeInAt, coffeeStart, lunchStart]);
 
-  /* initial active‑log check (unchanged) … */
+  /* initial active-log check */
   useEffect(() => {
     if (!token) return;
     (async () => {
@@ -155,7 +157,7 @@ export default function MyPunch() {
   async function doCall(endpoint) {
     setLoading(true);
 
-    /* always re‑fetch location right before hitting the API */
+    /* always re-fetch location right before hitting the API */
     setLocationLoading(true);
     const loc = await fetchLocation();
     setLocation(loc);
@@ -227,7 +229,7 @@ export default function MyPunch() {
   /* coffee ------------------------------------------------------------- */
   const handleCoffee = async () => {
     if (!isTimedIn) {
-      toast.message("You must be timed‑in.", {
+      toast.message("You must be timed-in.", {
         description: "Time in first before taking a coffee break.",
         icon: <AlertCircle className="h-5 w-5 text-red-500" />,
       });
@@ -235,7 +237,7 @@ export default function MyPunch() {
     }
 
     if (!coffeeActive && coffeeCount >= 2) {
-      toast.message("Coffee‑break limit reached.", {
+      toast.message("Coffee-break limit reached.", {
         description: "You've already taken your allowed coffee breaks for today.",
         icon: <AlertCircle className="h-5 w-5 text-red-500" />,
       });
@@ -261,7 +263,7 @@ export default function MyPunch() {
   /* lunch -------------------------------------------------------------- */
   const handleLunch = async () => {
     if (!isTimedIn) {
-      toast.message("You must be timed‑in.", {
+      toast.message("You must be timed-in.", {
         description: "Time in first before taking a lunch break.",
         icon: <AlertCircle className="h-5 w-5 text-red-500" />,
       });
@@ -306,20 +308,36 @@ export default function MyPunch() {
   /* ---------------------------------------------------------------- UI --- */
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="max-w-7xl mx-auto p-4 space-y-6">
+      <div className="max-w-7xl mx-auto px-2 py-6 space-y-8">
         <Toaster position="top-center" richColors />
 
-        {/* Header with title and icon */}
-        <div className="flex items-center gap-2 mb-2">
+        {/* Header with title, nav buttons */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
             <Clock className="h-7 w-7 text-orange-500" />
             My Punches
           </h2>
+
+          {/* navigation buttons */}
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex items-center gap-1" asChild>
+              <Link href="/dashboard/my-time-log">
+                <Timer className="h-4 w-4" />
+                Time&nbsp;Card
+              </Link>
+            </Button>
+            <Button variant="outline" className="flex items-center gap-1" asChild>
+              <Link href="/dashboard/my-shift-schedule">
+                <Calendar className="h-4 w-4" />
+                Schedule
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {/* status card */}
         <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-          <div className={`h-1 w-full ${isTimedIn ? "bg-  " : "bg-orange-500"}`}></div>
+          <div className={`h-1 w-full ${isTimedIn ? "bg-orange-500" : "bg-black/20 dark:bg-white/20"}`} />
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -403,7 +421,7 @@ export default function MyPunch() {
             </div>
           </CardContent>
 
-          <CardFooter className="flex flex-col gap-4 pt-2 pb-6  ">
+          <CardFooter className="flex flex-col gap-4 pt-2 pb-6">
             {/* main punch button */}
             <Button
               size="lg"

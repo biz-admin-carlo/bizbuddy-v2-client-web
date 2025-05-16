@@ -8,14 +8,10 @@
  * • Coffee / Lunch hours (decimal)
  * • CSV export
  * • Raw JSON view in Details dialog
- * • Handles:
- *     deviceIn / deviceOut
- *     deviceInfo.start / deviceInfo.end
- *     location.start / location.end
- *     any nested or JSON-encoded string
  */
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import useAuthStore from "@/store/useAuthStore";
 import { toast, Toaster } from "sonner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -24,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Clock, Calendar, ChevronDown, ChevronUp, RefreshCw, Download, Filter, Info, Trash2, Smartphone, MapPin, AlertCircle } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
@@ -46,8 +42,8 @@ const safeTime = (d) => (d ? new Date(d).toLocaleTimeString([], { hour: "2-digit
 
 const toHourString = (mins) => {
   const h = mins / 60;
-  const s = parseFloat(h.toFixed(2)).toString(); // drop trailing zeros
-  return s.startsWith("0.") ? s.slice(1) : s; // ".5" instead of "0.5"
+  const s = parseFloat(h.toFixed(2)).toString();
+  return s.startsWith("0.") ? s.slice(1) : s;
 };
 
 const duration = (tin, tout) => {
@@ -107,13 +103,12 @@ const findProp = (obj, names, depth = 0) => {
   return null;
 };
 
-/* ────────────── top-level key sets ────────────── */
+/* ────────────── key sets ────────────── */
 
 const DEV_IN_KEYS = ["deviceIn", "deviceInfoStart", "deviceStart", "deviceInfoIn"];
 const DEV_OUT_KEYS = ["deviceOut", "deviceInfoEnd", "deviceEnd", "deviceInfoOut"];
 const LOC_IN_KEYS = ["locIn", "locationIn", "locationStart", "locStart"];
 const LOC_OUT_KEYS = ["locOut", "locationOut", "locationEnd", "locEnd"];
-
 const firstField = (log, keys) => keys.map((k) => log[k]).find((v) => v != null);
 
 /* ────────────── device / location extractors ────────────── */
@@ -122,7 +117,7 @@ const chooseStartEnd = (log, dir, base) => (dir === "in" ? log?.[base]?.start : 
 
 const getDevice = (log, dir) => {
   let obj = firstField(log, dir === "in" ? DEV_IN_KEYS : DEV_OUT_KEYS);
-  if (!obj) obj = chooseStartEnd(log, dir, "deviceInfo"); // ← NEW
+  if (!obj) obj = chooseStartEnd(log, dir, "deviceInfo");
   if (!obj) return "—";
   obj = deepParse(obj);
   if (typeof obj === "string") return obj;
@@ -134,7 +129,7 @@ const getDevice = (log, dir) => {
 
 const getLocation = (log, dir) => {
   let obj = firstField(log, dir === "in" ? LOC_IN_KEYS : LOC_OUT_KEYS);
-  if (!obj) obj = chooseStartEnd(log, dir, "location"); // ← NEW
+  if (!obj) obj = chooseStartEnd(log, dir, "location");
   if (!obj) return { txt: "—", lat: null, lng: null };
   obj = deepParse(obj);
 
@@ -142,23 +137,12 @@ const getLocation = (log, dir) => {
     const parts = obj.split(/[, ]+/);
     const lat = parseFloat(parts[0]),
       lng = parseFloat(parts[1]);
-    return isFinite(lat) && isFinite(lng)
-      ? {
-          txt: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-          lat,
-          lng,
-        }
-      : { txt: obj, lat: null, lng: null };
+    return isFinite(lat) && isFinite(lng) ? { txt: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, lat, lng } : { txt: obj, lat: null, lng: null };
   }
 
   const lat = findProp(obj, ["latitude", "lat"]);
   const lng = findProp(obj, ["longitude", "lng"]);
-  if (lat != null && lng != null)
-    return {
-      txt: `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`,
-      lat,
-      lng,
-    };
+  if (lat != null && lng != null) return { txt: `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`, lat, lng };
   return { txt: "—", lat: null, lng: null };
 };
 
@@ -230,11 +214,7 @@ export default function MyTimeLog() {
       setLogs(
         (j.data || []).map((raw) => {
           const t = deepParse(raw);
-          return {
-            ...t,
-            coffeeMins: coffeeMinutes(t.coffeeBreaks),
-            lunchMins: lunchMinutes(t.lunchBreak),
-          };
+          return { ...t, coffeeMins: coffeeMinutes(t.coffeeBreaks), lunchMins: lunchMinutes(t.lunchBreak) };
         })
       );
     } catch (e) {
@@ -260,9 +240,7 @@ export default function MyTimeLog() {
   const exportCSV = () => {
     if (!sorted.length) return toast.message("No rows to export");
     setExporting(true);
-    const blob = new Blob([buildCSV(sorted)], {
-      type: "text/csv;charset=utf-8;",
-    });
+    const blob = new Blob([buildCSV(sorted)], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -350,6 +328,21 @@ const Header = ({ sortAsc, setSortAsc, refresh, refreshing, exportCSV, exporting
       <p className="text-muted-foreground mt-1">Track and manage your work hours</p>
     </div>
     <div className="flex items-center gap-2">
+      {/* navigation buttons */}
+      <Button variant="outline" className="flex items-center gap-1" asChild>
+        <Link href="/dashboard/my-punch">
+          <Clock className="h-4 w-4" />
+          Punch
+        </Link>
+      </Button>
+      <Button variant="outline" className="flex items-center gap-1" asChild>
+        <Link href="/dashboard/my-shift-schedule">
+          <Calendar className="h-4 w-4" />
+          Schedule
+        </Link>
+      </Button>
+
+      {/* controls */}
       <IconBtn icon={RefreshCw} tooltip="Refresh logs" spinning={refreshing} onClick={refresh} />
       <IconBtn icon={Download} tooltip="Export CSV" spinning={exporting} onClick={exportCSV} />
       <IconBtn icon={sortAsc ? ChevronUp : ChevronDown} tooltip={`Sort by ${sortAsc ? "oldest" : "newest"} first`} onClick={() => setSortAsc((s) => !s)} />
@@ -542,7 +535,7 @@ const LogsTable = ({ loading, logs, onDetails, onDelete }) => (
                       transition={{ duration: 0.2 }}
                       className="border-b hover:bg-muted/50"
                     >
-                      <TableCell className="font-mono text-xs text-orange-500">{log.id}</TableCell>
+                      <TableCell className="font-mono text-sm text-orange-500">{log.id}</TableCell>
                       <TableCell>{safeDate(log.timeIn)}</TableCell>
                       <TableCell>{safeTime(log.timeIn)}</TableCell>
                       <TableCell>{safeTime(log.timeOut)}</TableCell>
@@ -622,7 +615,6 @@ const DeleteDialog = ({ open, onOpenChange, selected, onDelete }) => (
           <AlertCircle className="h-5 w-5 text-red-500" />
           Confirm Deletion
         </DialogTitle>
-        <DialogDescription>Are you sure? This action cannot be undone.</DialogDescription>
       </DialogHeader>
       {selected && (
         <div className="border rounded-md p-3 bg-muted/50 text-sm space-y-1">

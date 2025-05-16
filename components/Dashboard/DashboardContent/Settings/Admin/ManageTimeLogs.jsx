@@ -78,6 +78,9 @@ const fmtDevice = (d) => {
   return JSON.stringify(d);
 };
 
+/* NEW: truncate helper for short UI text */
+const truncate = (str, len = 20) => (str && str.length > len ? str.slice(0, len) + "…" : str || "—");
+
 const fmtLoc = (loc) =>
   loc && loc.latitude != null && loc.longitude != null ? `${Number(loc.latitude).toFixed(5)}, ${Number(loc.longitude).toFixed(5)}` : "—";
 
@@ -371,7 +374,7 @@ function ManageTimelogs() {
   /* ────────── render ────────── */
 
   return (
-    <div className="max-w-7xl mx-auto p-4 space-y-8">
+    <div className="max-w-full mx-auto p-4 space-y-8">
       <Toaster position="top-center" />
 
       {/* HEADER */}
@@ -614,29 +617,58 @@ function ManageTimelogs() {
                       >
                         <TableCell className="font-mono text-xs text-orange-500">{t.id}</TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Users className="h-3 w-3 text-orange-500" />
-                            {t.employeeName}
-                          </div>
+                          <div className="flex items-center gap-1 text-nowrap text-xs">{t.email}</div>
                         </TableCell>
-                        <TableCell>{fmtLocalDateTime(t.timeIn)}</TableCell>
-                        <TableCell>{fmtLocalDateTime(t.timeOut)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1 text-nowrap text-xs">{fmtLocalDateTime(t.timeIn)}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1 text-nowrap text-xs">{fmtLocalDateTime(t.timeOut)}</div>
+                        </TableCell>
                         <TableCell>{diffHours(t.timeIn, t.timeOut)}</TableCell>
                         <TableCell>{t.coffeeMins}</TableCell>
                         <TableCell>{t.lunchMins}</TableCell>
+
+                        {/* Device In */}
                         <TableCell>
-                          {fmtDevice(t.deviceIn?.manufacturer)}, {fmtDevice(t.deviceIn?.deviceName)}
+                          <TooltipProvider delayDuration={300}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-1 text-xs cursor-default">
+                                  {truncate(fmtDevice(t.deviceIn?.manufacturer))}, {truncate(fmtDevice(t.deviceIn?.deviceName))}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {fmtDevice(t.deviceIn?.manufacturer)}, {fmtDevice(t.deviceIn?.deviceName)}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </TableCell>
+
+                        {/* Device Out */}
                         <TableCell>
-                          {fmtDevice(t.deviceOut?.manufacturer)}, {fmtDevice(t.deviceOut?.deviceName)}
+                          <TooltipProvider delayDuration={300}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-1 text-xs cursor-default">
+                                  {truncate(fmtDevice(t.deviceOut?.manufacturer))}, {truncate(fmtDevice(t.deviceOut?.deviceName))}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {fmtDevice(t.deviceOut?.manufacturer)}, {fmtDevice(t.deviceOut?.deviceName)}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </TableCell>
+
+                        {/* Location In */}
                         <TableCell>
                           {t.locIn && t.locIn.latitude != null && t.locIn.longitude != null ? (
                             <a
                               href={`https://www.google.com/maps?q=${t.locIn.latitude},${t.locIn.longitude}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-orange-500 hover:underline"
+                              className="text-orange-500 hover:underline text-xs"
                             >
                               {fmtLoc(t.locIn)}
                             </a>
@@ -644,13 +676,15 @@ function ManageTimelogs() {
                             fmtLoc(t.locIn)
                           )}
                         </TableCell>
+
+                        {/* Location Out */}
                         <TableCell>
                           {t.locOut && t.locOut.latitude != null && t.locOut.longitude != null ? (
                             <a
                               href={`https://www.google.com/maps?q=${t.locOut.latitude},${t.locOut.longitude}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-orange-500 hover:underline"
+                              className="text-orange-500 hover:underline text-xs"
                             >
                               {fmtLoc(t.locOut)}
                             </a>
