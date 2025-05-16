@@ -1,17 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-/**
- * ManageTimelogs (Admin UI)
- * -------------------------------------------------
- * • multi-employee filter, CSV export, etc.
- * • shows Device-In / Device-Out and Location-In / Location-Out
- * • NEW:
- *    – first column shows Timelog **ID**
- *    – CSV export mirrors exactly what the table displays
- *    – Location cells open Google Maps with the lat/long
- */
-
 import { useEffect, useMemo, useState } from "react";
 import {
   Clock,
@@ -32,7 +21,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
 
-/* ────────── shadcn/ui imports ────────── */
+/* ────────── shadcn/ui ────────── */
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -44,18 +33,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 
-/* ───────────────────────── helper functions ───────────────────────── */
+/* ────────── helpers ────────── */
 
-const fmtLocalDateTime = (d) => {
-  if (!d) return "—";
-  const x = new Date(d);
-  const Y = x.getFullYear();
-  const M = String(x.getMonth() + 1).padStart(2, "0");
-  const D = String(x.getDate()).padStart(2, "0");
-  const h = String(x.getHours()).padStart(2, "0");
-  const m = String(x.getMinutes()).padStart(2, "0");
-  return `${Y}-${M}-${D} ${h}:${m}`;
-};
+const fmtLocalDateTime = (d) =>
+  d
+    ? new Date(d).toLocaleString(undefined, {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
 
 const diffHours = (tin, tout) => (!tin || !tout ? "—" : ((new Date(tout) - new Date(tin)) / 36e5).toFixed(2));
 
@@ -73,7 +62,8 @@ const fmtDevice = (d) => {
 const fmtLoc = (loc) =>
   loc && loc.latitude != null && loc.longitude != null ? `${Number(loc.latitude).toFixed(5)}, ${Number(loc.longitude).toFixed(5)}` : "—";
 
-/* ────────── CSV helper (mirrors table) ────────── */
+/* ────────── CSV ────────── */
+
 const wrap = (v) => `"${String(v).replace(/"/g, '""')}"`;
 
 const buildCSV = (rows) => {
@@ -91,6 +81,7 @@ const buildCSV = (rows) => {
     "Device Out",
     "Location In",
     "Location Out",
+    "Is Active",
     "Status",
   ].map(wrap);
 
@@ -112,6 +103,7 @@ const buildCSV = (rows) => {
       deviceOut,
       fmtLoc(r.locIn),
       fmtLoc(r.locOut),
+      r.status === "active" ? "Yes" : "No",
       r.status.charAt(0).toUpperCase() + r.status.slice(1),
     ].map(wrap);
   });
@@ -119,18 +111,19 @@ const buildCSV = (rows) => {
   return [header, ...body].map((row) => row.join(",")).join("\r\n");
 };
 
-/* ───────────────────────── component ───────────────────────── */
+/* ────────── component ────────── */
+
 function ManageTimelogs() {
   const { token } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-  /* core data */
+  /* data */
   const [timelogs, setTimelogs] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [companyName, setCompanyName] = useState("");
 
-  /* ui state */
+  /* ui */
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -145,13 +138,14 @@ function ManageTimelogs() {
     status: "all",
   });
 
-  /* sorting */
+  /* sort */
   const [sortConfig, setSortConfig] = useState({
     key: "date",
     direction: "descending",
   });
 
-  /* ───────────────────────── fetches ───────────────────────── */
+  /* ────────── fetches ────────── */
+
   useEffect(() => {
     if (!token) return;
     fetchEmployees();
@@ -236,7 +230,8 @@ function ManageTimelogs() {
     setRefreshing(false);
   };
 
-  /* ───────────────────────── filtering + sort ───────────────────────── */
+  /* ────────── filter + sort ────────── */
+
   const displayed = useMemo(() => {
     let data = [...timelogs];
 
@@ -275,7 +270,8 @@ function ManageTimelogs() {
     return data;
   }, [timelogs, filters.employeeIds, filters.search, sortConfig]);
 
-  /* ───────────────────────── CSV export ───────────────────────── */
+  /* ────────── CSV export ────────── */
+
   const exportCSV = () => {
     if (!displayed.length) {
       toast.message("No rows to export");
@@ -304,7 +300,8 @@ function ManageTimelogs() {
     setExporting(false);
   };
 
-  /* ───────────────────────── multi-employee popover ───────────────────────── */
+  /* ────────── multi-employee popover ────────── */
+
   const MultiEmployeeSelect = () => {
     const allChecked = filters.employeeIds.includes("all");
 
@@ -352,12 +349,13 @@ function ManageTimelogs() {
     );
   };
 
-  /* ───────────────────────── render ───────────────────────── */
+  /* ────────── render ────────── */
+
   return (
     <div className="max-w-7xl mx-auto p-4 space-y-8">
       <Toaster position="top-center" />
 
-      {/* ---------------- HEADER ---------------- */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
@@ -406,7 +404,7 @@ function ManageTimelogs() {
         </div>
       </div>
 
-      {/* ---------------- FILTERS CARD ---------------- */}
+      {/* FILTERS */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
@@ -422,7 +420,7 @@ function ManageTimelogs() {
         <CardContent>
           {/* row 1 */}
           <div className="flex flex-wrap gap-3 mb-4">
-            {/* text search */}
+            {/* search */}
             <div className="flex-1 min-w-[220px]">
               <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg-white/5">
                 <Search className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -484,7 +482,7 @@ function ManageTimelogs() {
         </CardContent>
       </Card>
 
-      {/* ---------------- TIMELAGS TABLE ---------------- */}
+      {/* TABLE */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2 flex justify-between items-start">
@@ -505,10 +503,7 @@ function ManageTimelogs() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {/* ID column (not sortable) */}
                   <TableHead className="w-[220px]">ID</TableHead>
-
-                  {/* Employee */}
                   <TableHead
                     className="cursor-pointer"
                     onClick={() =>
@@ -524,8 +519,6 @@ function ManageTimelogs() {
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </div>
                   </TableHead>
-
-                  {/* Time In */}
                   <TableHead
                     className="cursor-pointer"
                     onClick={() =>
@@ -541,10 +534,7 @@ function ManageTimelogs() {
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </div>
                   </TableHead>
-
                   <TableHead>Time&nbsp;Out</TableHead>
-
-                  {/* Hours */}
                   <TableHead
                     className="cursor-pointer"
                     onClick={() =>
@@ -560,25 +550,21 @@ function ManageTimelogs() {
                         (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
                     </div>
                   </TableHead>
-
                   <TableHead>Coffee&nbsp;(min)</TableHead>
                   <TableHead>Lunch&nbsp;(min)</TableHead>
                   <TableHead>
-                    <Smartphone className="h-4 w-4" />
-                    &nbsp;In
+                    <Smartphone className="h-4 w-4" /> In
                   </TableHead>
                   <TableHead>
-                    <Smartphone className="h-4 w-4" />
-                    &nbsp;Out
+                    <Smartphone className="h-4 w-4" /> Out
                   </TableHead>
                   <TableHead>
-                    <MapPin className="h-4 w-4" />
-                    &nbsp;In
+                    <MapPin className="h-4 w-4" /> In
                   </TableHead>
                   <TableHead>
-                    <MapPin className="h-4 w-4" />
-                    &nbsp;Out
+                    <MapPin className="h-4 w-4" /> Out
                   </TableHead>
+                  <TableHead>Is&nbsp;Active</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -587,7 +573,7 @@ function ManageTimelogs() {
                 {loading ? (
                   [...Array(6)].map((_, i) => (
                     <TableRow key={i}>
-                      {Array(12)
+                      {Array(13)
                         .fill(0)
                         .map((__, j) => (
                           <TableCell key={j}>
@@ -607,35 +593,24 @@ function ManageTimelogs() {
                         transition={{ duration: 0.2 }}
                         className="border-b transition-colors hover:bg-muted/50"
                       >
-                        {/* ID */}
                         <TableCell className="font-mono text-xs text-orange-500">{t.id}</TableCell>
-
-                        {/* Employee */}
                         <TableCell>
                           <div className="flex items-center gap-1">
                             <Users className="h-3 w-3 text-orange-500" />
                             {t.employeeName}
                           </div>
                         </TableCell>
-
-                        {/* Time In / Out */}
                         <TableCell>{fmtLocalDateTime(t.timeIn)}</TableCell>
                         <TableCell>{fmtLocalDateTime(t.timeOut)}</TableCell>
-
-                        {/* Hours / breaks */}
                         <TableCell>{diffHours(t.timeIn, t.timeOut)}</TableCell>
                         <TableCell>{t.coffeeMins}</TableCell>
                         <TableCell>{t.lunchMins}</TableCell>
-
-                        {/* Device / Location */}
                         <TableCell>
                           {fmtDevice(t.deviceIn?.manufacturer)}, {fmtDevice(t.deviceIn?.deviceName)}
                         </TableCell>
                         <TableCell>
                           {fmtDevice(t.deviceOut?.manufacturer)}, {fmtDevice(t.deviceOut?.deviceName)}
                         </TableCell>
-
-                        {/* Location In (clickable if coords exist) */}
                         <TableCell>
                           {t.locIn && t.locIn.latitude != null && t.locIn.longitude != null ? (
                             <a
@@ -650,8 +625,6 @@ function ManageTimelogs() {
                             fmtLoc(t.locIn)
                           )}
                         </TableCell>
-
-                        {/* Location Out (clickable if coords exist) */}
                         <TableCell>
                           {t.locOut && t.locOut.latitude != null && t.locOut.longitude != null ? (
                             <a
@@ -665,6 +638,11 @@ function ManageTimelogs() {
                           ) : (
                             fmtLoc(t.locOut)
                           )}
+                        </TableCell>
+
+                        {/* Is Active */}
+                        <TableCell>
+                          {t.status === "active" ? <Badge className="bg-green-500 text-white">Yes</Badge> : <Badge variant="outline">No</Badge>}
                         </TableCell>
 
                         {/* Status */}
@@ -683,7 +661,7 @@ function ManageTimelogs() {
                   </AnimatePresence>
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={12} className="h-28 text-center">
+                    <TableCell colSpan={13} className="h-28 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
                         <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                           <Clock className="h-8 w-8 text-orange-500/50" />
