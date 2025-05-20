@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import useAuthStore from "@/store/useAuthStore";
 import { toast, Toaster } from "sonner";
-import { Clock, Coffee, Sandwich, MapPin, AlertCircle, Check, Timer, LogOut, LogIn, Loader2, Calendar } from "lucide-react";
+import { Clock, Coffee, Sandwich, MapPin, AlertCircle, Check, Timer, LogOut, LogIn, Loader2, Calendar, RefreshCw } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,13 +46,15 @@ function fetchLocation() {
   });
 }
 
-/* -------------------------------------------------------------------------- */
+/* ────────────────────────────────────────────────────────────────────────── */
 export default function MyPunch() {
   const { token } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   /* --------------------- reactive state ---------------------------------- */
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
   const [isTimedIn, setIsTimedIn] = useState(false);
   const [timeInAt, setTimeInAt] = useState(null);
   const [elapsed, setElapsed] = useState(0);
@@ -79,6 +81,54 @@ export default function MyPunch() {
     });
   }, []);
 
+  /* -------------------------------------------------- active-log fetcher -- */
+  const fetchActiveLog = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/timelogs/user`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const d = await res.json();
+      if (res.ok && Array.isArray(d.data)) {
+        const active = d.data.find((l) => l.status);
+        if (active) {
+          setIsTimedIn(true);
+          const ti = +new Date(active.timeIn);
+          setTimeInAt(ti);
+          setElapsed(Math.floor((Date.now() - ti) / 1000));
+
+          /* coffee */
+          if (active.coffeeBreaks?.length) {
+            const last = active.coffeeBreaks.at(-1);
+            setCoffeeCount(active.coffeeBreaks.length - (last?.end ? 0 : 1));
+            if (last && !last.end) {
+              setCoffeeActive(true);
+              const cs = +new Date(last.start);
+              setCoffeeStart(cs);
+              setCoffeeElapsed(Math.floor((Date.now() - cs) / 1000));
+            }
+          }
+          /* lunch */
+          if (active.lunchBreak && active.lunchBreak.start && !active.lunchBreak.end) {
+            setLunchActive(true);
+            const ls = +new Date(active.lunchBreak.start);
+            setLunchStart(ls);
+            setLunchElapsed(Math.floor((Date.now() - ls) / 1000));
+          }
+        } else {
+          resetAll();
+        }
+      }
+    } catch {
+      /* silent */
+    }
+  };
+
+  /* run fetcher on mount / token change */
+  useEffect(() => {
+    fetchActiveLog();
+  }, [token]);
+
   /* master interval */
   const intervalRef = useRef(null);
   useEffect(() => {
@@ -93,49 +143,6 @@ export default function MyPunch() {
     }
     return () => clearInterval(intervalRef.current);
   }, [isTimedIn, coffeeActive, lunchActive, timeInAt, coffeeStart, lunchStart]);
-
-  /* initial active-log check */
-  useEffect(() => {
-    if (!token) return;
-    (async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/timelogs/user`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const d = await res.json();
-        if (res.ok && Array.isArray(d.data)) {
-          const active = d.data.find((l) => l.status);
-          if (active) {
-            setIsTimedIn(true);
-            const ti = +new Date(active.timeIn);
-            setTimeInAt(ti);
-            setElapsed(Math.floor((Date.now() - ti) / 1000));
-
-            /* coffee */
-            if (active.coffeeBreaks?.length) {
-              const last = active.coffeeBreaks.at(-1);
-              setCoffeeCount(active.coffeeBreaks.length - (last?.end ? 0 : 1));
-              if (last && !last.end) {
-                setCoffeeActive(true);
-                const cs = +new Date(last.start);
-                setCoffeeStart(cs);
-                setCoffeeElapsed(Math.floor((Date.now() - cs) / 1000));
-              }
-            }
-            /* lunch */
-            if (active.lunchBreak && active.lunchBreak.start && !active.lunchBreak.end) {
-              setLunchActive(true);
-              const ls = +new Date(active.lunchBreak.start);
-              setLunchStart(ls);
-              setLunchElapsed(Math.floor((Date.now() - ls) / 1000));
-            }
-          }
-        }
-      } catch {
-        /* silent */
-      }
-    })();
-  }, [token, API_URL]);
 
   /* reset helper */
   const resetAll = () => {
@@ -293,6 +300,12 @@ export default function MyPunch() {
     }
   };
 
+  /* refresh-button handler --------------------------------------------- */
+  const refreshStatus = () => {
+    setRefreshing(true);
+    fetchActiveLog().finally(() => setRefreshing(false));
+  };
+
   /* Format time for display */
   const formatTimeDisplay = (timestamp) => {
     if (!timestamp) return "--:--";
@@ -311,15 +324,15 @@ export default function MyPunch() {
       <div className="max-w-7xl mx-auto px-2 py-6 space-y-8">
         <Toaster position="top-center" richColors />
 
-        {/* Header with title, nav buttons */}
+        {/* Header with title, nav buttons, refresh */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
             <Clock className="h-7 w-7 text-orange-500" />
             My Punches
           </h2>
 
-          {/* navigation buttons */}
-          <div className="flex gap-2">
+          {/* navigation + refresh buttons */}
+          <div className="flex gap-2 items-center">
             <Button variant="outline" className="flex items-center gap-1" asChild>
               <Link href="/dashboard/my-time-log">
                 <Timer className="h-4 w-4" />
@@ -332,6 +345,9 @@ export default function MyPunch() {
                 Schedule
               </Link>
             </Button>
+
+            {/* NEW ─ refresh status */}
+            <IconBtn icon={RefreshCw} tooltip="Refresh status" spinning={refreshing} onClick={refreshStatus} />
           </div>
         </div>
 
@@ -534,7 +550,8 @@ export default function MyPunch() {
   );
 }
 
-/* Enhanced metric tile ------------------------------------------------------- */
+/* ---------- shared small components -------------------------------------- */
+
 function Metric({ icon, label, value, active, progress, progressLabel, disabled }) {
   return (
     <div
@@ -579,3 +596,22 @@ function Metric({ icon, label, value, active, progress, progressLabel, disabled 
     </div>
   );
 }
+
+/* ---------- small icon-button (matches other pages) ----------------------- */
+const IconBtn = ({ icon: Icon, tooltip, spinning, ...props }) => (
+  <TooltipProvider delayDuration={300}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="outline"
+          size="icon"
+          className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+          {...props}
+        >
+          <Icon className={`h-4 w-4 ${spinning ? "animate-spin" : ""}`} />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+);

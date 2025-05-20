@@ -3,6 +3,7 @@
 import "./globals.css";
 import { ThemeProvider } from "@/components/Theme/ThemeProvider";
 import NavBar from "@/components/Partial/Navbar";
+import BizChat from "@/components/Home/BizChat";
 
 export const metadata = {
   title: "BizBuddy",
@@ -19,6 +20,7 @@ export default function RootLayout({ children }) {
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <NavBar />
           <main className="pt-16">{children}</main>
+          {/* <BizChat /> */}
         </ThemeProvider>
       </body>
     </html>
