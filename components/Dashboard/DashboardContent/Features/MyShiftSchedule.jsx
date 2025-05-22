@@ -1,12 +1,12 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { format, parseISO, isSameDay, isValid } from "date-fns";
 import Link from "next/link";
 import useAuthStore from "@/store/useAuthStore";
 import { toast, Toaster } from "sonner";
-import { CalendarIcon, Clock, ArrowRight } from "lucide-react";
+import { CalendarIcon, Clock, ArrowRight, RefreshCw } from "lucide-react";
 
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -42,26 +42,29 @@ export default function MyShiftSchedule() {
   const [allShifts, setAllShifts] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  /* --------------------------- fetch user shifts -------------------------- */
-  useEffect(() => {
+  /* ----------------------- fetch helper (extracted) ----------------------- */
+  const fetchShifts = useCallback(async () => {
     if (!token) return;
-    (async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`${API_URL}/api/usershifts`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (res.ok) setAllShifts(data.data || []);
-        else toast.message(data.error || "Failed to fetch shifts.");
-      } catch (err) {
-        console.error(err);
-        toast.message("Failed to fetch shifts.");
-      } finally {
-        setLoading(false);
-      }
-    })();
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/usershifts`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) setAllShifts(data.data || []);
+      else toast.message(data.error || "Failed to fetch shifts.");
+    } catch (err) {
+      console.error(err);
+      toast.message("Failed to fetch shifts.");
+    } finally {
+      setLoading(false);
+    }
   }, [token, API_URL]);
+
+  /* --------------------------- fetch on mount ---------------------------- */
+  useEffect(() => {
+    fetchShifts();
+  }, [fetchShifts]);
 
   /* ------------------ build helpers derived from fetched data ------------- */
   const shiftDays = useMemo(() => {
@@ -111,7 +114,7 @@ export default function MyShiftSchedule() {
 
   /* ------------------------------ rendering ------------------------------- */
   return (
-    <div className="max-w-7xl mx-auto space-y-8 p-4">
+    <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
       <Toaster position="top-center" />
 
       {/* ---------------------------- page title + nav ---------------------------- */}
@@ -147,6 +150,11 @@ export default function MyShiftSchedule() {
           >
             <CalendarIcon className="h-4 w-4 mr-2" />
             Today
+          </Button>
+
+          {/* refresh button */}
+          <Button onClick={fetchShifts} variant="outline" size="icon" disabled={loading} aria-label="Refresh shift data">
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
         </div>
       </div>

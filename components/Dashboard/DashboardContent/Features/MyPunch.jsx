@@ -321,7 +321,7 @@ export default function MyPunch() {
   /* ---------------------------------------------------------------- UI --- */
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="max-w-7xl mx-auto px-2 py-6 space-y-8">
+      <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
         <Toaster position="top-center" richColors />
 
         {/* Header with title, nav buttons, refresh */}

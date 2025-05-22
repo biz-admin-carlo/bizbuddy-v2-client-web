@@ -54,7 +54,7 @@ export default function Overview() {
   }, [roleButtons]);
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6">
+    <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
       <Toaster position="top-center" richColors />
       <div className="bg-white dark:bg-neutral-950 rounded-xl shadow-sm p-4 mb-6 border border-neutral-200 dark:border-neutral-800">
         <div className="flex flex-wrap items-center justify-between gap-3">

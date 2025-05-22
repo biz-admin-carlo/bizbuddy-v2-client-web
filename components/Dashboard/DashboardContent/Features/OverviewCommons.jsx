@@ -22,10 +22,8 @@ import {
   AreaChart,
 } from "recharts";
 
-/* Enhanced color palette with better contrast and accessibility */
 const COLORS = ["#f97316", "#0ea5e9", "#84cc16", "#8b5cf6", "#ec4899", "#14b8a6", "#f59e0b", "#6366f1"];
 
-/* simple card wrapper with improved styling */
 export const ChartCard = ({ title, children }) => (
   <Card className="border-2 dark:border-white/10 overflow-hidden shadow-sm transition-all hover:shadow-md">
     <div className="h-1.5 w-full bg-gradient-to-r from-orange-500 to-orange-400" />
@@ -36,7 +34,6 @@ export const ChartCard = ({ title, children }) => (
   </Card>
 );
 
-/* Enhanced chart helpers with better styling and tooltips */
 export const PieSimple = ({ data }) => (
   <ResponsiveContainer>
     <PieChart margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
@@ -44,8 +41,8 @@ export const PieSimple = ({ data }) => (
         data={data}
         dataKey="value"
         nameKey="name"
-        outerRadius={90}
-        innerRadius={40}
+        outerRadius={60}
+        innerRadius={20}
         paddingAngle={2}
         label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
       >

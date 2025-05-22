@@ -156,7 +156,7 @@ export default function MyLeavesApproval() {
   );
 
   return (
-    <div className="max-w-7xl mx-auto p-4 space-y-8">
+    <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
       <Toaster position="top-center" />
 
       {/* header */}
