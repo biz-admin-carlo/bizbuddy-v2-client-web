@@ -59,6 +59,14 @@ const DAY_NAME = {
 };
 
 /* ════════════ UTILITIES ════════════ */
+const fmtClock = (iso) =>
+  new Date(iso).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "UTC",
+  });
+
 const buildRRule = (byday, startISO) =>
   new RRule({
     freq: RRule.WEEKLY,
@@ -195,7 +203,6 @@ function ManageShiftSchedules() {
   /* ---------- FETCH ---------- */
   useEffect(() => {
     token && fetchAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   async function fetchAll() {
@@ -556,7 +563,12 @@ function ManageShiftSchedules() {
                   <div className="col-span-3">
                     <MultiUserSelect
                       list={createForm.assignedUserIds}
-                      setList={(arr) => setCreateForm((p) => ({ ...p, assignedUserIds: arr }))}
+                      setList={(arr) =>
+                        setCreateForm((p) => ({
+                          ...p,
+                          assignedUserIds: arr,
+                        }))
+                      }
                       users={users}
                     />
                   </div>
@@ -603,7 +615,7 @@ function ManageShiftSchedules() {
 
             {/* email filter */}
             <div className="flex-1 min-w-[220px]">
-              <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg-white/5">
+              <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg:white/5">
                 <Mail className="h-4 w-4 mr-2 text-muted-foreground" />
                 <Input
                   placeholder="User email"
@@ -753,7 +765,7 @@ function ManageShiftSchedules() {
 
       {/* ===== EDIT DIALOG ===== */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
-        <DialogContent className="border-2 dark:border-white/10 max-w-xl">
+        <DialogContent className="border-2 dark:border:white/10 max-w-xl">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -902,17 +914,11 @@ function ManageShiftSchedules() {
             <div className="space-y-2 pt-2 text-sm">
               <div>
                 <span className="opacity-70">Start:&nbsp;</span>
-                {new Date(selectedShift.startTime).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+                {fmtClock(selectedShift.startTime)}
               </div>
               <div>
                 <span className="opacity-70">End:&nbsp;</span>
-                {new Date(selectedShift.endTime).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+                {fmtClock(selectedShift.endTime)}
               </div>
               <div>
                 <span className="opacity-70">Total Hours:&nbsp;</span>

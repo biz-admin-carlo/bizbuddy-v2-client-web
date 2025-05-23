@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -15,26 +16,41 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-/* ---------- helper: total hours ---------- */
-function totalHours(startISO, endISO) {
-  if (!startISO || !endISO) return "—";
-  try {
-    const start = new Date(startISO);
-    const end = new Date(endISO);
-    let diff = end - start;
-    if (diff < 0) diff += 24 * 60 * 60 * 1000;
-    return (diff / 36e5).toFixed(2);
-  } catch (err) {
-    console.error("Error calculating hours:", err);
-    return "—";
-  }
-}
+/* ────────── helper functions ────────── */
+const toUtcIso = (hhmm) => {
+  const [h, m] = hhmm.split(":").map(Number);
+  return new Date(Date.UTC(1970, 0, 1, h, m)).toISOString();
+};
 
+const fmtClock = (iso) =>
+  new Date(iso).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "UTC", // keep as fixed wall-clock value
+  });
+
+const fmtDateTime = (iso) =>
+  new Date(iso).toLocaleString([], {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+const totalHours = (startISO, endISO) => {
+  if (!startISO || !endISO) return "—";
+  let diff = new Date(endISO) - new Date(startISO);
+  if (diff < 0) diff += 24 * 60 * 60 * 1000;
+  return (diff / 36e5).toFixed(2);
+};
+
+/* ────────── component ────────── */
 function ManageShifts() {
   const { token } = useAuthStore();
-  const API_URL = process.env.NEXT_PUBLIC_API_URL;
+  const API = process.env.NEXT_PUBLIC_API_URL;
 
-  /* ---------- state ---------- */
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -61,52 +77,39 @@ function ManageShifts() {
   const [actionLoading, setActionLoading] = useState(false);
 
   const [filters, setFilters] = useState({ name: "" });
-  const [sortConfig, setSortConfig] = useState({ key: "shiftName", direction: "ascending" });
+  const [sortConfig, setSortConfig] = useState({
+    key: "shiftName",
+    direction: "ascending",
+  });
 
-  /* ---------- fetch ---------- */
+  /* ────────── fetch ────────── */
   useEffect(() => {
     if (token) fetchShifts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  async function fetchShifts() {
+  const fetchShifts = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/shifts`, {
+      const r = await fetch(`${API}/api/shifts`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
-      if (res.ok) setShifts(data.data || []);
-      else toast.message(data.error || "Failed to fetch shifts.");
-    } catch (e) {
-      console.error(e);
+      const j = await r.json();
+      if (r.ok) setShifts(j.data || []);
+      else toast.message(j.message || "Failed to fetch shifts.");
+    } catch {
       toast.message("Failed to fetch shifts.");
     }
     setLoading(false);
-  }
+  };
 
   const refreshShifts = async () => {
     setRefreshing(true);
-    try {
-      const res = await fetch(`${API_URL}/api/shifts`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setShifts(data.data || []);
-        toast.message("Shifts refreshed");
-      } else {
-        toast.message(data.error || "Failed to refresh shifts.");
-      }
-    } catch (e) {
-      console.error(e);
-      toast.message("Failed to refresh shifts.");
-    }
+    await fetchShifts();
     setRefreshing(false);
   };
 
-  /* ---------- filter / sort ---------- */
-  function filteredSorted() {
+  /* ────────── filter + sort ────────── */
+  const filteredSorted = () => {
     const data = shifts.filter((s) => s.shiftName.toLowerCase().includes(filters.name.toLowerCase()));
     if (sortConfig.key) {
       data.sort((a, b) => {
@@ -125,10 +128,10 @@ function ManageShifts() {
       });
     }
     return data;
-  }
+  };
 
-  /* ---------- create ---------- */
-  function openCreate() {
+  /* ────────── create ────────── */
+  const openCreate = () => {
     setCreateForm({
       shiftName: "",
       startTime: "08:00",
@@ -136,19 +139,19 @@ function ManageShifts() {
       differentialMultiplier: "1.0",
     });
     setShowCreate(true);
-  }
+  };
 
-  async function handleCreate() {
+  const handleCreate = async () => {
     if (!createForm.shiftName.trim()) return toast.message("Shift name required.");
     setActionLoading(true);
     try {
       const payload = {
         shiftName: createForm.shiftName.trim(),
-        startTime: new Date(`1970-01-01T${createForm.startTime}:00`).toISOString(),
-        endTime: new Date(`1970-01-01T${createForm.endTime}:00`).toISOString(),
+        startTime: toUtcIso(createForm.startTime),
+        endTime: toUtcIso(createForm.endTime),
         differentialMultiplier: Number.parseFloat(createForm.differentialMultiplier),
       };
-      const res = await fetch(`${API_URL}/api/shifts/create`, {
+      const r = await fetch(`${API}/api/shifts/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -156,44 +159,41 @@ function ManageShifts() {
         },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (res.status === 201 || res.status === 200) {
-        toast.message(data.message || "Shift created.");
+      const j = await r.json();
+      if (r.status === 201 || r.status === 200) {
+        toast.message(j.message || "Shift created.");
         setShowCreate(false);
         fetchShifts();
-      } else toast.message(data.error || "Failed to create shift.");
-    } catch (e) {
-      console.error(e);
+      } else toast.message(j.message || "Failed to create shift.");
+    } catch {
       toast.message("Failed to create shift.");
-    } finally {
-      setActionLoading(false);
     }
-  }
+    setActionLoading(false);
+  };
 
-  /* ---------- edit ---------- */
-  function openEdit(shift) {
+  /* ────────── edit ────────── */
+  const openEdit = (s) => {
     setEditForm({
-      id: shift.id,
-      shiftName: shift.shiftName,
-      startTime: new Date(shift.startTime).toISOString().slice(11, 16),
-      endTime: new Date(shift.endTime).toISOString().slice(11, 16),
-      differentialMultiplier: String(shift.differentialMultiplier),
+      id: s.id,
+      shiftName: s.shiftName,
+      startTime: fmtClock(s.startTime),
+      endTime: fmtClock(s.endTime),
+      differentialMultiplier: String(s.differentialMultiplier),
     });
     setShowEdit(true);
-  }
+  };
 
-  async function handleSaveEdit() {
-    const { id, shiftName, startTime, endTime, differentialMultiplier } = editForm;
-    if (!shiftName.trim()) return toast.message("Shift name required.");
+  const handleSaveEdit = async () => {
+    if (!editForm.shiftName.trim()) return toast.message("Shift name required.");
     setActionLoading(true);
     try {
       const payload = {
-        shiftName: shiftName.trim(),
-        startTime: new Date(`1970-01-01T${startTime}:00`).toISOString(),
-        endTime: new Date(`1970-01-01T${endTime}:00`).toISOString(),
-        differentialMultiplier: Number.parseFloat(differentialMultiplier),
+        shiftName: editForm.shiftName.trim(),
+        startTime: toUtcIso(editForm.startTime),
+        endTime: toUtcIso(editForm.endTime),
+        differentialMultiplier: Number.parseFloat(editForm.differentialMultiplier),
       };
-      const res = await fetch(`${API_URL}/api/shifts/${id}`, {
+      const r = await fetch(`${API}/api/shifts/${editForm.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -201,50 +201,46 @@ function ManageShifts() {
         },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (res.ok) {
-        toast.message(data.message || "Shift updated.");
+      const j = await r.json();
+      if (r.ok) {
+        toast.message(j.message || "Shift updated.");
         setShowEdit(false);
         fetchShifts();
-      } else toast.message(data.error || "Failed to update shift.");
-    } catch (e) {
-      console.error(e);
+      } else toast.message(j.message || "Failed to update shift.");
+    } catch {
       toast.message("Failed to update shift.");
-    } finally {
-      setActionLoading(false);
     }
-  }
+    setActionLoading(false);
+  };
 
-  /* ---------- delete ---------- */
-  function openDelete(shift) {
-    setShiftToDelete(shift);
+  /* ────────── delete ────────── */
+  const openDelete = (s) => {
+    setShiftToDelete(s);
     setShowDelete(true);
-  }
+  };
 
-  async function confirmDelete() {
+  const confirmDelete = async () => {
     if (!shiftToDelete) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/shifts/${shiftToDelete.id}`, {
+      const r = await fetch(`${API}/api/shifts/${shiftToDelete.id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
-      if (res.ok) {
-        toast.message(data.message || "Shift deleted.");
-        setShifts((p) => p.filter((s) => s.id !== shiftToDelete.id));
-      } else toast.message(data.error || "Failed to delete shift.");
-    } catch (e) {
-      console.error(e);
+      const j = await r.json();
+      if (r.ok) {
+        toast.message(j.message || "Shift deleted.");
+        setShifts((p) => p.filter((x) => x.id !== shiftToDelete.id));
+      } else toast.message(j.message || "Failed to delete shift.");
+    } catch {
       toast.message("Failed to delete shift.");
-    } finally {
-      setActionLoading(false);
-      setShowDelete(false);
-      setShiftToDelete(null);
     }
-  }
+    setActionLoading(false);
+    setShowDelete(false);
+    setShiftToDelete(null);
+  };
 
-  /* ---------- render ---------- */
+  /* ────────── render ────────── */
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
       <Toaster position="top-center" />
@@ -317,7 +313,12 @@ function ManageShifts() {
                       step={field === "differentialMultiplier" ? "0.1" : undefined}
                       className="col-span-3"
                       value={createForm[field]}
-                      onChange={(e) => setCreateForm((p) => ({ ...p, [field]: e.target.value }))}
+                      onChange={(e) =>
+                        setCreateForm((p) => ({
+                          ...p,
+                          [field]: e.target.value,
+                        }))
+                      }
                     />
                   </div>
                 ))}
@@ -328,21 +329,7 @@ function ManageShifts() {
                   Cancel
                 </Button>
                 <Button onClick={handleCreate} disabled={actionLoading} className="bg-orange-500 hover:bg-orange-600 text-white">
-                  {actionLoading ? (
-                    <span className="flex items-center">
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                      </svg>
-                      Creating...
-                    </span>
-                  ) : (
-                    <span>Create Shift</span>
-                  )}
+                  {actionLoading ? "Creating..." : "Create Shift"}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -350,7 +337,7 @@ function ManageShifts() {
         </div>
       </div>
 
-      {/* filters and search */}
+      {/* filters */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500"></div>
         <CardHeader className="pb-2">
@@ -388,57 +375,40 @@ function ManageShifts() {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Sort by:</span>
-              <TooltipProvider delayDuration={300}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setSortConfig({
-                          key: "shiftName",
-                          direction: sortConfig.key === "shiftName" && sortConfig.direction === "ascending" ? "descending" : "ascending",
-                        })
-                      }
-                      className={`${sortConfig.key === "shiftName" ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}`}
-                    >
-                      Name{" "}
-                      {sortConfig.key === "shiftName" &&
-                        (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Sort by shift name</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              <TooltipProvider delayDuration={300}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setSortConfig({
-                          key: "differentialMultiplier",
-                          direction: sortConfig.key === "differentialMultiplier" && sortConfig.direction === "ascending" ? "descending" : "ascending",
-                        })
-                      }
-                      className={`${
-                        sortConfig.key === "differentialMultiplier" ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""
-                      }`}
-                    >
-                      Multiplier{" "}
-                      {sortConfig.key === "differentialMultiplier" &&
-                        (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Sort by multiplier</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              {[
+                ["shiftName", "Name"],
+                ["differentialMultiplier", "Multiplier"],
+              ].map(([key, label]) => (
+                <TooltipProvider key={key} delayDuration={300}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setSortConfig({
+                            key,
+                            direction: sortConfig.key === key && sortConfig.direction === "ascending" ? "descending" : "ascending",
+                          })
+                        }
+                        className={sortConfig.key === key ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
+                      >
+                        {label}{" "}
+                        {sortConfig.key === key ? (
+                          sortConfig.direction === "ascending" ? (
+                            <ChevronUp className="ml-1 h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="ml-1 h-4 w-4" />
+                          )
+                        ) : null}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Sort by {label.toLowerCase()}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ))}
             </div>
           </div>
         </CardContent>
@@ -461,39 +431,13 @@ function ManageShifts() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead
-                    className="cursor-pointer"
-                    onClick={() =>
-                      setSortConfig({
-                        key: "shiftName",
-                        direction: sortConfig.key === "shiftName" && sortConfig.direction === "ascending" ? "descending" : "ascending",
-                      })
-                    }
-                  >
-                    <div className="flex items-center">
-                      Shift Name{" "}
-                      {sortConfig.key === "shiftName" &&
-                        (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                    </div>
-                  </TableHead>
+                  <TableHead>Shift Name</TableHead>
                   <TableHead>Start</TableHead>
                   <TableHead>End</TableHead>
-                  <TableHead
-                    className="cursor-pointer"
-                    onClick={() =>
-                      setSortConfig({
-                        key: "differentialMultiplier",
-                        direction: sortConfig.key === "differentialMultiplier" && sortConfig.direction === "ascending" ? "descending" : "ascending",
-                      })
-                    }
-                  >
-                    <div className="flex items-center">
-                      Multiplier{" "}
-                      {sortConfig.key === "differentialMultiplier" &&
-                        (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                    </div>
-                  </TableHead>
+                  <TableHead>Multiplier</TableHead>
                   <TableHead>Total hrs</TableHead>
+                  <TableHead>Created At</TableHead>
+                  <TableHead>Updated At</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -503,24 +447,13 @@ function ManageShifts() {
                     .fill(0)
                     .map((_, i) => (
                       <TableRow key={i}>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-20 ml-auto" />
-                        </TableCell>
+                        {Array(8)
+                          .fill(0)
+                          .map((__, j) => (
+                            <TableCell key={j}>
+                              <Skeleton className="h-6 w-full" />
+                            </TableCell>
+                          ))}
                       </TableRow>
                     ))
                 ) : filteredSorted().length ? (
@@ -536,26 +469,20 @@ function ManageShifts() {
                       >
                         <TableCell className="font-medium">
                           <div className="flex items-center">
-                            <div className="w-2 h-2 rounded-full bg-orange-500 mr-2"></div>
+                            <div className="w-2 h-2 rounded-full bg-orange-500 mr-2" />
                             {s.shiftName}
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center">
                             <Clock className="h-3 w-3 mr-1 text-orange-500" />
-                            {new Date(s.startTime).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
+                            {fmtClock(s.startTime)}
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center">
                             <Clock className="h-3 w-3 mr-1 text-orange-500" />
-                            {new Date(s.endTime).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
+                            {fmtClock(s.endTime)}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -566,6 +493,8 @@ function ManageShifts() {
                         <TableCell>
                           <Badge className="bg-orange-500 hover:bg-orange-600 text-white">{totalHours(s.startTime, s.endTime)} hrs</Badge>
                         </TableCell>
+                        <TableCell>{fmtDateTime(s.createdAt)}</TableCell>
+                        <TableCell>{fmtDateTime(s.updatedAt)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
                             <TooltipProvider delayDuration={300}>
@@ -610,7 +539,7 @@ function ManageShifts() {
                   </AnimatePresence>
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-32 text-center">
+                    <TableCell colSpan={8} className="h-32 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
                         <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                           <Clock className="h-8 w-8 text-orange-500/50" />
@@ -634,7 +563,7 @@ function ManageShifts() {
       {/* edit dialog */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
         <DialogContent className="border-2 dark:border-white/10">
-          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
+          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
@@ -673,30 +602,16 @@ function ManageShifts() {
               Cancel
             </Button>
             <Button onClick={handleSaveEdit} disabled={actionLoading} className="bg-orange-500 hover:bg-orange-600 text-white">
-              {actionLoading ? (
-                <span className="flex items-center">
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Saving...
-                </span>
-              ) : (
-                <span>Save Changes</span>
-              )}
+              {actionLoading ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* delete confirmation dialog */}
+      {/* delete dialog */}
       <Dialog open={showDelete} onOpenChange={setShowDelete}>
         <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
-          <div className="h-1 w-full bg-red-500 -mt-6 mb-4"></div>
+          <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="p-2 rounded-full bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400">
@@ -718,22 +633,16 @@ function ManageShifts() {
                   <span className="font-medium">{totalHours(shiftToDelete.startTime, shiftToDelete.endTime)}</span>
                 </div>
                 <div>
-                  <span className="opacity-70">Start Time:</span>{" "}
-                  <span className="font-medium">
-                    {new Date(shiftToDelete.startTime).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
+                  <span className="opacity-70">Start Time:</span> <span className="font-medium">{fmtClock(shiftToDelete.startTime)}</span>
                 </div>
                 <div>
-                  <span className="opacity-70">End Time:</span>{" "}
-                  <span className="font-medium">
-                    {new Date(shiftToDelete.endTime).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
+                  <span className="opacity-70">End Time:</span> <span className="font-medium">{fmtClock(shiftToDelete.endTime)}</span>
+                </div>
+                <div>
+                  <span className="opacity-70">Created:</span> <span className="font-medium">{fmtDateTime(shiftToDelete.createdAt)}</span>
+                </div>
+                <div>
+                  <span className="opacity-70">Updated:</span> <span className="font-medium">{fmtDateTime(shiftToDelete.updatedAt)}</span>
                 </div>
               </div>
             </div>
@@ -747,22 +656,8 @@ function ManageShifts() {
             >
               Cancel
             </Button>
-            <Button variant="destructive" onClick={confirmDelete} className="bg-red-500 hover:bg-red-600">
-              {actionLoading ? (
-                <span className="flex items-center">
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Deleting...
-                </span>
-              ) : (
-                <span>Delete Shift</span>
-              )}
+            <Button variant="destructive" onClick={confirmDelete} disabled={actionLoading} className="bg-red-500 hover:bg-red-600">
+              {actionLoading ? "Deleting..." : "Delete Shift"}
             </Button>
           </DialogFooter>
         </DialogContent>
