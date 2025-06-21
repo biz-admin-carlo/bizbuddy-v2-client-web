@@ -2,11 +2,13 @@
 
 import MyLeavesApproval from "@/components/Dashboard/DashboardContent/Features/MyLeavesApproval";
 import React from "react";
+import { Suspense } from "react";
+export const dynamic = "force-dynamic";
 
 export default function MyLeavesApprovalPage() {
   return (
-    <div>
+    <Suspense fallback={<div className="p-6 text-center">Loading...</div>}>
       <MyLeavesApproval />
-    </div>
+    </Suspense>
   );
 }

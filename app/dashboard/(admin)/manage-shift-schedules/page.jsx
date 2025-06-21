@@ -2,11 +2,13 @@
 
 import ManageShiftSchedules from "@/components/Dashboard/DashboardContent/Settings/Admin/ManageShiftSchedules";
 import React from "react";
+import { Suspense } from "react";
+export const dynamic = "force-dynamic";
 
 export default function ManageShiftSchedulesPage() {
   return (
-    <div>
+    <Suspense fallback={<div className="p-6 text-center">Loading...</div>}>
       <ManageShiftSchedules />
-    </div>
+    </Suspense>
   );
 }

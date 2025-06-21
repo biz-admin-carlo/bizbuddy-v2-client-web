@@ -2,7 +2,14 @@
 
 "use client";
 import Overview from "@/components/Dashboard/DashboardContent/Features/Overview/Overview";
+import React from "react";
+import { Suspense } from "react";
+export const dynamic = "force-dynamic";
 
 export default function OverviewPage() {
-  return <Overview />;
+  return (
+    <Suspense fallback={<div className="p-6 text-center">Loading...</div>}>
+      <Overview />
+    </Suspense>
+  );
 }

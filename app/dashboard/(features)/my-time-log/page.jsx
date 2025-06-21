@@ -2,11 +2,13 @@
 
 import MyTimeLog from "@/components/Dashboard/DashboardContent/Features/MyTimeLog";
 import React from "react";
+import { Suspense } from "react";
+export const dynamic = "force-dynamic";
 
 export default function MyTimeLogPage() {
   return (
-    <div>
+    <Suspense fallback={<div className="p-6 text-center">Loading...</div>}>
       <MyTimeLog />
-    </div>
+    </Suspense>
   );
 }

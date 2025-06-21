@@ -2,11 +2,13 @@
 
 import ManageOvertime from "@/components/Dashboard/DashboardContent/Settings/Admin/ManageOvertime";
 import React from "react";
+import { Suspense } from "react";
+export const dynamic = "force-dynamic";
 
 export default function ManagePayrollPage() {
   return (
-    <div>
+    <Suspense fallback={<div className="p-6 text-center">Loading leave requests…</div>}>
       <ManageOvertime />
-    </div>
+    </Suspense>
   );
 }
