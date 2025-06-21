@@ -1,3 +1,4 @@
+// components/Dashboard/DashboardContent/Features/Overview/OverviewAdmin.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
@@ -7,13 +8,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
-import { ChartCard, PieSimple, BarSimple, LineSimple, GroupedBarSimple, StackedBarSimple, AreaSimple } from "./OverviewCommons";
+import { ChartCard, PieSimple, BarSimple, LineSimple, GroupedBarSimple, StackedBarSimple, AreaSimple } from "./Commons";
 
-/* ------------------------------------------------------------------ */
-/*  ── helpers ──                                                     */
-/* ------------------------------------------------------------------ */
 const diffHours = (isoA, isoB) => (isoA && isoB ? (new Date(isoB) - new Date(isoA)) / 36e5 : 0);
-
 const monthKey = (iso) => iso.slice(0, 7);
 const dayKey = (iso) => iso.slice(0, 10);
 
@@ -23,22 +20,16 @@ const leaveByTypeToRow = (obj) => {
   return row;
 };
 
-/* ------------------------------------------------------------------ */
-/*  ── component ──                                                   */
-/* ------------------------------------------------------------------ */
 export default function OverviewAdmin() {
   const { token } = useAuthStore();
   const API = process.env.NEXT_PUBLIC_API_URL;
 
-  /* ─────────────── raw state ─────────────── */
   const [departments, setDepartments] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [timelogs, setTimelogs] = useState([]);
-  const [userShifts, setUserShifts] = useState([]); // ← scheduled (assigned) shifts
+  const [userShifts, setUserShifts] = useState([]);
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  /* ─────────────── fetch all admin-scope data ─────────────── */
   const fetchData = useCallback(async () => {
     if (!token) return;
     setLoading(true);
@@ -86,11 +77,9 @@ export default function OverviewAdmin() {
     fetchData();
   }, [fetchData]);
 
-  /* ─────────────── analytics ─────────────── */
   const analytics = useMemo(() => {
     if (loading) return null;
 
-    /* 1️⃣  ACTIVE STAFF (unique punch-ins per month) */
     const activeByMonth = {};
     timelogs.forEach((l) => {
       const m = monthKey(l.timeIn);
@@ -100,15 +89,12 @@ export default function OverviewAdmin() {
       .sort()
       .map(([month, ids]) => ({ month, count: ids.size }));
 
-    /* 2️⃣  SCHEDULED vs ACTUAL HOURS */
-    /* ---- scheduled ---- */
-    const schedHours = {}; // key = "userId_month" → hours
+    const schedHours = {};
     userShifts.forEach((row) => {
       const key = `${row.userId}_${monthKey(row.assignedDate)}`;
       const h = diffHours(row.shift.startTime, row.shift.endTime);
       schedHours[key] = (schedHours[key] || 0) + h;
     });
-    /* ---- actual ---- */
     const actualHours = {};
     timelogs.forEach((l) => {
       if (!l.timeOut) return;
@@ -117,7 +103,6 @@ export default function OverviewAdmin() {
       actualHours[key] = (actualHours[key] || 0) + h;
     });
 
-    /* aggregate monthly */
     const months = new Set([...Object.keys(schedHours).map((k) => k.split("_")[1]), ...Object.keys(actualHours).map((k) => k.split("_")[1])]);
     const hoursCompareArr = [...months].sort().map((m) => ({
       month: m,
@@ -135,10 +120,9 @@ export default function OverviewAdmin() {
       ),
     }));
 
-    /* 3️⃣  LATE-IN & EARLY-OUT */
     let late = 0;
     let early = 0;
-    const shiftIndex = {}; // userId_date → {start,end}
+    const shiftIndex = {};
     userShifts.forEach((us) => {
       shiftIndex[`${us.userId}_${dayKey(us.assignedDate)}`] = {
         start: us.shift.startTime,
@@ -158,12 +142,9 @@ export default function OverviewAdmin() {
     const totalScheduledShifts = userShifts.length || 1; // avoid /0
     const lateRate = ((late / totalScheduledShifts) * 100).toFixed(1);
     const earlyRate = ((early / totalScheduledShifts) * 100).toFixed(1);
-
-    /* 4️⃣  ATTENDANCE RELIABILITY */
     const attendedOnTime = totalScheduledShifts - late - early > 0 ? totalScheduledShifts - late - early : 0;
     const reliability = ((attendedOnTime / totalScheduledShifts) * 100).toFixed(1);
 
-    /* 5️⃣  LEAVE USAGE BY TYPE + APPROVALS */
     const leaveByType = {};
     leaves
       .filter((lv) => lv.status === "approved")
@@ -181,7 +162,6 @@ export default function OverviewAdmin() {
       { name: "Pending / Rejected", value: totalReq - totalApproved },
     ];
 
-    /* 6️⃣  OVERTIME (hours by department & cost trend) */
     const deptName = (uid) => employees.find((e) => e.id === uid)?.department?.name || "Unassigned";
 
     const overtimeByDept = {};
@@ -203,14 +183,12 @@ export default function OverviewAdmin() {
       .sort()
       .map(([month, ot]) => ({
         month,
-        cost: Number((ot * 1.5).toFixed(2)), // dummy rate multiplier
+        cost: Number((ot * 1.5).toFixed(2)),
       }));
 
-    /* 7️⃣  SHIFT COVERAGE */
     const covered = userShifts.filter((us) => timelogs.some((l) => l.userId === us.userId && dayKey(l.timeIn) === dayKey(us.assignedDate))).length;
     const coverageRate = ((covered / totalScheduledShifts) * 100).toFixed(1);
 
-    /* ── KPI CARDS ── */
     const cards = [
       {
         icon: <Briefcase className="h-6 w-6 text-orange-500" />,
@@ -254,10 +232,8 @@ export default function OverviewAdmin() {
       },
     ];
 
-    /* ── CHARTS ── */
     const charts = (
       <div className="grid gap-4">
-        {/* row 1 */}
         <div className="grid lg:grid-cols-2 gap-4">
           <ChartCard title="Active Staff / Month">
             <BarSimple data={activeArr} x="month" y="count" />
@@ -267,7 +243,6 @@ export default function OverviewAdmin() {
           </ChartCard>
         </div>
 
-        {/* row 2 */}
         <div className="grid lg:grid-cols-2 gap-4">
           <ChartCard title="Late-In vs Early-Out %">
             <LineSimple
@@ -316,7 +291,6 @@ export default function OverviewAdmin() {
     return { cards, charts };
   }, [loading, departments, employees, timelogs, userShifts, leaves]);
 
-  /* ─────────────── skeletons / KPI card util ─────────────── */
   const SkeletonCards = (n) => (
     <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6 mb-6">
       {Array.from({ length: n }).map((_, i) => (
@@ -348,7 +322,6 @@ export default function OverviewAdmin() {
     </div>
   );
 
-  /* ─────────────── render ─────────────── */
   if (!analytics)
     return (
       <>

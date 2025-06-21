@@ -1,3 +1,4 @@
+// components/Home/TrusterPartners.jsx
 "use client";
 
 import { trustedPartners } from "@/lib/data";

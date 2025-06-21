@@ -1,5 +1,6 @@
 // File: biz-web-app/components/Partial/Footer.jsx
 "use client";
+
 import React from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -12,9 +13,6 @@ const Footer = () => {
     e.preventDefault();
   };
 
-  /* ------------------------------------------------------------
-   * Updated social-media links
-   * ---------------------------------------------------------- */
   const socials = [
     {
       icon: FaLinkedin,
@@ -52,7 +50,6 @@ const Footer = () => {
     <motion.footer className="w-full px-2 mt-28" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
       <div className="container mx-auto px-2 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-12 lg:gap-16 items-center justify-center">
-          {/* ---------- Brand + blurb + social row ---------- */}
           <div className="space-y-6">
             <div className="flex items-center">
               <Image src="/logo.png" alt="BizBuddy Logo" width={200} height={60} className="w-48 sm:w-52 lg:w-56" />
@@ -63,7 +60,6 @@ const Footer = () => {
             </p>
             <p className="font-medium">Stay productive, stay efficient!</p>
 
-            {/* Social-media icons */}
             <div className="flex items-center gap-4">
               {socials.map(({ icon: Icon, href, label }) => (
                 <Link
@@ -80,7 +76,6 @@ const Footer = () => {
             </div>
           </div>
 
-          {/* ---------- Help column ---------- */}
           <div className="space-y-6">
             <h3 className="font-semibold text-lg">Help</h3>
             <ul className="space-y-4">
@@ -103,7 +98,6 @@ const Footer = () => {
             </ul>
           </div>
 
-          {/* ---------- Newsletter card ---------- */}
           <div className="space-y-6 shadow-xl rounded-xl p-2 h-full dark:bg-neutral-900 bg-orange-50">
             <div className="p-6 rounded-xl">
               <h3 className="font-bold text-2xl mb-4 text-neutral-800 dark:text-neutral-200">Subscribe to Our Newsletter</h3>

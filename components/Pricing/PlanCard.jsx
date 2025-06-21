@@ -1,3 +1,5 @@
+// File: biz-web-app/components/Pricing/PlanCard.jsx
+
 "use client";
 
 import { useState, useEffect } from "react";

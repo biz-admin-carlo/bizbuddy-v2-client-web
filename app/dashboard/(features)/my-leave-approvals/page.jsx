@@ -1,3 +1,5 @@
+// app/dashboard/(features)/my-leave-approvals/page.jsx
+
 import MyLeavesApproval from "@/components/Dashboard/DashboardContent/Features/MyLeavesApproval";
 import React from "react";
 

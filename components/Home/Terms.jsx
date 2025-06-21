@@ -1,8 +1,4 @@
-/* --------------------------------------------------------------------------
- *  Terms.jsx  – Collapsible “Terms & Conditions” page
- *  Built with Framer-motion + shadcn/ui Accordion
- * ------------------------------------------------------------------------*/
-
+// components/Home/Terms.jsx
 "use client";
 
 import React from "react";
@@ -10,9 +6,6 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 
-/* --------------------------------------------------------------------------
- *  Accordion sections (complete list, no shortcuts)
- * ------------------------------------------------------------------------*/
 const termsItems = [
   {
     value: "intro",
@@ -105,9 +98,6 @@ These Terms are governed by the laws of the State of California. Any dispute wil
   {
     value: "contact",
     title: "11. Contact Information",
-    /* --------------------------------------------------------------------
-     *  Interactive links – address (Google Maps), email (mailto), website
-     * ------------------------------------------------------------------*/
     content: (
       <div className="space-y-2">
         <p>BizSolutions&nbsp;LLC</p>
@@ -140,7 +130,6 @@ These Terms are governed by the laws of the State of California. Any dispute wil
   },
 ];
 
-/* --------------------------- Framer-motion variants ----------------------*/
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
@@ -150,7 +139,6 @@ const itemVariants = {
   visible: { y: 0, opacity: 1 },
 };
 
-/* ------------------------------ Component --------------------------------*/
 export default function Terms() {
   return (
     <motion.section className="py-10 md:py-10 px-4 mx-auto w-full max-w-7xl" initial="hidden" animate="visible" variants={containerVariants}>

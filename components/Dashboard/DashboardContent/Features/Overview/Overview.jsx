@@ -1,4 +1,5 @@
-// apps/web/components/Overview/Overview.jsx
+// components/Dashboard/DashboardContent/Features/Overview/Overview.jsx
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -6,7 +7,6 @@ import { RefreshCw, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Toaster, toast } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
-
 import OverviewSuperadmin from "./OverviewSuperadmin";
 import OverviewAdmin from "./OverviewAdmin";
 import OverviewEmployee from "./OverviewEmployee";
@@ -56,7 +56,7 @@ export default function Overview() {
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
       <Toaster position="top-center" richColors />
-      <div className="bg-white dark:bg-neutral-950 rounded-xl shadow-sm p-4 mb-6 border border-neutral-200 dark:border-neutral-800">
+      <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-sm p-4 mb-6 border border-neutral-200 dark:border-neutral-800">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <LayoutDashboard className="h-5 w-5 text-orange-500" />
@@ -80,7 +80,7 @@ export default function Overview() {
               variant="outline"
               size="icon"
               onClick={() => setRefreshKey((k) => k + 1)}
-              className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20 ml-2"
+              className="flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-black"
             >
               <RefreshCw className="h-4 w-4" />
             </Button>

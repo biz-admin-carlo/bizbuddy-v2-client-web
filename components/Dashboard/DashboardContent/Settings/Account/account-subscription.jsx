@@ -1,3 +1,4 @@
+// components/Dashboard/DashboardContent/Settings/Account/account-subscription.jsx
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -80,7 +81,6 @@ export default function AccountSubscription() {
         if (res.ok && data.data) {
           setPlans(data.data);
 
-          // Group plans by name (Free, Basic, Pro) and include features on each option.
           const grouped = {};
           data.data.forEach((plan) => {
             if (!grouped[plan.name]) {
@@ -94,10 +94,9 @@ export default function AccountSubscription() {
               price: plan.price,
               rangeOfUsers: plan.rangeOfUsers,
               description: plan.description,
-              features: plan.features, // include features here
+              features: plan.features,
             });
           });
-          // Sort each grouped plan's options by the lower bound of rangeOfUsers.
           Object.keys(grouped).forEach((planName) => {
             grouped[planName].options.sort((a, b) => {
               const aLow = Number(a.rangeOfUsers.split("-")[0]);
@@ -284,7 +283,6 @@ export default function AccountSubscription() {
       <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
         <Toaster position="top-center" richColors />
 
-        {/* Header with title and icon */}
         <div className="flex items-center gap-2 mb-2">
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
             <CreditCard className="h-7 w-7 text-orange-500" />
@@ -292,7 +290,6 @@ export default function AccountSubscription() {
           </h2>
         </div>
 
-        {/* Company Information Card */}
         <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
           <div className="h-1 w-full bg-orange-500"></div>
           <CardHeader className="pb-2">
@@ -317,7 +314,6 @@ export default function AccountSubscription() {
           </CardContent>
         </Card>
 
-        {/* Subscription Details Card */}
         <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
           <div className="h-1 w-full bg-orange-500"></div>
           <CardHeader className="pb-2">
@@ -356,7 +352,6 @@ export default function AccountSubscription() {
                   </div>
                 </div>
 
-                {/* Plan Features */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="rounded-lg border p-4 bg-orange-500/10 border-orange-500/30 dark:bg-orange-500/20 dark:border-orange-500/30">
                     <div className="flex items-center gap-2 mb-2">
@@ -401,7 +396,6 @@ export default function AccountSubscription() {
           </CardContent>
         </Card>
 
-        {/* Upgrade Subscription Card */}
         <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
           <div className="h-1 w-full bg-orange-500"></div>
           <CardHeader className="pb-2">
@@ -465,7 +459,6 @@ export default function AccountSubscription() {
           </CardContent>
         </Card>
 
-        {/* Quick summary card */}
         <Card className="border dark:border-white/10">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Subscription Benefits</CardTitle>

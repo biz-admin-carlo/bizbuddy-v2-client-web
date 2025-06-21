@@ -1,6 +1,8 @@
+// components/ui/alert.jsx
+"use client";
+
 import * as React from "react";
 import { cva } from "class-variance-authority";
-
 import { cn } from "@/lib/utils";
 
 const alertVariants = cva(
@@ -8,7 +10,7 @@ const alertVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-background text-foreground",
+        default: "bg-background text-foreground dark:bg-neutral-900",
         destructive: "border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive",
       },
     },

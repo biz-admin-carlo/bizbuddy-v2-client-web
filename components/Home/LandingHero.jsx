@@ -1,3 +1,4 @@
+// components/Home/LandingHero.jsx
 "use client";
 
 import { useState } from "react";
@@ -6,7 +7,6 @@ import Image from "next/image";
 import { X, Smartphone, Download } from "lucide-react";
 
 export default function LandingHero() {
-  // Track which QR code modal to show: 'app' or 'play'
   const [qrModalType, setQrModalType] = useState(null);
 
   const handleOpenQrModal = (type) => {
@@ -19,7 +19,6 @@ export default function LandingHero() {
 
   return (
     <section className="md:py-12 py-7 mx-4 shadow-xl flex flex-col md:flex-row items-center justify-around max-w-7xl bg-gradient-to-r from-orange-400 to-red-600 rounded-xl overflow-hidden relative">
-      {/* Left Section: Text and Download Buttons */}
       <motion.div
         initial={{ opacity: 0, x: -50 }}
         animate={{ opacity: 1, x: 0 }}
@@ -71,14 +70,12 @@ export default function LandingHero() {
           Download <span className="text-white">Bizbuddy</span> for free!
         </motion.p>
 
-        {/* Download buttons */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 1.2, duration: 0.6 }}
           className="flex md:gap-4 gap-2 items-center"
         >
-          {/* App Store button */}
           <Image
             src="/download-app-store.png"
             alt="download app store"
@@ -87,8 +84,6 @@ export default function LandingHero() {
             className="w-44 sm:w-48 hover:scale-105 transition-transform cursor-pointer"
             onClick={() => handleOpenQrModal("app")}
           />
-
-          {/* Play Store button */}
           <Image
             src="/download-google-play.png"
             alt="download google play"
@@ -99,8 +94,6 @@ export default function LandingHero() {
           />
         </motion.div>
       </motion.div>
-
-      {/* Right Section: Device Image */}
       <motion.div
         initial={{ opacity: 0, x: 50 }}
         animate={{ opacity: 1, x: 0 }}
@@ -119,8 +112,6 @@ export default function LandingHero() {
           <Image src="/landing-hero-image.png" alt="Devices" width={700} height={700} className="w-[150%] h-auto object-contain" />
         </motion.div>
       </motion.div>
-
-      {/* Improved QR Code Modal */}
       <AnimatePresence>
         {qrModalType && (
           <motion.div
@@ -139,7 +130,6 @@ export default function LandingHero() {
               className="bg-white dark:bg-neutral-800 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Modal Header with gradient background */}
               <div className="bg-gradient-to-r from-orange-400 to-red-600 p-4 relative">
                 <button
                   onClick={handleCloseQrModal}
@@ -151,10 +141,7 @@ export default function LandingHero() {
                 <h3 className="text-xl font-bold text-white">{qrModalType === "app" ? "Download for iOS" : "Download for Android"}</h3>
                 <p className="text-white/90 text-sm mt-1">Scan the QR code to download BizBuddy</p>
               </div>
-
-              {/* Modal Content */}
               <div className="p-6 flex flex-col md:flex-row items-center gap-6">
-                {/* QR Code with animated border */}
                 <div className="relative">
                   <motion.div
                     animate={{
@@ -172,8 +159,6 @@ export default function LandingHero() {
                     />
                   </motion.div>
                 </div>
-
-                {/* Instructions */}
                 <div className="flex-1 space-y-4">
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-neutral-700 dark:text-neutral-200">
@@ -190,8 +175,6 @@ export default function LandingHero() {
                     </div>
                     <p className="text-sm text-neutral-600 dark:text-neutral-400 pl-7">Tap the notification and follow the instructions to install</p>
                   </div>
-
-                  {/* Direct link option */}
                   <div className="pt-2">
                     <p className="text-sm text-neutral-500 dark:text-neutral-400">Or visit directly:</p>
                     <a
@@ -205,8 +188,6 @@ export default function LandingHero() {
                   </div>
                 </div>
               </div>
-
-              {/* Footer with benefits */}
               <div className="bg-neutral-100 dark:bg-neutral-900 p-4 border-t border-neutral-200 dark:border-neutral-700">
                 <div className="flex flex-wrap gap-3 justify-center text-center">
                   <div className="text-xs text-neutral-600 dark:text-neutral-400 px-2">

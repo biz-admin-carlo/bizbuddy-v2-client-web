@@ -1,3 +1,5 @@
+// app/dashboard/(features)/my-payroll/page.jsx
+
 import TemporaryPage from "@/components/Dashboard/temporary-page";
 import React from "react";
 

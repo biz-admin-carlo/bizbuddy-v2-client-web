@@ -1,5 +1,4 @@
-// biz-web-app/components/Home/KeyFeatures.jsx
-
+// components/Home/KeyFeatures.jsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -18,7 +17,7 @@ function KeyFeatures() {
       setCurrentImageIndex((prevIndex) => (prevIndex + 1) % images.length);
     }, 3000);
     return () => clearInterval(interval);
-  }, []); // Removed unnecessary dependency: images.length
+  }, []);
 
   const imageVariants = {
     initial: { x: 100, opacity: 0 },

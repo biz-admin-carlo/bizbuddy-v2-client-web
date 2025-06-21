@@ -1,7 +1,6 @@
-// File: biz-web-app/app/(home)/privacy-policy/page.jsx
-
+// app/(home)/privacy-policy/page.jsx
 "use client";
-import FAQ from "@/components/Home/Accordion";
+
 import PrivacyPolicy from "@/components/Home/PrivacyPolicy";
 import Footer from "@/components/Partial/Footer";
 import React from "react";

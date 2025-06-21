@@ -1,8 +1,4 @@
-/* --------------------------------------------------------------------------
- *  PrivacyPolicy.jsx
- *  Collapsible Privacy Policy page (Framer-motion + shadcn/ui Accordion)
- * ------------------------------------------------------------------------*/
-
+// components/Home/PrivacyPolicy.jsx
 "use client";
 
 import React from "react";
@@ -10,9 +6,6 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 
-/* --------------------------------------------------------------------------
- *  Accordion sections
- * ------------------------------------------------------------------------*/
 const policyItems = [
   {
     value: "intro",
@@ -110,7 +103,6 @@ Our Services are not intended for individuals under 16. We do not knowingly coll
     content: `
 We may update this policy periodically. Changes will appear here with a new effective date. Review this page regularly.`,
   },
-  /* ---- Contact section with live links ---- */
   {
     value: "contact",
     title: "9. Contact Us",
@@ -146,7 +138,6 @@ We may update this policy periodically. Changes will appear here with a new effe
   },
 ];
 
-/* --------------------------- Framer-motion variants -----------------------*/
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
@@ -156,7 +147,6 @@ const itemVariants = {
   visible: { y: 0, opacity: 1 },
 };
 
-/* ------------------------------ Component -------------------------------- */
 export default function PrivacyPolicy() {
   return (
     <motion.section className="py-10 md:py-10 px-4 mx-auto w-full max-w-7xl" initial="hidden" animate="visible" variants={containerVariants}>

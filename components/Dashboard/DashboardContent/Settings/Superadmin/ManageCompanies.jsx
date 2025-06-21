@@ -1,38 +1,9 @@
+// components/Dashboard/DashboardContent/Settings/Superadmin/ManageTimeLogs.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-/**
- * ManageCompanies – Super-Admin page
- * -------------------------------------------------
- *  TABLE COLUMNS:
- *    1. Company ID  (monospace)
- *    2. Company Name
- *    3. Country
- *    4. Currency
- *    5. Language
- *    6. Start Date (from active sub, else latest)
- *    7. Expiration (same sub)
- *    8. Actions
- *
- *  Company-Details modal logic is unchanged.
- *  NEW FEATURES:
- *    • Refresh button
- *    • CSV export of current table rows
- */
-
 import { useEffect, useState } from "react";
-import {
-  Building2,
-  Edit3,
-  Trash2,
-  ChevronUp,
-  ChevronDown,
-  Search,
-  CreditCard,
-  AlertCircle,
-  RefreshCw, // ← ADDED
-  Download, // ← ADDED
-} from "lucide-react";
+import { Building2, Edit3, Trash2, ChevronUp, ChevronDown, Search, CreditCard, AlertCircle, RefreshCw, Download } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
 
@@ -47,9 +18,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { motion, AnimatePresence } from "framer-motion";
 
-/* ------------------------------------------------------------------ */
-/*  Constants                                                          */
-/* ------------------------------------------------------------------ */
 const COUNTRY_OPTS = ["Philippines", "United States", "Canada", "Japan"];
 const CURRENCY_OPTS = ["PHP", "USD", "CAD", "JPY", "EUR"];
 const LANGUAGE_OPTS = ["English", "Filipino", "Japanese", "French"];
@@ -62,9 +30,6 @@ const BLANK_FORM = {
 
 const arrow = (on, dir) => (on ? dir === "ascending" ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" /> : null);
 
-/* ------------------------------------------------------------------ */
-/*  CSV helper                                                         */
-/* ------------------------------------------------------------------ */
 const buildCSV = (rows) => {
   const header = ["ID", "Name", "Country", "Currency", "Language", "Start Date", "Expiration"];
   const body = rows.map((c) => {
@@ -76,45 +41,29 @@ const buildCSV = (rows) => {
   return [header, ...body].map((l) => l.join(",")).join("\r\n");
 };
 
-/* ------------------------------------------------------------------ */
-/*  firstRelevantSub (hoisted so CSV helper can use it)                */
-/* ------------------------------------------------------------------ */
 function firstRelevantSub(subs) {
   if (!subs?.length) return null;
   return subs.find((s) => s.active) || subs.slice().sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())[0];
 }
 
-/* ------------------------------------------------------------------ */
-/*  Component                                                          */
-/* ------------------------------------------------------------------ */
 function ManageCompanies() {
   const { token } = useAuthStore();
   const API = process.env.NEXT_PUBLIC_API_URL;
-
-  /* ---------------- state ---------------- */
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(false);
-
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState({ ...BLANK_FORM, id: "" });
   const [showDelete, setShowDelete] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-
   const [showDetails, setShowDetails] = useState(false);
   const [details, setDetails] = useState(null);
   const [detailsLoad, setDetailsLoad] = useState(false);
-
   const [sort, setSort] = useState({ key: "name", direction: "ascending" });
   const [filterName, setFilterName] = useState("");
-
-  /* NEW state */
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
 
-  /* ------------------------------------------------------------------ */
-  /*  Fetch list                                                         */
-  /* ------------------------------------------------------------------ */
   useEffect(() => {
     if (token) fetchCompanies();
   }, [token]);
@@ -134,9 +83,6 @@ function ManageCompanies() {
     setLoading(false);
   }
 
-  /* ------------------------------------------------------------------ */
-  /*  NEW helpers: refresh + CSV export                                  */
-  /* ------------------------------------------------------------------ */
   async function refreshData() {
     setRefreshing(true);
     await fetchCompanies();
@@ -166,9 +112,6 @@ function ManageCompanies() {
     }
   }
 
-  /* ------------------------------------------------------------------ */
-  /*  Helpers                                                            */
-  /* ------------------------------------------------------------------ */
   const requestSort = (key) => {
     setSort((p) => ({
       key,
@@ -179,8 +122,6 @@ function ManageCompanies() {
   const listed = () => {
     const filtered = companies.filter((c) => (filterName ? c.name.toLowerCase().includes(filterName.toLowerCase()) : true));
     if (!sort.key) return filtered;
-
-    /* simple value sort (same logic as original) */
     return [...filtered].sort((a, b) => {
       const aVal = (a[sort.key] ?? "").toString().toLowerCase();
       const bVal = (b[sort.key] ?? "").toString().toLowerCase();
@@ -211,7 +152,6 @@ function ManageCompanies() {
     </div>
   );
 
-  /* ---------------- submitEdit / confirmDelete / openDetails ---------- */
   async function submitEdit() {
     const data = { ...editForm };
     ["country", "currency", "language"].forEach((f) => {
@@ -277,14 +217,9 @@ function ManageCompanies() {
     setDetailsLoad(false);
   }
 
-  /* ------------------------------------------------------------------ */
-  /*  RENDER                                                             */
-  /* ------------------------------------------------------------------ */
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
       <Toaster position="top-center" />
-
-      {/* ---------------- HEADER ---------------- */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
@@ -293,10 +228,7 @@ function ManageCompanies() {
           </h2>
           <p className="text-muted-foreground mt-1">Update tenant companies, subscriptions & payments</p>
         </div>
-
-        {/* NEW: buttons */}
         <div className="flex gap-2">
-          {/* refresh */}
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -313,8 +245,6 @@ function ManageCompanies() {
               <TooltipContent>Refresh data</TooltipContent>
             </Tooltip>
           </TooltipProvider>
-
-          {/* CSV export */}
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -333,8 +263,6 @@ function ManageCompanies() {
           </TooltipProvider>
         </div>
       </div>
-
-      {/* ---------------- SEARCH / FILTER CARD ---------------- */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
@@ -393,8 +321,6 @@ function ManageCompanies() {
           </div>
         </CardContent>
       </Card>
-
-      {/* ---------------- COMPANIES TABLE ---------------- */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
@@ -477,7 +403,6 @@ function ManageCompanies() {
                           <TableCell>{endDate}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
-                              {/* details */}
                               <TooltipProvider delayDuration={300}>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -493,8 +418,6 @@ function ManageCompanies() {
                                   <TooltipContent>View details</TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
-
-                              {/* edit */}
                               <TooltipProvider delayDuration={300}>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -518,8 +441,6 @@ function ManageCompanies() {
                                   <TooltipContent>Edit company</TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
-
-                              {/* delete */}
                               <TooltipProvider delayDuration={300}>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -566,8 +487,6 @@ function ManageCompanies() {
           </div>
         </CardContent>
       </Card>
-
-      {/* ---------------- DELETE MODAL ---------------- */}
       <Dialog open={showDelete} onOpenChange={setShowDelete}>
         <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
           <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
@@ -599,8 +518,6 @@ function ManageCompanies() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* ---------------- DETAILS MODAL ---------------- */}
       <Dialog open={showDetails} onOpenChange={setShowDetails}>
         <DialogContent className="max-w-2xl border-2 dark:border-white/10 overflow-y-auto max-h-[90vh]">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -615,7 +532,6 @@ function ManageCompanies() {
             </div>
           ) : details ? (
             <>
-              {/* basic */}
               <section className="space-y-1 mb-6">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                   <Building2 className="h-5 w-5" /> {details.name}
@@ -625,8 +541,6 @@ function ManageCompanies() {
                 {details.currency && <p className="text-sm text-muted-foreground">Currency: {details.currency}</p>}
                 {details.language && <p className="text-sm text-muted-foreground">Language: {details.language}</p>}
               </section>
-
-              {/* subscriptions */}
               <section className="mb-6">
                 <h4 className="font-medium mb-2 flex items-center gap-1">
                   <CreditCard className="h-4 w-4 text-orange-500" /> Subscriptions
@@ -656,8 +570,6 @@ function ManageCompanies() {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* ---------------- EDIT MODAL ---------------- */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
         <DialogContent className="border-2 dark:border-white/10 max-w-lg">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />

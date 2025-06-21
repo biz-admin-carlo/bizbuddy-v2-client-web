@@ -1,3 +1,5 @@
+// app/dashboard/(admin)/manage-leave-requests/page.jsx
+
 import ManageLeaveRequests from "@/components/Dashboard/DashboardContent/Settings/Admin/ManageLeaveRequests";
 import React from "react";
 

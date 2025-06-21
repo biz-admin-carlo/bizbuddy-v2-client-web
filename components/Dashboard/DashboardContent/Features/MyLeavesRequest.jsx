@@ -1,18 +1,16 @@
+// components/Dashboard/DashboardContent/Features/MyLeavesRequest.jsx
+/* eslint-disable react-hooks/exhaustive-deps */
+
 "use client";
 
 import { useEffect, useState } from "react";
 import { Loader2, Calendar, Clock, Send, User, FileText, AlertCircle, CheckCircle2, PenLine } from "lucide-react";
 import { toast, Toaster } from "sonner";
-
 import useAuthStore from "@/store/useAuthStore";
-
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
 import { DateTimePicker } from "@/components/DateTimePicker";
@@ -29,10 +27,6 @@ const leaveTypeOptions = [
 
 function MyLeavesRequest() {
   const { token } = useAuthStore();
-
-  /* -------------------------------------------- */
-  /* form state                                   */
-  /* -------------------------------------------- */
   const [leaveType, setLeaveType] = useState("");
   const [approverId, setApproverId] = useState("");
   const [reason, setReason] = useState("");
@@ -46,7 +40,6 @@ function MyLeavesRequest() {
   const [success, setSuccess] = useState(false);
   const [formProgress, setFormProgress] = useState(0);
 
-  /* fetch approvers once */
   useEffect(() => {
     if (!token) return;
     async function go() {
@@ -80,7 +73,6 @@ function MyLeavesRequest() {
     go();
   }, [token]);
 
-  /* Calculate form progress */
   useEffect(() => {
     let progress = 0;
     if (leaveType) progress += 25;
@@ -90,7 +82,6 @@ function MyLeavesRequest() {
     setFormProgress(progress);
   }, [leaveType, approverId, start, end]);
 
-  /* validate form */
   const validateForm = () => {
     const errors = {};
 
@@ -111,9 +102,6 @@ function MyLeavesRequest() {
     return Object.keys(errors).length === 0;
   };
 
-  /* -------------------------------------------- */
-  /* submit handler                               */
-  /* -------------------------------------------- */
   const handleSubmit = async () => {
     if (submitting) return;
     setSuccess(false);
@@ -151,7 +139,6 @@ function MyLeavesRequest() {
           icon: <CheckCircle2 className="h-5 w-5 text-orange-500" />,
         });
         setSuccess(true);
-        /* reset form */
         setLeaveType("");
         setApproverId("");
         setReason("");
@@ -172,28 +159,18 @@ function MyLeavesRequest() {
     }
     setSubmitting(false);
   };
-
-  /* get selected leave type details */
   const selectedLeaveType = leaveTypeOptions.find((lt) => lt.id === leaveType);
-
-  /* -------------------------------------------- */
-  /* render                                       */
-  /* -------------------------------------------- */
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
+      <div className="max-w-6xl mx-auto p-4 lg:px-10 px-2 space-y-8">
         <Toaster position="top-center" richColors />
-
-        {/* Header with title and icon */}
         <div className="flex items-center gap-2 mb-2">
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
             <PenLine className="h-7 w-7 text-orange-500" />
             Request Leave
           </h2>
         </div>
-
-        {/* Main card */}
-        <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
+        <Card className="border-2 shadow-md overflow-hidden ">
           <div className="h-1 w-full bg-orange-500"></div>
 
           <CardHeader className="pb-2">
@@ -207,7 +184,6 @@ function MyLeavesRequest() {
           </CardHeader>
 
           <CardContent className="space-y-6">
-            {/* Form progress */}
             <div className="space-y-2">
               <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground">Form completion</span>
@@ -216,7 +192,6 @@ function MyLeavesRequest() {
               <Progress value={formProgress} className="h-2 [&>div]:bg-orange-500 bg-black/10 dark:bg-white/10" />
             </div>
             <div className="grid md:grid-cols-2 gap-6">
-              {/* Leave type */}
               <div className="space-y-2">
                 <label className="font-medium text-sm block flex items-center">
                   <div className="p-1.5 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500 mr-2">
@@ -252,7 +227,6 @@ function MyLeavesRequest() {
                   </p>
                 )}
               </div>
-              {/* Approver */}
               <div className="space-y-2">
                 <label className="font-medium text-sm block flex items-center">
                   <div className="p-1.5 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500 mr-2">
@@ -300,9 +274,7 @@ function MyLeavesRequest() {
                 )}
               </div>
             </div>
-            {/* Dates */}
             <div className="grid md:grid-cols-2 gap-6">
-              {/* Start Date-Time Picker */}
               <div className="space-y-2">
                 <label className="font-medium text-sm block flex items-center">
                   <div className="p-1.5 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500 mr-2">
@@ -324,8 +296,6 @@ function MyLeavesRequest() {
                   </p>
                 )}
               </div>
-
-              {/* End Date-Time Picker */}
               <div className="space-y-2">
                 <label className="font-medium text-sm block flex items-center">
                   <div className="p-1.5 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500 mr-2">
@@ -348,7 +318,6 @@ function MyLeavesRequest() {
                 )}
               </div>
             </div>
-            {/* Reason */}
             <div className="space-y-2">
               <label className="font-medium text-sm block flex items-center">
                 <div className="p-1.5 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500 mr-2">
@@ -364,7 +333,6 @@ function MyLeavesRequest() {
               />
             </div>
           </CardContent>
-
           <CardFooter className="flex flex-col sm:flex-row gap-4 pt-2 pb-6 justify-end ">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -402,8 +370,6 @@ function MyLeavesRequest() {
             </Button>
           </CardFooter>
         </Card>
-
-        {/* Quick tips card */}
       </div>
     </TooltipProvider>
   );

@@ -1,7 +1,13 @@
-// File: biz-web-app/components/Partial/Navbar.jsx
+// components/Partial/Navbar.jsx
+
 "use client";
+
+import { useState } from "react";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { motion } from "framer-motion";
+import { Bell, BellDot } from "lucide-react";
 import { ThemeToggle } from "../Theme/ThemeToggle";
 import useAuthStore from "@/store/useAuthStore";
 import UserMenu from "./Navbar/UserMenu";
@@ -16,85 +22,132 @@ const navLinks = [
 
 function DesktopNavLinks({ pathname }) {
   return (
-    <>
-      {navLinks.map((link) => (
-        <Link
-          key={link.href}
-          href={link.href}
-          className={`px-1 py-1 transition-colors hover:text-orange-500 ${pathname === link.href ? "text-orange-500" : ""}`}
-        >
-          {link.label}
-        </Link>
-      ))}
-    </>
+    <nav className="flex items-center space-x-1">
+      {navLinks.map((link) => {
+        const isActive = pathname === link.href;
+        return (
+          <Link
+            key={link.href}
+            href={link.href}
+            className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+              isActive
+                ? "text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950"
+                : "text-neutral-700 dark:text-neutral-300 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950"
+            }`}
+          >
+            {link.label}
+            {isActive && (
+              <motion.div layoutId="activeTab" className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-orange-500 rounded-full" />
+            )}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 
-function SignInLink() {
+function SignInButton() {
   return (
-    <Link
-      href="/sign-in"
-      className="py-2.5 px-4 font-semibold text-white rounded-lg text-sm bg-gradient-to-r from-orange-500 to-orange-600 hover:bg-orange-600 transition-colors ease-in-out"
+    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+      <Link
+        href="/sign-in"
+        className="inline-flex items-center justify-center px-6 py-2.5 font-semibold text-white 
+                   rounded-xl text-sm bg-gradient-to-r from-orange-500 to-orange-600 
+                   hover:from-orange-600 hover:to-orange-700 transition-all duration-200 
+                   shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+      >
+        Sign in
+      </Link>
+    </motion.div>
+  );
+}
+
+function NotificationButton() {
+  const [hasNotifications] = useState(true); // This would come from your notification state
+
+  return (
+    <motion.button
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      className="relative p-2 rounded-xl text-neutral-600 dark:text-neutral-400 
+                 hover:text-orange-600 dark:hover:text-orange-400 
+                 hover:bg-orange-50 dark:hover:bg-orange-950 
+                 transition-all duration-200"
     >
-      Sign in
-    </Link>
-  );
-}
-
-function NotificationIcon() {
-  return (
-    <button className="relative p-2">
-      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 hover:text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 00-5-5.917V4a2 2 0 10-4 0v1.083A6 6 0 004 11v3.159c0 .538-.214 1.055-.595 1.436L2 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+      {hasNotifications ? <BellDot className="w-5 h-5" /> : <Bell className="w-5 h-5" />}
+      {hasNotifications && (
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-neutral-900"
         />
-      </svg>
-      <span className="absolute top-0 right-0 block h-2 w-2 rounded-full ring-2 ring-white bg-red-500"></span>
-    </button>
+      )}
+    </motion.button>
   );
 }
 
 export default function NavBar() {
   const { token } = useAuthStore();
   const pathname = usePathname();
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-t from-white dark:from-black to-white dark:to-black px-4 md:px-6 py-1  border-b">
-      <div className="mx-auto max-w-7xl md:px-4 px-2">
-        <div className="hidden md:flex items-center justify-between h-14">
-          <Link href="/">
-            <img src="/logo.png" alt="Bizbuddy title and logo" width={110} height={40} />
-          </Link>
-          <div className="flex items-center space-x-4">
+    <motion.header
+      initial={{ y: -100 }}
+      animate={{ y: 0 }}
+      className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-neutral-900/80 
+                 backdrop-blur-lg border-b border-neutral-200 dark:border-neutral-700"
+    >
+      <div className="mx-auto max-w-7xl px-4 md:px-6">
+        {/* Desktop Navigation */}
+        <div className="hidden md:flex items-center justify-between h-16">
+          <motion.div whileHover={{ scale: 1.05 }}>
+            <Link href="/" className="flex items-center">
+              <img src="/logo.png" alt="Bizbuddy title and logo" width={120} height={45} className="h-10 w-auto" />
+            </Link>
+          </motion.div>
+
+          <div className="flex items-center space-x-6">
             <ThemeToggle />
-            {!token ? <DesktopNavLinks pathname={pathname} /> : <NotificationIcon />}
-            {!token ? <SignInLink /> : <UserMenu />}
+            {!token ? (
+              <>
+                <DesktopNavLinks pathname={pathname} />
+                <SignInButton />
+              </>
+            ) : (
+              <>
+                <NotificationButton />
+                <UserMenu />
+              </>
+            )}
           </div>
         </div>
+
+        {/* Mobile Navigation */}
         <div className="md:hidden">
           <div className="flex items-center justify-between h-14">
-            <Link href="/">
-              <img src="/logo.png" alt="Bizbuddy title and logo" width={100} height={25} />
-            </Link>
-            <div className="flex items-center">
+            <motion.div whileHover={{ scale: 1.05 }}>
+              <Link href="/" className="flex items-center">
+                <img src="/logo.png" alt="Bizbuddy title and logo" width={100} height={35} className="h-8 w-auto" />
+              </Link>
+            </motion.div>
+
+            <div className="flex items-center space-x-2">
               <ThemeToggle />
-              {!token ? <MobileMenu /> : <NotificationIcon />}
               {!token ? (
-                <Link
-                  href="/sign-in"
-                  className="py-2 px-4 font-semibold text-white rounded-lg text-sm bg-gradient-to-r from-orange-500 to-orange-600 hover:bg-orange-600 transition-colors ease-in-out"
-                >
-                  Sign in
-                </Link>
+                <>
+                  <MobileMenu />
+                  <SignInButton />
+                </>
               ) : (
-                <UserMenu />
+                <>
+                  <NotificationButton />
+                  <UserMenu />
+                </>
               )}
             </div>
           </div>
         </div>
       </div>
-    </header>
+    </motion.header>
   );
 }

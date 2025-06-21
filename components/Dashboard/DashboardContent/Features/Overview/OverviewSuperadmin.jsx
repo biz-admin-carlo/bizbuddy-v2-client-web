@@ -1,3 +1,4 @@
+// components/Dashboard/DashboardContent/Features/Overview/OverviewSuperadmin.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
@@ -5,21 +6,16 @@ import { useEffect, useState } from "react";
 import useAuthStore from "@/store/useAuthStore";
 import { toast } from "sonner";
 import { Building, Users, BarChart3, Activity, DollarSign, Server } from "lucide-react";
-
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChartCard, PieSimple, BarSimple, LineSimple, AreaSimple } from "./OverviewCommons";
+import { ChartCard, PieSimple, BarSimple, LineSimple, AreaSimple } from "./Commons";
 
-/* -------------------------------------------------------------
-   SUPER-ADMIN DASHBOARD
---------------------------------------------------------------*/
 export default function OverviewSuperadmin() {
   const { token } = useAuthStore();
   const API = process.env.NEXT_PUBLIC_API_URL;
   const [data, set] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  /* fetch once */
   useEffect(() => {
     if (!token) return;
     (async () => {
@@ -38,7 +34,6 @@ export default function OverviewSuperadmin() {
     })();
   }, [API, token]);
 
-  /* ------------------- SKELETONS ------------------- */
   const SkelCards = (n) => (
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
       {Array.from({ length: n }).map((_, i) => (
@@ -62,7 +57,6 @@ export default function OverviewSuperadmin() {
       </>
     );
 
-  /* ------------------- KPI CARDS ------------------- */
   const cards = [
     { icon: <Building className="h-6 w-6 text-orange-500" />, label: "Companies", value: data.totals.companies },
     { icon: <Users className="h-6 w-6 text-orange-500" />, label: "Employees", value: data.totals.employees },
@@ -89,7 +83,6 @@ export default function OverviewSuperadmin() {
     </div>
   );
 
-  /* ------------------- CHARTS ------------------- */
   return (
     <>
       <KPICards />
@@ -125,8 +118,6 @@ export default function OverviewSuperadmin() {
           )}
         </ChartCard>
       </div>
-
-      {/* ---- Top 5 Active Clients table ---- */}
       <div className="mt-6">
         <Card className="border-2 dark:border-white/10 shadow-sm overflow-hidden">
           <div className="h-1.5 w-full bg-gradient-to-r from-orange-500 to-orange-400" />

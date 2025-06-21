@@ -1,3 +1,4 @@
+// components/Dashboard/DashboardContent/Settings/Account/account-settings.jsx
 "use client";
 
 import { useState } from "react";
@@ -41,7 +42,6 @@ export default function AccountSettings() {
       toast.message("Account deleted successfully.", {
         icon: <CheckCircle2 className="h-5 w-5 text-orange-500" />,
       });
-      // After deletion, log the user out.
       logout();
     } catch (err) {
       setError(err.message || "Failed to delete account.");
@@ -59,8 +59,6 @@ export default function AccountSettings() {
     <TooltipProvider delayDuration={300}>
       <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
         <Toaster position="top-center" richColors />
-
-        {/* Header with title and icon */}
         <div className="flex items-center gap-2 mb-2">
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
             <Shield className="h-7 w-7 text-orange-500" />

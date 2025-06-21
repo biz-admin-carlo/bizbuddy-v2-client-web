@@ -1,4 +1,4 @@
-// app/(auth)/payment.page.jsx
+// app/(auth)/payment/page.jsx
 
 "use client";
 
@@ -9,7 +9,6 @@ import { Elements, CardElement, useStripe, useElements } from "@stripe/react-str
 import Footer from "@/components/Partial/Footer";
 import { motion } from "framer-motion";
 
-// Load publishable key from env
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
 function CheckoutForm({ planId, planPrice, email, companyName, onPaymentSuccess }) {
@@ -26,7 +25,6 @@ function CheckoutForm({ planId, planPrice, email, companyName, onPaymentSuccess 
     setError(null);
 
     try {
-      // Call your backend endpoint to create a PaymentIntent
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/payments/create-payment-intent`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -44,7 +42,6 @@ function CheckoutForm({ planId, planPrice, email, companyName, onPaymentSuccess 
         return;
       }
 
-      // If the plan is free, clientSecret will be null.
       if (data.data.clientSecret === null) {
         localStorage.setItem("paymentStatus", "paid");
         onPaymentSuccess();
@@ -54,8 +51,6 @@ function CheckoutForm({ planId, planPrice, email, companyName, onPaymentSuccess 
 
       const clientSecret = data.data.clientSecret;
       setClientSecret(clientSecret);
-
-      // Confirm the payment using the CardElement
       const result = await stripe.confirmCardPayment(clientSecret, {
         payment_method: {
           card: elements.getElement(CardElement),
@@ -161,13 +156,11 @@ export default function PaymentPage() {
   const [companyName, setCompanyName] = useState("");
 
   useEffect(() => {
-    // Retrieve the selected plan from localStorage.
     const storedPlan = localStorage.getItem("selectedPlan");
     if (storedPlan) {
       setPlan(JSON.parse(storedPlan));
     }
 
-    // Retrieve user and company details from the same keys used in the sign-up page.
     const storedUser = localStorage.getItem("userForm");
     const storedCompany = localStorage.getItem("companyForm");
     if (storedUser) {
@@ -193,7 +186,6 @@ export default function PaymentPage() {
   }, []);
 
   const handlePaymentSuccess = () => {
-    // After successful payment, redirect back to the sign-up page.
     router.push("/sign-up");
   };
 
@@ -271,7 +263,6 @@ export default function PaymentPage() {
             </div>
           )}
 
-          {/* If either email or companyName is missing, show a message */}
           {(!email || !companyName) && (
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400 p-4 rounded-lg text-sm flex items-center mb-6">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">

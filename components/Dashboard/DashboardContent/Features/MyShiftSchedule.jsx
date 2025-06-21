@@ -1,3 +1,4 @@
+// components/Dashboard/DashboardContent/Features/MyShiftSchedule.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
@@ -6,8 +7,8 @@ import { format, parseISO, isSameDay, isValid } from "date-fns";
 import Link from "next/link";
 import useAuthStore from "@/store/useAuthStore";
 import { toast, Toaster } from "sonner";
-import { CalendarIcon, Clock, ArrowRight, RefreshCw } from "lucide-react";
-
+import { motion, AnimatePresence } from "framer-motion";
+import { CalendarIcon, Clock, ArrowRight, RefreshCw, Timer, Activity, TrendingUp } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -15,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
-/* ---------------------------- helper: hours -------------------------------- */
 function hoursBetween(startISO, endISO) {
   try {
     const start = new Date(startISO);
@@ -30,19 +30,14 @@ function hoursBetween(startISO, endISO) {
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/*                              main component                                */
-/* -------------------------------------------------------------------------- */
 export default function MyShiftSchedule() {
   const { token } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
-
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [allShifts, setAllShifts] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  /* ----------------------- fetch helper (extracted) ----------------------- */
   const fetchShifts = useCallback(async () => {
     if (!token) return;
     setLoading(true);
@@ -61,12 +56,10 @@ export default function MyShiftSchedule() {
     }
   }, [token, API_URL]);
 
-  /* --------------------------- fetch on mount ---------------------------- */
   useEffect(() => {
     fetchShifts();
   }, [fetchShifts]);
 
-  /* ------------------ build helpers derived from fetched data ------------- */
   const shiftDays = useMemo(() => {
     const uniq = new Set();
     allShifts.forEach((s) => {
@@ -112,213 +105,317 @@ export default function MyShiftSchedule() {
     return isNaN(d.getTime()) ? "Invalid time" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
-  /* ------------------------------ rendering ------------------------------- */
-  return (
-    <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
-      <Toaster position="top-center" />
+  const totalHoursToday = useMemo(() => {
+    return shiftsToday.reduce((total, shift) => {
+      const hours = Number.parseFloat(hoursBetween(shift.shift.startTime, shift.shift.endTime));
+      return total + (isNaN(hours) ? 0 : hours);
+    }, 0);
+  }, [shiftsToday]);
 
-      {/* ---------------------------- page title + nav ---------------------------- */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+  return (
+    <div className="max-w-full mx-auto p-4 lg:px-8 space-y-8">
+      <Toaster position="top-center" />
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col md:flex-row md:items-center justify-between gap-4"
+      >
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
-            <CalendarIcon className="h-7 w-7 text-orange-500" />
-            My Shift Schedule
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight flex items-center gap-3">
+            <div className="p-2 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg">
+              <CalendarIcon className="h-8 w-8" />
+            </div>
+            My Shift Schedules
           </h2>
-          <p className="text-muted-foreground mt-1">View and manage your upcoming shifts</p>
+          <p className="text-muted-foreground mt-2 text-lg">View and manage your upcoming shifts</p>
         </div>
 
-        <div className="flex gap-2">
-          {/* navigation buttons */}
-          <Button variant="outline" className="flex items-center gap-1" asChild>
+        <div className="flex gap-3">
+          <Button variant="outline" className="flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-black" asChild>
             <Link href="/dashboard/my-punch">
               <Clock className="h-4 w-4" />
               Punch
             </Link>
           </Button>
-          <Button variant="outline" className="flex items-center gap-1" asChild>
+          <Button variant="outline" className="flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-black" asChild>
             <Link href="/dashboard/my-time-log">
-              <CalendarIcon className="h-4 w-4" />
-              Time&nbsp;Card
+              <Timer className="h-4 w-4" />
+              Time Card
             </Link>
           </Button>
 
-          {/* today button */}
-          <Button
-            onClick={goToToday}
-            variant="outline"
-            className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-          >
+          <Button onClick={goToToday} variant="outline" className="flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-black">
             <CalendarIcon className="h-4 w-4 mr-2" />
             Today
           </Button>
 
-          {/* refresh button */}
-          <Button onClick={fetchShifts} variant="outline" size="icon" disabled={loading} aria-label="Refresh shift data">
+          <Button onClick={fetchShifts} variant="outline" size="icon" disabled={loading} aria-label="Refresh shift data" className="">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
         </div>
+      </motion.div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+          <Card className="border-2 shadow-xl overflow-hidden bg-gradient-to-br from-white to-orange-50 dark:from-neutral-900 dark:to-orange-950">
+            <div className="h-2 w-full bg-gradient-to-r from-orange-500 to-orange-600" />
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 text-white">
+                  <CalendarIcon className="h-5 w-5" />
+                </div>
+                Today's Shifts
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center">
+                <div className="text-4xl font-bold bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent mb-2">
+                  {shiftsToday.length}
+                </div>
+                <p className="text-sm text-muted-foreground">{shiftsToday.length === 1 ? "shift scheduled" : "shifts scheduled"}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+          <Card className="border-2 shadow-xl overflow-hidden bg-gradient-to-br from-white to-blue-50 dark:from-neutral-900 dark:to-blue-950">
+            <div className="h-2 w-full bg-gradient-to-r from-blue-500 to-blue-600" />
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white">
+                  <Clock className="h-5 w-5" />
+                </div>
+                Total Hours
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center">
+                <div className="text-4xl font-bold bg-gradient-to-r from-blue-500 to-blue-600 bg-clip-text text-transparent mb-2">
+                  {totalHoursToday.toFixed(1)}
+                </div>
+                <p className="text-sm text-muted-foreground">hours today</p>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+          <Card className="border-2 shadow-xl overflow-hidden bg-gradient-to-br from-white to-emerald-50 dark:from-neutral-900 dark:to-emerald-950">
+            <div className="h-2 w-full bg-gradient-to-r from-emerald-500 to-emerald-600" />
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white">
+                  <TrendingUp className="h-5 w-5" />
+                </div>
+                This Month
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center">
+                <div className="text-4xl font-bold bg-gradient-to-r from-emerald-500 to-emerald-600 bg-clip-text text-transparent mb-2">
+                  {allShifts.length}
+                </div>
+                <p className="text-sm text-muted-foreground">total shifts</p>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* ---------------------------- calendar ----------------------------- */}
-        <Card className="lg:col-span-2 shadow-md border-2 dark:border-white/10 overflow-hidden">
-          <div className="h-1 w-full bg-orange-500" />
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }}>
+          <Card className="lg:col-span-2 shadow-xl border-2 bg-gradient-to-br from-white to-orange-50 dark:from-neutral-900 dark:to-orange-950 overflow-hidden">
+            <div className="h-2 w-full bg-gradient-to-r from-orange-500 to-orange-600" />
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 text-white">
+                  <CalendarIcon className="h-5 w-5" />
+                </div>
+                Calendar View
+              </CardTitle>
+              <CardDescription>Click on any date to view shifts for that day</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-2">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={(d) => d && setSelectedDate(d)}
+                month={currentMonth}
+                onMonthChange={setCurrentMonth}
+                modifiers={{ hasShift: shiftDays }}
+                className="w-full p-0 rounded-xl border border-orange-200 dark:border-orange-800"
+                components={{
+                  DayContent: (props) => {
+                    const day = props.date;
+                    const dayNumber = isValid(day) ? day.getDate() : "?";
+                    const dateKey = isValid(day) ? format(day, "yyyy-MM-dd") : "";
+                    const shiftCount = shiftCountByDay[dateKey] || 0;
+                    const hasShifts = shiftCount > 0;
+
+                    return (
+                      <div
+                        className={`flex flex-col items-center justify-center h-full w-full m-1 rounded-lg transition-all duration-200 ${
+                          hasShifts
+                            ? "bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold shadow-md transform hover:scale-105"
+                            : "hover:bg-orange-50 dark:hover:bg-orange-950"
+                        }`}
+                      >
+                        <span className={hasShifts ? "mb-1" : ""}>{dayNumber}</span>
+                        {hasShifts && (
+                          <div className="text-xs bg-white/20 px-1 rounded-full">
+                            {shiftCount} {shiftCount === 1 ? "shift" : "shifts"}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  },
+                }}
+                initialFocus
+              />
+            </CardContent>
+          </Card>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}>
+          <Card className="shadow-xl border-2 bg-gradient-to-br from-white to-blue-50 dark:from-neutral-900 dark:to-blue-950 overflow-hidden">
+            <div className="h-2 w-full bg-gradient-to-r from-blue-500 to-blue-600" />
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white">
+                  <Activity className="h-5 w-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-lg">{safeFormat(selectedDate, "EEEE")}</div>
+                  <div className="text-sm text-muted-foreground">{safeFormat(selectedDate, "MMMM d, yyyy")}</div>
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-6 space-y-4">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              ) : shiftsToday.length ? (
+                <div className="divide-y divide-blue-200 dark:divide-blue-800">
+                  <AnimatePresence>
+                    {shiftsToday.map((s, index) => (
+                      <motion.div
+                        key={s.id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        className="p-6 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors"
+                      >
+                        <div className="flex justify-between items-start mb-3">
+                          <h3 className="font-semibold text-lg capitalize flex items-center">
+                            <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 mr-3" />
+                            {s.shift.shiftName}
+                          </h3>
+                          <Badge className="bg-gradient-to-r from-blue-500 to-blue-600 text-white">
+                            {hoursBetween(s.shift.startTime, s.shift.endTime)} hrs
+                          </Badge>
+                        </div>
+                        <div className="flex items-center text-sm text-muted-foreground bg-blue-100 dark:bg-blue-900 rounded-xl p-3">
+                          <Clock className="h-4 w-4 mr-2 text-blue-500" />
+                          <span className="font-mono">{safeTimeFormat(s.shift.startTime)}</span>
+                          <ArrowRight className="h-4 w-4 mx-3 text-blue-500" />
+                          <span className="font-mono">{safeTimeFormat(s.shift.endTime)}</span>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              ) : (
+                <div className="py-16 text-center text-muted-foreground">
+                  <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <Clock className="h-10 w-10 text-blue-500" />
+                  </div>
+                  <p className="text-lg font-medium mb-2">No shifts scheduled</p>
+                  <p className="text-sm">for {format(selectedDate, "MMMM d, yyyy")}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
+        <Card className="shadow-xl border-2 bg-gradient-to-br from-white to-emerald-50 dark:from-neutral-900 dark:to-emerald-950 overflow-hidden">
+          <div className="h-2 w-full bg-gradient-to-r from-emerald-500 to-emerald-600" />
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white">
                 <CalendarIcon className="h-5 w-5" />
               </div>
-              Calendar View
+              Shift Details
             </CardTitle>
+            <CardDescription>Detailed information about your scheduled shifts for the selected date</CardDescription>
           </CardHeader>
-          <CardContent className="pt-2">
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={(d) => d && setSelectedDate(d)}
-              month={currentMonth}
-              onMonthChange={setCurrentMonth}
-              modifiers={{ hasShift: shiftDays }}
-              className="w-full p-0"
-              components={{
-                DayContent: (props) => {
-                  const day = props.date;
-                  const dayNumber = isValid(day) ? day.getDate() : "?";
-                  const dateKey = isValid(day) ? format(day, "yyyy-MM-dd") : "";
-                  const hasShifts = (shiftCountByDay[dateKey] || 0) > 0;
-
-                  return (
-                    <div
-                      className={`flex flex-col items-center justify-center h-full w-full m-1 rounded-md transition-colors ${
-                        hasShifts ? "bg-orange-500 text-white font-bold" : ""
-                      }`}
-                    >
-                      <span className={hasShifts ? "mb-1" : ""}>{dayNumber}</span>
-                    </div>
-                  );
-                },
-              }}
-              initialFocus
-            />
-          </CardContent>
-        </Card>
-
-        {/* --------------------------- daily shifts --------------------------- */}
-        <Card className="shadow-md border-2 dark:border-white/10 overflow-hidden">
-          <div className="h-1 w-full bg-orange-500" />
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
-                <Clock className="h-5 w-5" />
-              </div>
-              {safeFormat(selectedDate, "EEEE, MMMM d, yyyy")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="p-6 space-y-4">
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
-              </div>
-            ) : shiftsToday.length ? (
-              <div className="divide-y">
-                {shiftsToday.map((s) => (
-                  <div
-                    key={s.id}
-                    className="p-4 hover:bg-black/5 dark:hover:bg-white/5 transition-colors border-b last:border-b-0 border-black/10 dark:border-white/10"
-                  >
-                    <div className="flex justify-between items-center mb-2">
-                      <h3 className="font-semibold text-lg capitalize flex items-center">
-                        <div className="w-2 h-2 rounded-full bg-orange-500 mr-2" />
-                        {s.shift.shiftName}
-                      </h3>
-                      <Badge className="bg-orange-500 hover:bg-orange-600 text-white">{hoursBetween(s.shift.startTime, s.shift.endTime)} hrs</Badge>
-                    </div>
-                    <div className="flex items-center text-sm text-muted-foreground bg-black/5 dark:bg-white/5 rounded-md p-2">
-                      <Clock className="h-4 w-4 mr-1 text-orange-500" />
-                      <span>{safeTimeFormat(s.shift.startTime)}</span>
-                      <ArrowRight className="h-3 w-3 mx-2" />
-                      <span>{safeTimeFormat(s.shift.endTime)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="py-12 text-center text-muted-foreground">
-                <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Clock className="h-8 w-8 text-orange-500/50" />
-                </div>
-                <p>No shifts scheduled for</p>
-                <p className="font-medium text-orange-500">{format(selectedDate, "MMMM d, yyyy")}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* --------------------------- shift details table --------------------------- */}
-      <Card className="shadow-md border-2 dark:border-white/10 overflow-hidden">
-        <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2">
-            <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
-              <CalendarIcon className="h-5 w-5" />
-            </div>
-            Shift Details
-          </CardTitle>
-          <CardDescription>Detailed information about your scheduled shifts</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Shift</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Start</TableHead>
-                <TableHead>End</TableHead>
-                <TableHead className="text-right">Total&nbsp;hrs</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                Array(3)
-                  .fill(0)
-                  .map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell colSpan={5}>
-                        <Skeleton className="h-6 w-full" />
+          <CardContent>
+            <div className="rounded-xl border-2 border-emerald-200 dark:border-emerald-800 overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gradient-to-r from-emerald-50 to-emerald-100 dark:from-emerald-950 dark:to-emerald-900">
+                    <TableHead className="font-semibold">Shift Name</TableHead>
+                    <TableHead className="font-semibold">Date</TableHead>
+                    <TableHead className="font-semibold">Start Time</TableHead>
+                    <TableHead className="font-semibold">End Time</TableHead>
+                    <TableHead className="text-right font-semibold">Total Hours</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    Array(3)
+                      .fill(0)
+                      .map((_, i) => (
+                        <TableRow key={i}>
+                          <TableCell colSpan={5}>
+                            <Skeleton className="h-8 w-full" />
+                          </TableCell>
+                        </TableRow>
+                      ))
+                  ) : shiftsToday.length ? (
+                    <AnimatePresence>
+                      {shiftsToday.map((s, index) => (
+                        <motion.tr
+                          key={s.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                          className="hover:bg-emerald-50 dark:hover:bg-emerald-950 transition-colors"
+                        >
+                          <TableCell className="font-medium capitalize">{s.shift.shiftName}</TableCell>
+                          <TableCell className="font-mono">{safeFormat(parseISO(s.assignedDate), "MMM d, yyyy")}</TableCell>
+                          <TableCell className="font-mono">{safeTimeFormat(s.shift.startTime)}</TableCell>
+                          <TableCell className="font-mono">{safeTimeFormat(s.shift.endTime)}</TableCell>
+                          <TableCell className="text-right">
+                            <Badge className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white">
+                              {hoursBetween(s.shift.startTime, s.shift.endTime)} hrs
+                            </Badge>
+                          </TableCell>
+                        </motion.tr>
+                      ))}
+                    </AnimatePresence>
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-16 text-center">
+                        <div className="flex flex-col items-center justify-center text-muted-foreground">
+                          <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900 rounded-full flex items-center justify-center mb-4">
+                            <Clock className="h-8 w-8 text-emerald-500" />
+                          </div>
+                          <p className="text-lg font-medium mb-2">No shifts scheduled</p>
+                          <p className="text-sm">for {safeFormat(selectedDate, "MMM d, yyyy")}</p>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  ))
-              ) : shiftsToday.length ? (
-                shiftsToday.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-medium capitalize">{s.shift.shiftName}</TableCell>
-                    <TableCell>{safeFormat(parseISO(s.assignedDate), "MMM d, yyyy")}</TableCell>
-                    <TableCell>{safeTimeFormat(s.shift.startTime)}</TableCell>
-                    <TableCell>{safeTimeFormat(s.shift.endTime)}</TableCell>
-                    <TableCell className="text-right">
-                      <Badge className="bg-orange-500 hover:bg-orange-600 text-white">{hoursBetween(s.shift.startTime, s.shift.endTime)}</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center">
-                    <div className="flex flex-col items-center justify-center text-muted-foreground">
-                      <div className="w-12 h-12 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mb-3">
-                        <Clock className="h-6 w-6 text-orange-500/50" />
-                      </div>
-                      <p>No shifts scheduled for {safeFormat(selectedDate, "MMM d, yyyy")}</p>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
     </div>
   );
 }

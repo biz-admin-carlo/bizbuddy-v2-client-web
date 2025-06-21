@@ -1,3 +1,4 @@
+// components/Dashboard/DashboardContent/Settings/Admin/ManageShifts.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
@@ -6,7 +7,6 @@ import { PlusCircle, Edit3, Trash2, ChevronUp, ChevronDown, Search, Clock, Alert
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
 import { motion, AnimatePresence } from "framer-motion";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -16,7 +16,6 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-/* ────────── helper functions ────────── */
 const toUtcIso = (hhmm) => {
   const [h, m] = hhmm.split(":").map(Number);
   return new Date(Date.UTC(1970, 0, 1, h, m)).toISOString();
@@ -27,7 +26,7 @@ const fmtClock = (iso) =>
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-    timeZone: "UTC", // keep as fixed wall-clock value
+    timeZone: "UTC",
   });
 
 const fmtDateTime = (iso) =>
@@ -46,7 +45,6 @@ const totalHours = (startISO, endISO) => {
   return (diff / 36e5).toFixed(2);
 };
 
-/* ────────── component ────────── */
 function ManageShifts() {
   const { token } = useAuthStore();
   const API = process.env.NEXT_PUBLIC_API_URL;
@@ -82,7 +80,6 @@ function ManageShifts() {
     direction: "ascending",
   });
 
-  /* ────────── fetch ────────── */
   useEffect(() => {
     if (token) fetchShifts();
   }, [token]);
@@ -108,7 +105,6 @@ function ManageShifts() {
     setRefreshing(false);
   };
 
-  /* ────────── filter + sort ────────── */
   const filteredSorted = () => {
     const data = shifts.filter((s) => s.shiftName.toLowerCase().includes(filters.name.toLowerCase()));
     if (sortConfig.key) {
@@ -130,7 +126,6 @@ function ManageShifts() {
     return data;
   };
 
-  /* ────────── create ────────── */
   const openCreate = () => {
     setCreateForm({
       shiftName: "",
@@ -171,7 +166,6 @@ function ManageShifts() {
     setActionLoading(false);
   };
 
-  /* ────────── edit ────────── */
   const openEdit = (s) => {
     setEditForm({
       id: s.id,
@@ -213,7 +207,6 @@ function ManageShifts() {
     setActionLoading(false);
   };
 
-  /* ────────── delete ────────── */
   const openDelete = (s) => {
     setShiftToDelete(s);
     setShowDelete(true);
@@ -240,12 +233,9 @@ function ManageShifts() {
     setShiftToDelete(null);
   };
 
-  /* ────────── render ────────── */
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
       <Toaster position="top-center" />
-
-      {/* header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
@@ -282,8 +272,6 @@ function ManageShifts() {
                 Create Shift
               </Button>
             </DialogTrigger>
-
-            {/* create dialog */}
             <DialogContent className="border-2 dark:border-white/10">
               <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
               <DialogHeader>
@@ -336,8 +324,6 @@ function ManageShifts() {
           </Dialog>
         </div>
       </div>
-
-      {/* filters */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500"></div>
         <CardHeader className="pb-2">
@@ -413,8 +399,6 @@ function ManageShifts() {
           </div>
         </CardContent>
       </Card>
-
-      {/* table */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500"></div>
         <CardHeader className="pb-2">
@@ -559,8 +543,6 @@ function ManageShifts() {
           </div>
         </CardContent>
       </Card>
-
-      {/* edit dialog */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
         <DialogContent className="border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -607,8 +589,6 @@ function ManageShifts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* delete dialog */}
       <Dialog open={showDelete} onOpenChange={setShowDelete}>
         <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
           <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />

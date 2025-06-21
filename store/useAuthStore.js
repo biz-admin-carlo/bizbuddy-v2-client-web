@@ -1,8 +1,8 @@
-// File: store/useAuthStore.js
+// store/useAuthStore.js
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { jwtDecode } from "jwt-decode"; // make sure this package is installed
+import { jwtDecode } from "jwt-decode";
 
 const useAuthStore = create(
   persist(

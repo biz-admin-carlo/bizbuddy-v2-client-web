@@ -1,8 +1,5 @@
-/* OverviewCommons.jsx
-   -------------------------------------------------------
-   Shared helper components for all Overview* dashboards
-*/
-
+// components/Dashboard/DashboardContent/Features/Overview/Commons.jsx
+/* eslint-disable react-hooks/exhaustive-deps */
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   PieChart,

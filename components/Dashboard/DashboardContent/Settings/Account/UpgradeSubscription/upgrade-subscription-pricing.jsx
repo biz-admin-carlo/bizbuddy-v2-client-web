@@ -1,3 +1,4 @@
+// components/Dashboard/DashboardContent/Settings/Account/UpgradeSubscription/upgrade-subscription-pricing.jsx
 "use client";
 
 import { useState } from "react";
@@ -17,7 +18,6 @@ const featureLabels = {
 };
 
 export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
-  // Parse features if they're strings
   plans.forEach((plan) => {
     if (typeof plan.features === "string") {
       try {

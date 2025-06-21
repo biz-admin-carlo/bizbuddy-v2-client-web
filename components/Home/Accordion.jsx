@@ -1,16 +1,10 @@
+// components/Home/Accordion.jsx
 "use client";
 
 import React from "react";
 import { motion } from "framer-motion";
-
-// Import the Accordion components from your UI library
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 
-/**
- * Updated FAQ items incorporating the complete details from the provided documentation.
- * Each object in this array represents one FAQ item with a unique "value",
- * a "question", and a corresponding "answer" that includes all relevant information.
- */
 const faqItems = [
   {
     value: "what-is-bizbuddy",
@@ -148,7 +142,6 @@ For precise payment methods or to get a custom quote, visit mybizbuddy.co or con
 ];
 
 function FAQ() {
-  // Framer Motion Variants
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {

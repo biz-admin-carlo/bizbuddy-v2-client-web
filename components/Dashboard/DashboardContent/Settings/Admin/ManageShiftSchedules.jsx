@@ -1,3 +1,4 @@
+// components/Dashboard/DashboardContent/Settings/Admin/ManageShiftSchedules.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
@@ -8,7 +9,6 @@ import { RRule } from "rrule";
 import { format } from "date-fns";
 import useAuthStore from "@/store/useAuthStore";
 import { motion, AnimatePresence } from "framer-motion";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -20,7 +20,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 
-/* ════════════ CONSTANTS ════════════ */
 const DAY_OPTIONS = [
   { value: "MO", label: "MO" },
   { value: "TU", label: "TU" },
@@ -58,7 +57,6 @@ const DAY_NAME = {
   SA: "Sat",
 };
 
-/* ════════════ UTILITIES ════════════ */
 const fmtClock = (iso) =>
   new Date(iso).toLocaleTimeString([], {
     hour: "2-digit",
@@ -99,7 +97,6 @@ const fmtDateTime = (iso) =>
     minute: "2-digit",
   });
 
-/* ════════════ HOOKS ════════════ */
 function useClickOutside(cb) {
   const ref = useRef(null);
   useEffect(() => {
@@ -114,21 +111,17 @@ function useClickOutside(cb) {
   return ref;
 }
 
-/* ════════════ SELECT HELPERS ════════════ */
 const labelForList = (ids, items, empty) => {
   if (!ids.length) return empty;
   if (ids.length === 1) return items.find((i) => i.id === ids[0])?.email || items.find((i) => i.id === ids[0])?.name || empty;
   return `${ids.length} selected`;
 };
 
-/* ---- USER SELECT ---- */
 function MultiUserSelect({ list, setList, users, singleSelect = false }) {
   const selected = Array.isArray(list) ? list : [];
   const [open, setOpen] = useState(false);
   const ref = useClickOutside(() => setOpen(false));
-
   const sorted = useMemo(() => [...users].sort((a, b) => a.email.toLowerCase().localeCompare(b.email.toLowerCase())), [users]);
-
   const toggle = (id) => setList(selected.includes(id) ? selected.filter((x) => x !== id) : singleSelect ? [id] : [...selected, id]);
 
   return (
@@ -156,12 +149,9 @@ function MultiUserSelect({ list, setList, users, singleSelect = false }) {
   );
 }
 
-/* ════════════ MAIN COMPONENT ════════════ */
 function ManageShiftSchedules() {
   const { token } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
-
-  /* ---------- STATE ---------- */
   const blankForm = {
     shiftId: "",
     departmentId: "",
@@ -200,7 +190,6 @@ function ManageShiftSchedules() {
     direction: "descending",
   });
 
-  /* ---------- FETCH ---------- */
   useEffect(() => {
     token && fetchAll();
   }, [token]);
@@ -246,7 +235,6 @@ function ManageShiftSchedules() {
     setRefreshing(false);
   };
 
-  /* ---------- MAPS ---------- */
   const shiftMap = useMemo(() => Object.fromEntries(shifts.map((s) => [s.id, s.shiftName])), [shifts]);
   const shiftObjMap = useMemo(() => Object.fromEntries(shifts.map((s) => [s.id, s])), [shifts]);
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u.email])), [users]);
@@ -261,7 +249,6 @@ function ManageShiftSchedules() {
     return map;
   }, [users]);
 
-  /* ---------- FILTER & SORT ---------- */
   const passesFilters = (s) => {
     const shiftOk = shiftMap[s.shiftId]?.toLowerCase().includes(filters.name.toLowerCase()) ?? false;
     const user = userObjMap[s.assignedUserId];
@@ -288,7 +275,6 @@ function ManageShiftSchedules() {
     });
   };
 
-  /* ---------- CREATE HELPERS ---------- */
   const handleDeptSelect = (deptId) => {
     if (deptId === "none") {
       setCreateForm((p) => ({ ...p, departmentId: "", assignedUserIds: [] }));
@@ -302,7 +288,6 @@ function ManageShiftSchedules() {
     }));
   };
 
-  /* ---------- CREATE ---------- */
   const openCreate = () => {
     setCreateForm({
       ...blankForm,
@@ -347,7 +332,6 @@ function ManageShiftSchedules() {
     }
   };
 
-  /* ---------- EDIT ---------- */
   const openEdit = (s) => {
     setEditForm({
       ...blankForm,
@@ -396,7 +380,6 @@ function ManageShiftSchedules() {
     }
   };
 
-  /* ---------- DELETE ---------- */
   const openDelete = (s) => {
     setScheduleToDelete(s);
     setShowDelete(true);
@@ -423,12 +406,9 @@ function ManageShiftSchedules() {
     setShowShiftInfo(true);
   };
 
-  /* ════════════ RENDER ════════════ */
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
       <Toaster position="top-center" />
-
-      {/* ===== HEADER ===== */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
@@ -439,7 +419,6 @@ function ManageShiftSchedules() {
         </div>
 
         <div className="flex gap-2">
-          {/* refresh */}
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -456,8 +435,6 @@ function ManageShiftSchedules() {
               <TooltipContent>Refresh data</TooltipContent>
             </Tooltip>
           </TooltipProvider>
-
-          {/* ===== CREATE DIALOG ===== */}
           <Dialog open={showCreate} onOpenChange={setShowCreate}>
             <DialogTrigger asChild>
               <Button className="bg-orange-500 hover:bg-orange-600 text-white font-semibold">
@@ -476,7 +453,6 @@ function ManageShiftSchedules() {
               </DialogHeader>
 
               <div className="space-y-4 py-4">
-                {/* shift */}
                 <div className="grid grid-cols-4 items-center gap-4 text-sm">
                   <label className="text-right font-medium">Shift</label>
                   <Select value={createForm.shiftId} onValueChange={(v) => setCreateForm((p) => ({ ...p, shiftId: v }))}>
@@ -492,8 +468,6 @@ function ManageShiftSchedules() {
                     </SelectContent>
                   </Select>
                 </div>
-
-                {/* department */}
                 <div className="grid grid-cols-4 items-center gap-4 text-sm">
                   <label className="text-right font-medium">Department</label>
                   <Select value={createForm.departmentId || "none"} onValueChange={handleDeptSelect}>
@@ -513,8 +487,6 @@ function ManageShiftSchedules() {
                     </SelectContent>
                   </Select>
                 </div>
-
-                {/* days */}
                 <div className="grid grid-cols-4 items-start gap-4 text-sm">
                   <label className="text-right font-medium">Days</label>
                   <div className="col-span-3 flex flex-wrap gap-2">
@@ -543,8 +515,6 @@ function ManageShiftSchedules() {
                     })}
                   </div>
                 </div>
-
-                {/* dates */}
                 {["startDate", "endDate"].map((f) => (
                   <div key={f} className="grid grid-cols-4 items-center gap-4 text-sm">
                     <label className="text-right font-medium">{f === "startDate" ? "Start Date" : "End Date (opt.)"}</label>
@@ -556,8 +526,6 @@ function ManageShiftSchedules() {
                     />
                   </div>
                 ))}
-
-                {/* users */}
                 <div className="grid grid-cols-4 items-start gap-4 text-sm">
                   <label className="text-right font-medium">Assign to</label>
                   <div className="col-span-3">
@@ -587,8 +555,6 @@ function ManageShiftSchedules() {
           </Dialog>
         </div>
       </div>
-
-      {/* ===== FILTER CARD ===== */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500"></div>
         <CardHeader className="pb-2">
@@ -600,7 +566,6 @@ function ManageShiftSchedules() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-3 mb-4">
-            {/* shift filter */}
             <div className="flex-1 min-w-[220px]">
               <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg-white/5">
                 <Search className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -612,8 +577,6 @@ function ManageShiftSchedules() {
                 />
               </div>
             </div>
-
-            {/* email filter */}
             <div className="flex-1 min-w-[220px]">
               <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg:white/5">
                 <Mail className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -643,8 +606,6 @@ function ManageShiftSchedules() {
           </p>
         </CardContent>
       </Card>
-
-      {/* ===== TABLE ===== */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500"></div>
         <CardHeader className="pb-2">
@@ -762,8 +723,6 @@ function ManageShiftSchedules() {
           </div>
         </CardContent>
       </Card>
-
-      {/* ===== EDIT DIALOG ===== */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
         <DialogContent className="border-2 dark:border:white/10 max-w-xl">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -776,7 +735,6 @@ function ManageShiftSchedules() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* shift */}
             <div className="grid grid-cols-4 items-center gap-4 text-sm">
               <label className="text-right font-medium">Shift</label>
               <Select value={editForm.shiftId} onValueChange={(v) => setEditForm((p) => ({ ...p, shiftId: v }))}>
@@ -792,8 +750,6 @@ function ManageShiftSchedules() {
                 </SelectContent>
               </Select>
             </div>
-
-            {/* days */}
             <div className="grid grid-cols-4 items-start gap-4 text-sm">
               <label className="text-right font-medium">Days</label>
               <div className="col-span-3 flex flex-wrap gap-2">
@@ -822,16 +778,12 @@ function ManageShiftSchedules() {
                 })}
               </div>
             </div>
-
-            {/* dates */}
             {["startDate", "endDate"].map((f) => (
               <div key={f} className="grid grid-cols-4 items-center gap-4 text-sm">
                 <label className="text-right font-medium">{f === "startDate" ? "Start Date" : "End Date (opt.)"}</label>
                 <Input type="date" className="col-span-3" value={editForm[f]} onChange={(e) => setEditForm((p) => ({ ...p, [f]: e.target.value }))} />
               </div>
             ))}
-
-            {/* users */}
             <div className="grid grid-cols-4 items-start gap-4 text-sm">
               <label className="text-right font-medium">Assign to</label>
               <div className="col-span-3">
@@ -855,8 +807,6 @@ function ManageShiftSchedules() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* ===== DELETE DIALOG ===== */}
       <Dialog open={showDelete} onOpenChange={setShowDelete}>
         <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
           <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
@@ -898,8 +848,6 @@ function ManageShiftSchedules() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* ===== SHIFT DETAILS ===== */}
       <Dialog open={showShiftInfo} onOpenChange={setShowShiftInfo}>
         {selectedShift && (
           <DialogContent className="border-2 dark:border-white/10 max-w-md">

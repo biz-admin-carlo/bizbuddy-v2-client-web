@@ -1,5 +1,4 @@
 // app/(home)/pricing/page.jsx
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -92,7 +91,7 @@ export default function PricingPage() {
   const groupedPlansArray = Object.values(groupedPlans);
 
   return (
-    <div className="flex flex-col justify-between items-center">
+    <div className="flex flex-col justify-between items-center bg-white dark:bg-black">
       <h1 className="mt-12 px-4 mb-10 text-center font-bold text-orange-500 lg:text-5xl md:text-4xl text-2xl">Our Subscription Plans</h1>
       <div className="grid gap-8 md:grid-cols-3 px-4 w-full">
         {groupedPlansArray.map((plan) => (

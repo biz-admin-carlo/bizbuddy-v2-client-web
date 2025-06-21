@@ -1,10 +1,11 @@
-// apps/web/components/Overview/OverviewEmployee.jsx
+// components/Dashboard/DashboardContent/Features/Overview/OverviewEmployee.jsx
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
-import { ChartCard, PieSimple, BarSimple } from "./OverviewCommons";
+import { ChartCard, PieSimple, BarSimple } from "./Commons";
 import { User, Briefcase, Clock } from "lucide-react";
 import { toast } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
@@ -14,8 +15,6 @@ export default function OverviewEmployee() {
   const API = process.env.NEXT_PUBLIC_API_URL;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  /* ───────────────────────────────────────── Fetch analytics */
   useEffect(() => {
     if (!token) return;
     (async () => {
@@ -35,7 +34,6 @@ export default function OverviewEmployee() {
     })();
   }, [API, token]);
 
-  /* ───────────────────────────────────────── Skeleton helpers */
   const SkelCards = (n) => (
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
       {Array.from({ length: n }).map((_, i) => (
@@ -60,7 +58,6 @@ export default function OverviewEmployee() {
       </>
     );
 
-  /* ───────────────────────────────────────── KPI cards */
   const cards = [
     { icon: <User className="h-6 w-6 text-orange-500" />, label: "Username", value: data.profile.username },
     { icon: <Briefcase className="h-6 w-6 text-orange-500" />, label: "Department", value: data.profile.department },
@@ -70,11 +67,8 @@ export default function OverviewEmployee() {
   ];
 
   const completedSessions = Math.max(0, data.charts.dailyHours.length - data.totals.activeSessions);
-
-  /* ───────────────────────────────────────── Render */
   return (
     <>
-      {/* KPI */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         {cards.map((c) => (
           <Card key={c.label} className="border-2 dark:border-white/10 overflow-hidden shadow-sm">
@@ -89,13 +83,10 @@ export default function OverviewEmployee() {
           </Card>
         ))}
       </div>
-
-      {/* Charts */}
       <div className="grid lg:grid-cols-3 gap-4">
         <ChartCard title="Daily Hours">
           <BarSimple data={data.charts.dailyHours} x="date" y="hours" />
         </ChartCard>
-
         <ChartCard title="Session Status">
           <PieSimple
             data={[
@@ -104,7 +95,6 @@ export default function OverviewEmployee() {
             ]}
           />
         </ChartCard>
-
         <ChartCard title="Absence vs Late">
           <PieSimple
             data={[

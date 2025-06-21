@@ -1,4 +1,4 @@
-// biz-web-app/components/LoadingScreen.jsx
+// components/LoadingScreen.jsx
 
 "use client";
 

@@ -1,3 +1,5 @@
+// components/Dashboard/DashboardContent/Settings/Admin/ManageLeaveRequests.jsx
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -33,11 +35,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
 /* -------------------------------------------------- */
 /* helpers                                            */
 /* -------------------------------------------------- */
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 const statusColors = {
   pending: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
@@ -114,10 +116,8 @@ function ManageLeaveRequests() {
   const filteredSortedLeaves = React.useMemo(() => {
     let list = [...leaves];
 
-    // Filter by status
     if (filterStatus !== "all") list = list.filter((l) => l.status === filterStatus);
 
-    // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
       list = list.filter(
@@ -129,7 +129,6 @@ function ManageLeaveRequests() {
       );
     }
 
-    // Sort
     switch (sortKey) {
       case "oldest":
         list.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
@@ -176,7 +175,10 @@ function ManageLeaveRequests() {
     try {
       const res = await fetch(`${API_URL}/api/leaves/${selectedLeave.id}/${endpoint}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ approverComments: comment }),
       });
       const data = await res.json();
@@ -239,7 +241,7 @@ function ManageLeaveRequests() {
           className="gap-1 border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
         >
           <SortAsc className="h-4 w-4" />
-          Sort
+          Sort Options
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
@@ -262,6 +264,7 @@ function ManageLeaveRequests() {
   /* -------------------------------------------- */
   /* render                                        */
   /* -------------------------------------------- */
+  const labelClass = "my-auto shrink-0 text-sm font-medium text-muted-foreground";
 
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
@@ -286,7 +289,7 @@ function ManageLeaveRequests() {
                   size="icon"
                   onClick={fetchLeaves}
                   disabled={loading}
-                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                  className="flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-black"
                 >
                   <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                 </Button>
@@ -296,7 +299,6 @@ function ManageLeaveRequests() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <SortDropdown />
         </div>
       </div>
 
@@ -308,64 +310,57 @@ function ManageLeaveRequests() {
             <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
               <Filter className="h-5 w-5" />
             </div>
-            Filters
+            Table Controls
           </CardTitle>
-          <CardDescription>Filter leave requests by status or search by requester, type, or reason</CardDescription>
+          <CardDescription>Filter, sort, and search leave requests</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {["all", "pending", "approved", "rejected"].map((s) => (
-              <Button
-                key={s}
-                size="sm"
-                variant={filterStatus === s ? "default" : "outline"}
-                className={`capitalize ${
-                  filterStatus === s
-                    ? "bg-orange-500 hover:bg-orange-600 text-white"
-                    : "border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                }`}
-                onClick={() => setFilterStatus(s)}
-              >
-                {s === "pending" && <Clock className="h-4 w-4 mr-1" />}
-                {s === "approved" && <CheckCircle2 className="h-4 w-4 mr-1" />}
-                {s === "rejected" && <XCircle className="h-4 w-4 mr-1" />}
-                {s === "all" && <Filter className="h-4 w-4 mr-1" />}
-                {s}
-              </Button>
-            ))}
-          </div>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Sort:</span>
+              <SortDropdown />
+            </div>
 
-          <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg-white/5">
-            <Search className="h-4 w-4 mr-2 text-muted-foreground" />
-            <Input
-              placeholder="Search by requester, leave type, or reason..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="border-0 h-8 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-            />
-            {searchQuery && (
-              <Button variant="ghost" size="icon" onClick={() => setSearchQuery("")} className="h-6 w-6 p-0 text-muted-foreground">
-                <XCircle className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Filter:</span>
+              {["all", "pending", "approved", "rejected"].map((s) => (
+                <Button
+                  key={s}
+                  size="sm"
+                  variant={filterStatus === s ? "default" : "outline"}
+                  className={`capitalize ${
+                    filterStatus === s
+                      ? "bg-orange-500 hover:bg-orange-600 text-white"
+                      : "border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                  }`}
+                  onClick={() => setFilterStatus(s)}
+                >
+                  {s === "pending" && <Clock className="h-4 w-4 mr-1" />}
+                  {s === "approved" && <CheckCircle2 className="h-4 w-4 mr-1" />}
+                  {s === "rejected" && <XCircle className="h-4 w-4 mr-1" />}
+                  {s === "all" && <Filter className="h-4 w-4 mr-1" />}
+                  {s}
+                </Button>
+              ))}
+            </div>
 
-          <div className="flex justify-between items-center text-sm text-muted-foreground">
-            <span>
-              Showing {filteredSortedLeaves.length} of {leaves.length} leave requests
-            </span>
-            <span>
-              {filterStatus !== "all" && (
-                <Badge variant="outline" className="ml-2">
-                  Filtered by: {filterStatus}
-                </Badge>
-              )}
-              {searchQuery && (
-                <Badge variant="outline" className="ml-2">
-                  Search: "{searchQuery}"
-                </Badge>
-              )}
-            </span>
+            <div className="flex justify-between items-center text-sm text-muted-foreground">
+              <span>
+                Showing {filteredSortedLeaves.length} of {leaves.length} leave requests
+              </span>
+              <span>
+                {filterStatus !== "all" && (
+                  <Badge variant="outline" className="ml-2 capitalize">
+                    Status: {filterStatus}
+                  </Badge>
+                )}
+                {searchQuery && (
+                  <Badge variant="outline" className="ml-2">
+                    Search: "{searchQuery}"
+                  </Badge>
+                )}
+              </span>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -412,24 +407,13 @@ function ManageLeaveRequests() {
                     .fill(0)
                     .map((_, i) => (
                       <TableRow key={i}>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-20" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-20 ml-auto" />
-                        </TableCell>
+                        {Array(6)
+                          .fill(0)
+                          .map((__, j) => (
+                            <TableCell key={j}>
+                              <Skeleton className="h-6 w-full" />
+                            </TableCell>
+                          ))}
                       </TableRow>
                     ))
                 ) : filteredSortedLeaves.length ? (

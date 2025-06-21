@@ -12,7 +12,6 @@ export default function SignUpPage() {
   const formRef = useRef(null);
   const [step, setStep] = useState(1);
 
-  // Form data
   const [userForm, setUserForm] = useState({
     username: "",
     email: "",
@@ -23,7 +22,6 @@ export default function SignUpPage() {
   });
   const [companyForm, setCompanyForm] = useState({ name: "" });
 
-  // Error states
   const [usernameError, setUsernameError] = useState("");
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
@@ -33,15 +31,12 @@ export default function SignUpPage() {
   const [lastNameError, setLastNameError] = useState("");
   const [error, setError] = useState("");
 
-  // Plan & Payment (from previous selection)
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [paymentStatus, setPaymentStatus] = useState("unpaid");
   const [loading, setLoading] = useState(false);
 
-  // Toggle for password visibility
   const [showPassword, setShowPassword] = useState(false);
 
-  // On mount, restore form values from localStorage
   useEffect(() => {
     const storedPlan = localStorage.getItem("selectedPlan");
     if (storedPlan) setSelectedPlan(JSON.parse(storedPlan));
@@ -59,7 +54,6 @@ export default function SignUpPage() {
     }
   }, []);
 
-  // Clear error messages when clicking outside the form
   useEffect(() => {
     function handleClickOutside(event) {
       if (formRef.current && !formRef.current.contains(event.target)) {
@@ -88,10 +82,6 @@ export default function SignUpPage() {
     localStorage.setItem("companyForm", JSON.stringify(updated));
   };
 
-  /**
-   * Check username availability.
-   * Calls GET {NEXT_PUBLIC_API_URL}/api/account/check-username?username=...
-   */
   const checkUsernameAvailability = async () => {
     if (!userForm.username.trim()) {
       setUsernameError("Username is required.");
@@ -139,7 +129,6 @@ export default function SignUpPage() {
     }
   };
 
-  // Validate password: minimum 6 characters, at least one uppercase, one lowercase, one number, and one symbol.
   const validatePassword = () => {
     const { password } = userForm;
     if (password.length < 6) {
@@ -165,7 +154,6 @@ export default function SignUpPage() {
     setPasswordError("");
   };
 
-  // Validate phone number: digits only.
   const validatePhoneNumber = () => {
     const { phoneNumber } = userForm;
     if (phoneNumber.trim() === "") {
@@ -179,7 +167,6 @@ export default function SignUpPage() {
     }
   };
 
-  // onBlur handlers for required fields in User Details
   const handleEmailBlur = () => {
     if (!userForm.email.trim()) {
       setEmailError("Email is required.");
@@ -204,7 +191,6 @@ export default function SignUpPage() {
     }
   };
 
-  // onBlur for company name field in Company Details
   const handleCompanyBlur = () => {
     if (!companyForm.name.trim()) {
       setCompanyError("Company name is required.");
@@ -243,19 +229,12 @@ export default function SignUpPage() {
   };
 
   const handleBack = () => setStep((prev) => prev - 1);
-
-  // Redirect to payment page if user needs to pay.
   const handlePayment = () => {
     router.push("/payment");
   };
 
-  /**
-   * Final submit.
-   * Calls POST {NEXT_PUBLIC_API_URL}/api/account/sign-up with all data.
-   */
   const handleSubmit = async (e) => {
     e.preventDefault();
-    // Only submit the form if on step 3 and the payment status is "paid"
     if (step < 3 || paymentStatus !== "paid") return;
 
     setLoading(true);
@@ -286,7 +265,6 @@ export default function SignUpPage() {
         throw new Error(data.message || "Signup failed");
       }
 
-      // On success, clear local storage and redirect
       localStorage.removeItem("userForm");
       localStorage.removeItem("companyForm");
       localStorage.removeItem("paymentStatus");
@@ -318,7 +296,6 @@ export default function SignUpPage() {
           <p className="text-neutral-600 dark:text-neutral-400 mt-2">Join us to start managing your business</p>
         </motion.div>
 
-        {/* Progress indicator */}
         <motion.div className="max-w-md mx-auto mb-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
           <div className="flex items-center justify-between">
             {[1, 2, 3].map((stepNumber) => (

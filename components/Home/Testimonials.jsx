@@ -1,5 +1,4 @@
-// biz-web-app/components/Home/Testimonials.jsx
-
+// components/Home/Testimonials.jsx
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -7,14 +6,11 @@ import { testimonials } from "@/lib/data";
 import { Star } from "lucide-react";
 import { motion } from "framer-motion";
 
-// Variants for the container (all content inside the background):
-// No delay/stagger, so everything appears at once.
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1 },
 };
 
-// Variants for individual items if you'd like them to fade/slide in a bit.
 const itemVariants = {
   hidden: { y: 20, opacity: 0 },
   visible: { y: 0, opacity: 1 },
@@ -86,19 +82,14 @@ function Testimonials() {
   };
 
   return (
-    // Regular <section> with static gradient background
     <section className="w-full px-4 sm:px-6 lg:px-8 mx-auto bg-gradient-to-b from-orange-50 dark:from-black via-orange-400 dark:via-orange-400 to-red-600 dark:to-red-600 min-h-[400px] sm:min-h-[450px] md:min-h-[500px] py-8 sm:py-12 md:py-16">
-      {/* Wrap all content in a motion.div so only the content is animated */}
       <motion.div className="mx-auto max-w-7xl" initial="hidden" animate="visible" variants={containerVariants}>
-        {/* Heading (animated item) */}
         <motion.h2
           className="text-orange-500 font-bold text-center pb-2 max-w-7xl mx-auto text-xl sm:text-2xl md:text-4xl lg:text-5xl capitalize"
           variants={itemVariants}
         >
           Testimonials
         </motion.h2>
-
-        {/* Carousel container (animated item) */}
         <motion.div
           className="max-w-xs sm:max-w-md md:max-w-2xl lg:max-w-3xl mx-auto relative overflow-hidden"
           ref={containerRef}
@@ -118,7 +109,6 @@ function Testimonials() {
             }}
           >
             {testimonials.map((testimonial, index) => (
-              // Each testimonial can animate in if you'd like.
               <motion.div key={index} className="w-full flex-shrink-0 px-2 sm:px-4 text-neutral-950" variants={itemVariants}>
                 <div className="rounded-lg p-4 sm:p-6 md:p-8 transition-all duration-300">
                   <div className="flex justify-center mb-3 sm:mb-4">
@@ -136,8 +126,6 @@ function Testimonials() {
             ))}
           </div>
         </motion.div>
-
-        {/* Dots (animated item) */}
         <motion.div className="flex justify-center mt-4 sm:mt-6" variants={itemVariants}>
           {testimonials.map((_, index) => (
             <button

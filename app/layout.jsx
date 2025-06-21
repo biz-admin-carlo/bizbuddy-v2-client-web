@@ -1,4 +1,4 @@
-// File: biz-web-app/app/layout.jsx
+// app/layout.jsx
 
 import "./globals.css";
 import { ThemeProvider } from "@/components/Theme/ThemeProvider";
@@ -16,11 +16,11 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head />
-      <body className="bg-orange-50/30 dark:bg-black text-neutral-700 dark:text-neutral-400">
+      <body className="bg-white dark:bg-black text-neutral-700 dark:text-neutral-400">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <NavBar />
           <main className="pt-16">{children}</main>
-          {/* <BizChat /> */}
+          <BizChat clientId="socckVI7VnKfbO5Jf6f6" />
         </ThemeProvider>
       </body>
     </html>

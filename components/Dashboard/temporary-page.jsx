@@ -1,9 +1,10 @@
+// File: biz-web-app/components/Dashboard/DashboardContent/temporary-page.jsx
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
-import { Construction, Clock, RefreshCw, Calendar, Bell, Rocket } from "lucide-react";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Construction, Clock, Calendar } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export default function TemporaryPage() {
@@ -14,7 +15,6 @@ export default function TemporaryPage() {
     { name: "Overview", icon: <Calendar className="h-4 w-4" />, progress: 10 },
   ]);
 
-  // Animated dots for loading indicator
   useEffect(() => {
     const interval = setInterval(() => {
       setDots((prev) => (prev.length >= 3 ? "." : prev + "."));
@@ -23,7 +23,6 @@ export default function TemporaryPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fake progress animation
   useEffect(() => {
     const interval = setInterval(() => {
       setProgress((prev) => {
@@ -38,7 +37,6 @@ export default function TemporaryPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Randomly update feature progress
   useEffect(() => {
     const interval = setInterval(() => {
       setFeatures((prev) =>

@@ -1,37 +1,12 @@
+// components/Dashboard/DashboardContent/Settings/Admin/ManageDepartments.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-/**
- * ManageDepartments
- * -------------------------------------------------
- * • Department ID first column + CSV export
- * • Accurate user-count badge (supervisor + members)
- * • Badge opens a modal with a table:
- *      – Supervisor row first (labelled)
- *      – Member rows beneath
- *      – Columns: Full Name | Email
- * • NEW: Refresh button to reload all data
- */
-
 import { useEffect, useState } from "react";
-import {
-  Trash2,
-  Edit3,
-  PlusCircle,
-  ChevronDown,
-  ChevronUp,
-  Search,
-  Building,
-  Users,
-  UserCheck,
-  AlertCircle,
-  Download,
-  RefreshCw, // ← added
-} from "lucide-react";
+import { Trash2, Edit3, PlusCircle, ChevronDown, ChevronUp, Building, Users, AlertCircle, Download, RefreshCw, Filter, Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -42,76 +17,63 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 
-/* =================================================================== */
-/*  CSV helper                                                         */
-/* =================================================================== */
 const buildCSV = (rows) => {
   const header = ["ID", "Department", "Supervisor", "User Count"];
   const body = rows.map((d) => [`"${d.id}"`, `"${d.name}"`, `"${d.supervisorName}"`, d.totalUsers]);
   return [header, ...body].map((l) => l.join(",")).join("\r\n");
 };
 
-/* =================================================================== */
-/*  Component                                                          */
-/* =================================================================== */
 function ManageDepartments() {
   const { token } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
-
-  /* ---------------- core data ---------------- */
   const [profileData, setProfileData] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
-
-  /* derived supervisor list */
   const supervisors = allUsers.filter((u) => u.role && u.role.toLowerCase() === "supervisor");
-
-  /* user-count map { deptId: N } */
   const [userCounts, setUserCounts] = useState({});
-
-  /* ---------------- ui state ---------------- */
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [refreshing, setRefreshing] = useState(false); // ← added
-
-  /* create modal */
+  const [refreshing, setRefreshing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createDeptForm, setCreateDeptForm] = useState({
-    name: "",
-    supervisorId: "",
-  });
-
-  /* edit modal */
+  const [createDeptForm, setCreateDeptForm] = useState({ name: "", supervisorId: "" });
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editDeptForm, setEditDeptForm] = useState({
-    id: "",
-    name: "",
-    supervisorId: "",
-  });
-
-  /* delete modal */
+  const [editDeptForm, setEditDeptForm] = useState({ id: "", name: "", supervisorId: "" });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [departmentToDelete, setDepartmentToDelete] = useState(null);
-
-  /* users list modal */
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [usersDeptName, setUsersDeptName] = useState("");
   const [supervisorUser, setSupervisorUser] = useState(null);
   const [deptMembers, setDeptMembers] = useState([]);
+  const [sortConfig, setSortConfig] = useState({ key: "id", direction: "ascending" });
 
-  /* sort & filter */
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
-  const [filters, setFilters] = useState({ name: "", supervisor: "" });
+  const [filters, setFilters] = useState({
+    deptIds: ["all"],
+    supervisorIds: ["all"],
+  });
 
-  /* =================================================================== */
-  /*  Fetch helpers                                                      */
-  /* =================================================================== */
+  const columnOptions = [
+    { value: "id", label: "ID" },
+    { value: "name", label: "Department Name" },
+    { value: "supervisor", label: "Supervisor" },
+    { value: "userCount", label: "User Count" },
+  ];
+  const [columnVisibility, setColumnVisibility] = useState(columnOptions.map((o) => o.value));
+
+  const sortOptions = [
+    { key: "id", label: "ID" },
+    { key: "name", label: "Department Name" },
+    { key: "supervisor", label: "Supervisor" },
+    { key: "userCount", label: "User Count" },
+  ];
+
+  const labelClass = "my-auto shrink-0 text-sm font-medium text-muted-foreground";
+
   useEffect(() => {
     if (!token) return;
-    fetch(`${API_URL}/api/account/profile`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    fetch(`${API_URL}/api/account/profile`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then((j) => {
         if (j?.data?.company?.id) setProfileData(j.data);
@@ -125,18 +87,12 @@ function ManageDepartments() {
       fetchDepartments();
       fetchAllUsers();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, profileData]);
 
-  /* ------------------------------------------------------------------- */
-  /*  Departments                                                        */
-  /* ------------------------------------------------------------------- */
   const fetchDepartments = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/departments`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`${API_URL}/api/departments`, { headers: { Authorization: `Bearer ${token}` } });
       const j = await res.json();
       if (j?.data) setDepartments(j.data);
       else toast.message(j.error || "Failed to fetch departments.");
@@ -146,14 +102,9 @@ function ManageDepartments() {
     setLoading(false);
   };
 
-  /* ------------------------------------------------------------------- */
-  /*  Users                                                              */
-  /* ------------------------------------------------------------------- */
   const fetchAllUsers = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/employee?all=1`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`${API_URL}/api/employee?all=1`, { headers: { Authorization: `Bearer ${token}` } });
       const j = await res.json();
       if (j?.data) setAllUsers(j.data);
       else toast.message("Failed to fetch users.");
@@ -162,9 +113,6 @@ function ManageDepartments() {
     }
   };
 
-  /* ------------------------------------------------------------------- */
-  /*  Refresh helper                                                     */
-  /* ------------------------------------------------------------------- */
   const refreshData = async () => {
     setRefreshing(true);
     await Promise.all([fetchDepartments(), fetchAllUsers()]);
@@ -172,32 +120,21 @@ function ManageDepartments() {
     setRefreshing(false);
   };
 
-  /* ------------------------------------------------------------------- */
-  /*  Re-compute userCounts whenever data changes                         */
-  /* ------------------------------------------------------------------- */
   useEffect(() => {
     if (!departments.length) return;
-
     const map = {};
     departments.forEach((d) => {
-      /* start with members whose department id matches */
       const members = allUsers.filter((u) => u.department && u.department.id === d.id);
-
-      /* ensure supervisor is counted exactly once */
       let supExtra = 0;
       if (d.supervisor) {
         const supInMembers = members.some((m) => m.id === d.supervisor.id);
         if (!supInMembers) supExtra = 1;
       }
-
       map[d.id] = members.length + supExtra;
     });
     setUserCounts(map);
   }, [departments, allUsers]);
 
-  /* =================================================================== */
-  /*  Sort / filter helpers                                              */
-  /* =================================================================== */
   const requestSort = (key) =>
     setSortConfig((p) => ({
       key,
@@ -213,9 +150,7 @@ function ManageDepartments() {
       )
     ) : null;
 
-  const handleFilterChange = (field, value) => setFilters({ ...filters, [field]: value });
-
-  const clearAllFilters = () => setFilters({ name: "", supervisor: "" });
+  const clearAllFilters = () => setFilters({ deptIds: ["all"], supervisorIds: ["all"] });
 
   const getDepartmentsProcessed = () => {
     const withCounts = departments.map((d) => ({
@@ -224,48 +159,38 @@ function ManageDepartments() {
       supervisorName: d.supervisor ? `${d.supervisor.profile.firstName || ""} ${d.supervisor.profile.lastName || ""}`.trim() : "",
     }));
 
-    /* filters */
-    const filtered = withCounts.filter((d) => {
-      const matchName = !filters.name || d.name.toLowerCase().includes(filters.name.toLowerCase());
-      const matchSup = !filters.supervisor || d.supervisorName.toLowerCase().includes(filters.supervisor.toLowerCase());
-      return matchName && matchSup;
-    });
+    let filtered = [...withCounts];
 
-    if (!sortConfig.key) return filtered;
+    if (!filters.deptIds.includes("all")) {
+      filtered = filtered.filter((d) => filters.deptIds.includes(d.id));
+    }
+    if (!filters.supervisorIds.includes("all")) {
+      filtered = filtered.filter((d) => d.supervisor && filters.supervisorIds.includes(d.supervisor.id));
+    }
 
-    /* sort */
-    return [...filtered].sort((a, b) => {
-      let aVal, bVal;
-      switch (sortConfig.key) {
-        case "id":
-          aVal = a.id;
-          bVal = b.id;
-          break;
-        case "name":
-          aVal = a.name.toLowerCase();
-          bVal = b.name.toLowerCase();
-          break;
-        case "supervisor":
-          aVal = a.supervisorName.toLowerCase();
-          bVal = b.supervisorName.toLowerCase();
-          break;
-        case "userCount":
-          aVal = a.totalUsers;
-          bVal = b.totalUsers;
-          break;
-        default:
-          aVal = 0;
-          bVal = 0;
-      }
+    return filtered.sort((a, b) => {
+      const getVal = (obj) => {
+        switch (sortConfig.key) {
+          case "id":
+            return obj.id;
+          case "name":
+            return obj.name.toLowerCase();
+          case "supervisor":
+            return obj.supervisorName.toLowerCase();
+          case "userCount":
+            return obj.totalUsers;
+          default:
+            return 0;
+        }
+      };
+      const aVal = getVal(a);
+      const bVal = getVal(b);
       if (aVal < bVal) return sortConfig.direction === "ascending" ? -1 : 1;
       if (aVal > bVal) return sortConfig.direction === "ascending" ? 1 : -1;
       return 0;
     });
   };
 
-  /* =================================================================== */
-  /*  CSV export                                                         */
-  /* =================================================================== */
   const exportCSV = () => {
     const rows = getDepartmentsProcessed();
     if (!rows.length) return toast.message("No rows to export");
@@ -273,14 +198,11 @@ function ManageDepartments() {
     try {
       const d = new Date();
       const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-      const fileName = `Departments_${stamp}.csv`;
-      const blob = new Blob([buildCSV(rows)], {
-        type: "text/csv;charset=utf-8;",
-      });
+      const blob = new Blob([buildCSV(rows)], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = fileName;
+      a.download = `Departments_${stamp}.csv`;
       a.click();
       URL.revokeObjectURL(url);
       toast.message("CSV exported");
@@ -290,21 +212,135 @@ function ManageDepartments() {
     setExporting(false);
   };
 
-  /* =================================================================== */
-  /*  Users modal helpers                                                */
-  /* =================================================================== */
   const openUsersModal = (dept) => {
     setUsersDeptName(dept.name);
     setSupervisorUser(dept.supervisor || null);
-
     const members = allUsers.filter((u) => u.department && u.department.id === dept.id && (!dept.supervisor || u.id !== dept.supervisor.id));
     setDeptMembers(members);
     setShowUsersModal(true);
   };
 
-  /* =================================================================== */
-  /*  CRUD HELPERS (create / edit / delete)                              */
-  /* =================================================================== */
+  const MultiDepartmentSelect = () => {
+    const allChecked = filters.deptIds.includes("all");
+    const toggle = (id) => {
+      if (id === "all") return setFilters({ ...filters, deptIds: ["all"] });
+      let list = filters.deptIds.filter((x) => x !== "all");
+      list = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+      if (!list.length) list = ["all"];
+      setFilters({ ...filters, deptIds: list });
+    };
+    const label = allChecked ? "All departments" : `${filters.deptIds.length} selected`;
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" className="min-w-[200px] justify-between">
+            {label}
+            <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 p-2 space-y-1" align="start">
+          <div className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer" onClick={() => toggle("all")}>
+            <Checkbox checked={allChecked} />
+            <span>All departments</span>
+            {allChecked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
+          </div>
+          <div className="max-h-64 overflow-y-auto pr-1">
+            {departments.map((d) => {
+              const checked = filters.deptIds.includes(d.id);
+              return (
+                <div key={d.id} className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer" onClick={() => toggle(d.id)}>
+                  <Checkbox checked={checked} />
+                  <span className="truncate">{d.name}</span>
+                  {checked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
+                </div>
+              );
+            })}
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  };
+
+  const MultiSupervisorSelect = () => {
+    const allChecked = filters.supervisorIds.includes("all");
+    const toggle = (id) => {
+      if (id === "all") return setFilters({ ...filters, supervisorIds: ["all"] });
+      let list = filters.supervisorIds.filter((x) => x !== "all");
+      list = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+      if (!list.length) list = ["all"];
+      setFilters({ ...filters, supervisorIds: list });
+    };
+    const label = allChecked ? "All supervisors" : `${filters.supervisorIds.length} selected`;
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" className="min-w-[200px] justify-between">
+            {label}
+            <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 p-2 space-y-1" align="start">
+          <div className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer" onClick={() => toggle("all")}>
+            <Checkbox checked={allChecked} />
+            <span>All supervisors</span>
+            {allChecked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
+          </div>
+          <div className="max-h-64 overflow-y-auto pr-1">
+            {supervisors.map((s) => {
+              const checked = filters.supervisorIds.includes(s.id);
+              const supName = `${s.profile.firstName || ""} ${s.profile.lastName || ""}`.trim() || s.username;
+              return (
+                <div key={s.id} className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer" onClick={() => toggle(s.id)}>
+                  <Checkbox checked={checked} />
+                  <span className="truncate">{supName}</span>
+                  {checked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
+                </div>
+              );
+            })}
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  };
+
+  const MultiColumnSelect = () => {
+    const allChecked = columnVisibility.length === columnOptions.length;
+    const toggle = (val) => {
+      if (val === "all") return setColumnVisibility(allChecked ? [] : columnOptions.map((o) => o.value));
+      setColumnVisibility((prev) => (prev.includes(val) ? prev.filter((x) => x !== val) : [...prev, val]));
+    };
+    const label = allChecked ? "All columns" : columnVisibility.length === 0 ? "No columns" : `${columnVisibility.length} selected`;
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" className="min-w-[180px] justify-between">
+            {label}
+            <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 p-2 space-y-1" align="start">
+          <div className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer" onClick={() => toggle("all")}>
+            <Checkbox checked={allChecked} />
+            <span>All columns</span>
+            {allChecked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
+          </div>
+          <div className="max-h-64 overflow-y-auto pr-1">
+            {columnOptions.map((opt) => {
+              const checked = columnVisibility.includes(opt.value);
+              return (
+                <div key={opt.value} className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer" onClick={() => toggle(opt.value)}>
+                  <Checkbox checked={checked} />
+                  <span>{opt.label}</span>
+                  {checked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
+                </div>
+              );
+            })}
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  };
+
   const handleCreateDepartment = async () => {
     setLoading(true);
     try {
@@ -314,10 +350,7 @@ function ManageDepartments() {
       };
       const res = await fetch(`${API_URL}/api/departments/create`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload),
       });
       const j = await res.json();
@@ -352,10 +385,7 @@ function ManageDepartments() {
       };
       const res = await fetch(`${API_URL}/api/departments/update/${editDeptForm.id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload),
       });
       const j = await res.json();
@@ -398,14 +428,9 @@ function ManageDepartments() {
     setDepartmentToDelete(null);
   };
 
-  /* =================================================================== */
-  /*  UI                                                                 */
-  /* =================================================================== */
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
       <Toaster position="top-center" />
-
-      {/* ================= HEADER ================= */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
@@ -416,7 +441,6 @@ function ManageDepartments() {
         </div>
 
         <div className="flex gap-2">
-          {/* refresh */}
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -425,7 +449,7 @@ function ManageDepartments() {
                   size="icon"
                   onClick={refreshData}
                   disabled={refreshing}
-                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                  className="flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-black"
                 >
                   <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
                 </Button>
@@ -433,8 +457,6 @@ function ManageDepartments() {
               <TooltipContent>Refresh data</TooltipContent>
             </Tooltip>
           </TooltipProvider>
-
-          {/* CSV export */}
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -443,7 +465,7 @@ function ManageDepartments() {
                   size="icon"
                   onClick={exportCSV}
                   disabled={exporting || !getDepartmentsProcessed().length}
-                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                  className="flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-black"
                 >
                   <Download className={`h-4 w-4 ${exporting ? "animate-spin" : ""}`} />
                 </Button>
@@ -451,8 +473,6 @@ function ManageDepartments() {
               <TooltipContent>Export CSV</TooltipContent>
             </Tooltip>
           </TooltipProvider>
-
-          {/* ---------- Create Department Dialog ---------- */}
           <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
             <DialogTrigger asChild>
               <Button className="bg-orange-500 hover:bg-orange-600 text-white font-semibold">
@@ -460,10 +480,8 @@ function ManageDepartments() {
                 Create Department
               </Button>
             </DialogTrigger>
-
-            {/* ================= CREATE MODAL ================= */}
             <DialogContent className="border-2 dark:border-white/10">
-              <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
+              <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
@@ -482,12 +500,7 @@ function ManageDepartments() {
                   <Input
                     id="dept-name"
                     value={createDeptForm.name}
-                    onChange={(e) =>
-                      setCreateDeptForm({
-                        ...createDeptForm,
-                        name: e.target.value,
-                      })
-                    }
+                    onChange={(e) => setCreateDeptForm({ ...createDeptForm, name: e.target.value })}
                     className="col-span-3"
                     placeholder="Enter department name"
                   />
@@ -497,15 +510,7 @@ function ManageDepartments() {
                   <label htmlFor="dept-supervisor" className="text-right font-medium text-sm">
                     Supervisor
                   </label>
-                  <Select
-                    value={createDeptForm.supervisorId}
-                    onValueChange={(v) =>
-                      setCreateDeptForm({
-                        ...createDeptForm,
-                        supervisorId: v,
-                      })
-                    }
-                  >
+                  <Select value={createDeptForm.supervisorId} onValueChange={(v) => setCreateDeptForm({ ...createDeptForm, supervisorId: v })}>
                     <SelectTrigger className="col-span-3">
                       <SelectValue placeholder="Select a supervisor" />
                     </SelectTrigger>
@@ -534,125 +539,72 @@ function ManageDepartments() {
         </div>
       </div>
 
-      {/* ================= SEARCH / FILTER ================= */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500"></div>
-        <CardHeader className="pb-2">
+        <div className="h-1 w-full bg-orange-500" />
+        <CardHeader className="pb-2 relative">
           <CardTitle className="flex items-center gap-2">
-            <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
-              <Search className="h-5 w-5" />
+            <div className="p-2 rounded-full bg-orange-500/10 text-orange-500">
+              <Filter className="h-5 w-5" />
             </div>
-            Search &amp; Filter
+            Table Controls
           </CardTitle>
-          <CardDescription>Find departments by name or supervisor</CardDescription>
+          <CardDescription>Choose columns, sort order, and apply filters</CardDescription>
+          <span className="absolute top-2 right-4 text-sm text-muted-foreground">
+            Showing {getDepartmentsProcessed().length} of {departments.length} departments
+          </span>
         </CardHeader>
-
         <CardContent>
-          <div className="flex flex-wrap gap-3 mb-4">
-            {/* filter name */}
-            <div className="flex-1 min-w-[200px]">
-              <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg:white/5">
-                <Search className="h-4 w-4 mr-2 text-muted-foreground" />
-                <Input
-                  placeholder="Filter by department name"
-                  value={filters.name}
-                  onChange={(e) => handleFilterChange("name", e.target.value)}
-                  className="border-0 h-8 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-                />
-              </div>
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Table:</span>
+              <MultiColumnSelect />
             </div>
-
-            {/* filter supervisor */}
-            <div className="flex-1 min-w-[200px]">
-              <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg:white/5">
-                <UserCheck className="h-4 w-4 mr-2 text-muted-foreground" />
-                <Input
-                  placeholder="Filter by supervisor name"
-                  value={filters.supervisor}
-                  onChange={(e) => handleFilterChange("supervisor", e.target.value)}
-                  className="border-0 h-8 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-                />
-              </div>
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Sort:</span>
+              {sortOptions.map(({ key, label }) => (
+                <TooltipProvider key={key} delayDuration={300}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setSortConfig({ key, direction: sortConfig.key === key && sortConfig.direction === "ascending" ? "descending" : "ascending" })
+                        }
+                        className={sortConfig.key === key ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
+                      >
+                        {label}
+                        {arrow(key)}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Sort by {label}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ))}
             </div>
-
-            {(filters.name || filters.supervisor) && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={clearAllFilters}
-                className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-              >
-                Clear Filters
-              </Button>
-            )}
-          </div>
-
-          <div className="flex justify-between items-center">
-            <div className="text-sm text-muted-foreground">
-              Showing {getDepartmentsProcessed().length} of {departments.length} departments
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Sort by:</span>
-
-              <TooltipProvider delayDuration={300}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => requestSort("id")}
-                      className={sortConfig.key === "id" ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
-                    >
-                      ID {arrow("id")}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Sort by department ID</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              <TooltipProvider delayDuration={300}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => requestSort("name")}
-                      className={sortConfig.key === "name" ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
-                    >
-                      Name {arrow("name")}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Sort by department name</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              <TooltipProvider delayDuration={300}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => requestSort("userCount")}
-                      className={sortConfig.key === "userCount" ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
-                    >
-                      Users {arrow("userCount")}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Sort by user count</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Filter:</span>
+              <MultiDepartmentSelect />
+              <MultiSupervisorSelect />
+              {(!filters.deptIds.includes("all") || !filters.supervisorIds.includes("all")) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearAllFilters}
+                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                >
+                  Clear Filters
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
-
-      {/* ================= TABLE ================= */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500"></div>
+        <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
-            <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
+            <div className="p-2 rounded-full bg-orange-500/10 text-orange-500">
               <Building className="h-5 w-5" />
             </div>
             Departments
@@ -665,19 +617,27 @@ function ManageDepartments() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="cursor-pointer" onClick={() => requestSort("id")}>
-                    <div className="flex items-center">ID {arrow("id")}</div>
-                  </TableHead>
-                  <TableHead className="cursor-pointer" onClick={() => requestSort("name")}>
-                    <div className="flex items-center">Department Name {arrow("name")}</div>
-                  </TableHead>
-                  <TableHead className="cursor-pointer" onClick={() => requestSort("supervisor")}>
-                    <div className="flex items-center">Supervisor {arrow("supervisor")}</div>
-                  </TableHead>
-                  <TableHead className="cursor-pointer" onClick={() => requestSort("userCount")}>
-                    <div className="flex items-center">User Count {arrow("userCount")}</div>
-                  </TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  {columnVisibility.includes("id") && (
+                    <TableHead className="cursor-pointer" onClick={() => requestSort("id")}>
+                      <div>ID {arrow("id")}</div>
+                    </TableHead>
+                  )}
+                  {columnVisibility.includes("name") && (
+                    <TableHead className="cursor-pointer" onClick={() => requestSort("name")}>
+                      <div>Department Name {arrow("name")}</div>
+                    </TableHead>
+                  )}
+                  {columnVisibility.includes("supervisor") && (
+                    <TableHead className="cursor-pointer" onClick={() => requestSort("supervisor")}>
+                      <div>Supervisor {arrow("supervisor")}</div>
+                    </TableHead>
+                  )}
+                  {columnVisibility.includes("userCount") && (
+                    <TableHead className="cursor-pointer" onClick={() => requestSort("userCount")}>
+                      <div>User Count {arrow("userCount")}</div>
+                    </TableHead>
+                  )}
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
 
@@ -685,13 +645,14 @@ function ManageDepartments() {
                 {loading ? (
                   [...Array(5)].map((_, i) => (
                     <TableRow key={i}>
-                      {Array(5)
-                        .fill(null)
-                        .map((__, j) => (
-                          <TableCell key={j}>
-                            <Skeleton className="h-6 w-full" />
-                          </TableCell>
-                        ))}
+                      {columnVisibility.map((__, j) => (
+                        <TableCell key={j}>
+                          <Skeleton className="h-6 w-full" />
+                        </TableCell>
+                      ))}
+                      <TableCell>
+                        <Skeleton className="h-6 w-full" />
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : getDepartmentsProcessed().length ? (
@@ -703,42 +664,25 @@ function ManageDepartments() {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, height: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                        className="border-b transition-colors hover:bg-muted/50"
                       >
-                        <TableCell className="font-mono text-orange-700 dark:text-orange-400">{dept.id}</TableCell>
-
-                        <TableCell className="font-medium">
-                          <div className="flex items-center">
-                            <div className="w-2 h-2 rounded-full bg-orange-500 mr-2"></div>
-                            <span className="capitalize">{dept.name}</span>
-                          </div>
-                        </TableCell>
-
+                        {columnVisibility.includes("id") && <TableCell className="text-xs">{dept.id}</TableCell>}
+                        {columnVisibility.includes("name") && <TableCell className="text-nowrap capitalize">{dept.name}</TableCell>}
+                        {columnVisibility.includes("supervisor") && (
+                          <TableCell className="text-nowrap">{dept.supervisorName || "No supervisor assigned"}</TableCell>
+                        )}
+                        {columnVisibility.includes("userCount") && (
+                          <TableCell>
+                            <Button variant="ghost" size="sm" onClick={() => openUsersModal(dept)}>
+                              <Badge className="bg-orange-500 hover:bg-orange-600 text-white">
+                                <Users className="h-3 w-3 mr-1" />
+                                {dept.totalUsers}
+                              </Badge>
+                            </Button>
+                          </TableCell>
+                        )}
                         <TableCell>
-                          {dept.supervisorName ? (
-                            <div className="flex items-center">
-                              <div className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center mr-2">
-                                <UserCheck className="h-4 w-4 text-orange-500" />
-                              </div>
-                              <span>{dept.supervisorName}</span>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">No supervisor assigned</span>
-                          )}
-                        </TableCell>
-
-                        <TableCell>
-                          <Button variant="ghost" size="sm" onClick={() => openUsersModal(dept)} className="p-0">
-                            <Badge className="bg-orange-500 hover:bg-orange-600 text-white">
-                              <Users className="h-3 w-3 mr-1" />
-                              {dept.totalUsers}
-                            </Badge>
-                          </Button>
-                        </TableCell>
-
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            {/* edit */}
+                          <div className="flex gap-1 justify-center">
                             <TooltipProvider delayDuration={300}>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -754,8 +698,6 @@ function ManageDepartments() {
                                 <TooltipContent>Edit department</TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
-
-                            {/* delete */}
                             <TooltipProvider delayDuration={300}>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -778,13 +720,13 @@ function ManageDepartments() {
                   </AnimatePresence>
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-32 text-center">
+                    <TableCell colSpan={columnVisibility.length + 1} className="h-32 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
                         <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                           <Building className="h-8 w-8 text-orange-500/50" />
                         </div>
                         <p>No departments found matching your filters</p>
-                        {(filters.name || filters.supervisor) && (
+                        {(!filters.deptIds.includes("all") || !filters.supervisorIds.includes("all")) && (
                           <Button variant="link" onClick={clearAllFilters} className="text-orange-500 hover:text-orange-600 mt-2">
                             Clear all filters
                           </Button>
@@ -798,11 +740,9 @@ function ManageDepartments() {
           </div>
         </CardContent>
       </Card>
-
-      {/* ================= USERS MODAL ================= */}
       <Dialog open={showUsersModal} onOpenChange={setShowUsersModal}>
         <DialogContent className="max-w-lg border-2 dark:border-white/10">
-          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
+          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Users className="h-5 w-5 text-orange-500" />
@@ -849,11 +789,9 @@ function ManageDepartments() {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* ================= EDIT MODAL ================= */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="border-2 dark:border:white/10">
-          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
+        <DialogContent className="border-2 dark:border-white/10">
+          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
@@ -872,12 +810,7 @@ function ManageDepartments() {
               <Input
                 id="edit-name"
                 value={editDeptForm.name}
-                onChange={(e) =>
-                  setEditDeptForm({
-                    ...editDeptForm,
-                    name: e.target.value,
-                  })
-                }
+                onChange={(e) => setEditDeptForm({ ...editDeptForm, name: e.target.value })}
                 className="col-span-3"
                 placeholder="Enter department name"
               />
@@ -887,15 +820,7 @@ function ManageDepartments() {
               <label htmlFor="edit-supervisor" className="text-right font-medium text-sm">
                 Supervisor
               </label>
-              <Select
-                value={editDeptForm.supervisorId}
-                onValueChange={(v) =>
-                  setEditDeptForm({
-                    ...editDeptForm,
-                    supervisorId: v,
-                  })
-                }
-              >
+              <Select value={editDeptForm.supervisorId} onValueChange={(v) => setEditDeptForm({ ...editDeptForm, supervisorId: v })}>
                 <SelectTrigger className="col-span-3">
                   <SelectValue placeholder="Select a supervisor" />
                 </SelectTrigger>
@@ -921,11 +846,9 @@ function ManageDepartments() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* ================= DELETE MODAL ================= */}
       <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
         <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
-          <div className="h-1 w-full bg-red-500 -mt-6 mb-4"></div>
+          <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="p-2 rounded-full bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400">
@@ -942,7 +865,7 @@ function ManageDepartments() {
             </p>
           </div>
 
-          <DialogFooter className="flex justify-between sm:justify-between">
+          <DialogFooter className="flex justify-between">
             <Button
               variant="outline"
               onClick={() => setShowDeleteModal(false)}

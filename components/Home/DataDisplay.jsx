@@ -1,3 +1,4 @@
+// components/Home/DataDisplay.jsx
 "use client";
 
 import { useState } from "react";
@@ -7,9 +8,7 @@ import { appData } from "@/lib/data";
 import { X, Smartphone, Download } from "lucide-react";
 
 function DataDisplay() {
-  // Track which QR code modal to show: 'app' or 'play'
   const [qrModalType, setQrModalType] = useState(null);
-
   const handleOpenQrModal = (type) => {
     setQrModalType(type);
   };
@@ -20,7 +19,6 @@ function DataDisplay() {
 
   return (
     <section className="relative w-full shadow-xl overflow-hidden bg-gradient-to-b from-red-600 via-orange-400 to-neutral-200 outline-none border-none">
-      {/* Main Content Container */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -28,7 +26,6 @@ function DataDisplay() {
         className="container mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-20"
       >
         <div className="flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-12">
-          {/* Left Content */}
           <motion.div
             initial={{ x: -50, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
@@ -55,15 +52,12 @@ function DataDisplay() {
                 Manage schedules, track hours, and stay on top of work. Try BizBuddy now!
               </motion.p>
             </div>
-
-            {/* Download Buttons with QR Modals */}
             <motion.div
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.8, duration: 0.6 }}
               className="flex flex-col md:flex-row items-center justify-center lg:justify-start lg:gap-4 gap-2 lg:pt-4 pt-2"
             >
-              {/* App Store button */}
               <Image
                 src="/download-app-store.png"
                 alt="Download on App Store"
@@ -72,8 +66,6 @@ function DataDisplay() {
                 className="w-20 sm:w-48 hover:scale-105 transition-transform cursor-pointer"
                 onClick={() => handleOpenQrModal("app")}
               />
-
-              {/* Play Store button */}
               <Image
                 src="/download-google-play.png"
                 alt="Get it on Google Play"
@@ -84,8 +76,6 @@ function DataDisplay() {
               />
             </motion.div>
           </motion.div>
-
-          {/* Right Content - Laptop Image */}
           <motion.div
             initial={{ x: 50, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
@@ -102,8 +92,6 @@ function DataDisplay() {
           </motion.div>
         </div>
       </motion.div>
-
-      {/* Stats Section */}
       <motion.div
         initial={{ opacity: 0, y: 50 }}
         animate={{ opacity: 1, y: 0 }}
@@ -127,8 +115,6 @@ function DataDisplay() {
           </div>
         </div>
       </motion.div>
-
-      {/* Improved QR Code Modal */}
       <AnimatePresence>
         {qrModalType && (
           <motion.div
@@ -147,7 +133,6 @@ function DataDisplay() {
               className="bg-white dark:bg-neutral-800 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Modal Header with gradient background */}
               <div className="bg-gradient-to-r from-red-600 to-orange-400 p-4 relative">
                 <button
                   onClick={handleCloseQrModal}
@@ -160,9 +145,7 @@ function DataDisplay() {
                 <p className="text-white/90 text-sm mt-1">Scan the QR code to download BizBuddy</p>
               </div>
 
-              {/* Modal Content */}
               <div className="p-6 flex flex-col md:flex-row items-center gap-6">
-                {/* QR Code with animated border */}
                 <div className="relative">
                   <motion.div
                     animate={{
@@ -180,8 +163,6 @@ function DataDisplay() {
                     />
                   </motion.div>
                 </div>
-
-                {/* Instructions */}
                 <div className="flex-1 space-y-4">
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-neutral-700 dark:text-neutral-200">
@@ -198,8 +179,6 @@ function DataDisplay() {
                     </div>
                     <p className="text-sm text-neutral-600 dark:text-neutral-400 pl-7">Tap the notification and follow the instructions to install</p>
                   </div>
-
-                  {/* Direct link option */}
                   <div className="pt-2">
                     <p className="text-sm text-neutral-500 dark:text-neutral-400">Or visit directly:</p>
                     <a
@@ -213,8 +192,6 @@ function DataDisplay() {
                   </div>
                 </div>
               </div>
-
-              {/* Footer with benefits */}
               <div className="bg-neutral-100 dark:bg-neutral-900 p-4 border-t border-neutral-200 dark:border-neutral-700">
                 <div className="flex flex-wrap gap-3 justify-center text-center">
                   <div className="text-xs text-neutral-600 dark:text-neutral-400 px-2">

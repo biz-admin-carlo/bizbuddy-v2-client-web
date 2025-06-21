@@ -1,10 +1,10 @@
-// app/(auth)/sign-in.page.jsx
+// app/(auth)/sign-in/page.jsx
 
 "use client";
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Crown, Shield, UserCheck, User } from "lucide-react";
+import { Crown, Shield, UserCheck, User, Eye, EyeOff } from "lucide-react";
 import useAuthStore from "@/store/useAuthStore";
 import Footer from "@/components/Partial/Footer";
 import { motion } from "framer-motion";
@@ -18,12 +18,16 @@ export default function SignInPage() {
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (e) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  // Step 1: Check email using the new endpoint
+  const togglePasswordVisibility = () => {
+    setShowPassword((prev) => !prev);
+  };
+
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -52,13 +56,11 @@ export default function SignInPage() {
     setLoading(false);
   };
 
-  // Step 2: User selects the company from the returned list.
   const handleCompanySelect = (companyId) => {
     setSelectedCompanyId(companyId);
     setError("");
   };
 
-  // Step 3: Sign in using email, password, and selected company.
   const handleSignInWithPassword = async (e) => {
     e.preventDefault();
     if (!formData.email || !formData.password || !selectedCompanyId) {
@@ -102,7 +104,7 @@ export default function SignInPage() {
 
   return (
     <motion.div
-      className="min-h-screen flex flex-col justify-between bg-gradient-to-b from-orange-50 to-white dark:from-neutral-950 dark:to-neutral-900"
+      className="min-h-screen flex flex-col justify-between bg-white dark:bg-black"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
@@ -118,7 +120,6 @@ export default function SignInPage() {
           <p className="text-neutral-600 dark:text-neutral-400 mt-2">Sign in to access your account</p>
         </motion.div>
 
-        {/* Progress indicator */}
         <motion.div className="max-w-md mx-auto mb-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
           <div className="flex items-center justify-center space-x-4">
             <div className={`w-3 h-3 rounded-full ${step === 1 ? "bg-orange-500" : "bg-green-500"}`}></div>
@@ -287,20 +288,29 @@ export default function SignInPage() {
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ duration: 0.3 }}
               >
-                <div>
+                <div className="relative">
+                  {" "}
                   <label htmlFor="password" className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                     Password
                   </label>
                   <input
                     id="password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     name="password"
                     placeholder="Enter your password"
                     value={formData.password}
                     onChange={handleChange}
-                    className="w-full p-3 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 outline-none focus:ring-2 focus:ring-orange-500/50 transition-all duration-200"
+                    className="w-full p-3 pr-10 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 outline-none focus:ring-2 focus:ring-orange-500/50 transition-all duration-200" // Add pr-10
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={togglePasswordVisibility}
+                    className="absolute right-3  transform translate-y-1/2 text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200" // Adjust top for centering
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-6 w-6" /> : <Eye className="h-6 w-6" />}
+                  </button>
                 </div>
                 <button
                   type="submit"

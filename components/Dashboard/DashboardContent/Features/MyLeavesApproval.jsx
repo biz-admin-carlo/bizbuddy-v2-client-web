@@ -1,14 +1,15 @@
+// components/Dashboard/DashboardContent/Features/MyLeavesApproval.jsx
+/* eslint-disable react-hooks/exhaustive-deps */
+
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { SortAsc, CheckCircle2, RefreshCw, Calendar, Clock, Filter, AlertCircle, XCircle, ChevronDown, Search, UserCheck, FileText } from "lucide-react";
+import { CheckCircle2, RefreshCw, Calendar, Clock, Filter, AlertCircle, XCircle, ChevronDown, ChevronUp, Search, UserCheck, FileText } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
 import { motion, AnimatePresence } from "framer-motion";
-
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,14 +39,21 @@ const formatDate = (d) =>
     minute: "2-digit",
   });
 
+const labelClass = "my-auto shrink-0 text-sm font-medium text-muted-foreground";
+
+const sortOptions = [
+  { key: "newest", label: "Newest first" },
+  { key: "oldest", label: "Oldest first" },
+  { key: "type", label: "Leave type" },
+  { key: "status", label: "Status" },
+];
+
 export default function MyLeavesApproval() {
   const { token } = useAuthStore();
-
   const [leaves, setLeaves] = useState([]);
   const [filterStatus, setFilterStatus] = useState("all");
   const [sortKey, setSortKey] = useState("newest");
   const [loading, setLoading] = useState(false);
-  const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   const fetchLeaves = useCallback(async () => {
@@ -80,25 +88,20 @@ export default function MyLeavesApproval() {
 
   const list = useMemo(() => {
     let l = [...leaves];
-
-    // Filter by status
     if (filterStatus !== "all") {
       l = l.filter((x) => x.status === filterStatus);
     }
-
-    // Filter by search query
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
+      const q = searchQuery.toLowerCase().trim();
       l = l.filter(
         (leave) =>
-          (leave.leaveType || "").toLowerCase().includes(query) ||
-          (leave.leaveReason || "").toLowerCase().includes(query) ||
-          (leave.approver?.email || "").toLowerCase().includes(query) ||
-          (leave.approverComments || "").toLowerCase().includes(query)
+          (leave.leaveType || "").toLowerCase().includes(q) ||
+          (leave.leaveReason || "").toLowerCase().includes(q) ||
+          (leave.approver?.email || "").toLowerCase().includes(q) ||
+          (leave.approverComments || "").toLowerCase().includes(q)
       );
     }
 
-    // Sort
     switch (sortKey) {
       case "oldest":
         l.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
@@ -127,44 +130,16 @@ export default function MyLeavesApproval() {
     </span>
   );
 
-  const SortDropdown = () => (
-    <DropdownMenu open={sortMenuOpen} onOpenChange={setSortMenuOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1 border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-        >
-          <SortAsc className="h-4 w-4" />
-          Sort
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
-        {[
-          { key: "newest", label: "Newest first" },
-          { key: "oldest", label: "Oldest first" },
-          { key: "type", label: "Leave type" },
-          { key: "status", label: "Status" },
-        ].map((opt) => (
-          <DropdownMenuItem key={opt.key} onSelect={() => setSortKey(opt.key)}>
-            {opt.label}
-            {sortKey === opt.key && <CheckCircle2 className="ml-auto h-4 w-4 text-orange-500" />}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-
   return (
-    <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
+    <div className="max-w-6xl mx-auto p-4 lg:px-10 px-2 space-y-8">
       <Toaster position="top-center" />
 
-      {/* header */}
+      {/* ── page header ───────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
             <Calendar className="h-7 w-7 text-orange-500" />
-            My Leave History
+            My Leave Approvals
           </h2>
           <p className="text-muted-foreground mt-1">View and track all your leave requests</p>
         </div>
@@ -178,7 +153,7 @@ export default function MyLeavesApproval() {
                   size="icon"
                   onClick={fetchLeaves}
                   disabled={loading}
-                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                  className="flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-black"
                 >
                   <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                 </Button>
@@ -188,13 +163,9 @@ export default function MyLeavesApproval() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <SortDropdown />
         </div>
       </div>
-
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Total Requests */}
         <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
           <div className="h-1 w-full bg-orange-500"></div>
           <CardHeader className="pb-2">
@@ -214,13 +185,11 @@ export default function MyLeavesApproval() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Pending */}
         <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-          <div className="h-1 w-full bg-amber-500"></div>
+          <div className="h-1 w-full bg-orange-500"></div>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
-              <div className="p-2 rounded-full bg-amber-500/10 text-amber-500 dark:bg-amber-500/20 dark:text-amber-500">
+              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
                 <Clock className="h-4 w-4" />
               </div>
               Pending
@@ -230,18 +199,16 @@ export default function MyLeavesApproval() {
             <div className="flex items-center justify-between">
               <div className="text-3xl font-bold">{leaves.filter((l) => l.status === "pending").length}</div>
               <div className="p-3 rounded-full bg-black/5 dark:bg-white/5">
-                <Clock className="h-5 w-5 text-amber-500" />
+                <Clock className="h-5 w-5 text-orange-500" />
               </div>
             </div>
           </CardContent>
         </Card>
-
-        {/* Approved */}
         <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-          <div className="h-1 w-full bg-green-500"></div>
+          <div className="h-1 w-full bg-orange-500"></div>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
-              <div className="p-2 rounded-full bg-green-500/10 text-green-500 dark:bg-green-500/20 dark:text-green-500">
+              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
                 <CheckCircle2 className="h-4 w-4" />
               </div>
               Approved
@@ -251,27 +218,50 @@ export default function MyLeavesApproval() {
             <div className="flex items-center justify-between">
               <div className="text-3xl font-bold">{leaves.filter((l) => l.status === "approved").length}</div>
               <div className="p-3 rounded-full bg-black/5 dark:bg-white/5">
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                <CheckCircle2 className="h-5 w-5 text-orange-500" />
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
-
-      {/* filters and search */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500"></div>
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-2 relative">
           <CardTitle className="flex items-center gap-2">
             <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
               <Filter className="h-5 w-5" />
             </div>
-            Filters
+            Table Controls
           </CardTitle>
-          <CardDescription>Filter leave history by status or search by type, reason, or comments</CardDescription>
+          <CardDescription>Filter and sort your leave history</CardDescription>
+          <span className="absolute top-2 right-4 text-sm text-muted-foreground">
+            Showing {list.length} of {leaves.length} leave requests
+          </span>
         </CardHeader>
+
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3 items-center">
+            <span className={labelClass}>Sort:</span>
+            {sortOptions.map((opt) => (
+              <Button
+                key={opt.key}
+                size="sm"
+                variant="outline"
+                onClick={() => setSortKey(opt.key)}
+                className={sortKey === opt.key ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
+              >
+                {opt.label}
+                {sortKey === opt.key && (
+                  <>
+                    {opt.key === "newest" && <ChevronDown className="ml-1 h-4 w-4" />}
+                    {opt.key === "oldest" && <ChevronUp className="ml-1 h-4 w-4" />}
+                  </>
+                )}
+              </Button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-3 items-center">
+            <span className={labelClass}>Filter:</span>
             {["all", "pending", "approved", "rejected"].map((s) => (
               <Button
                 key={s}
@@ -280,7 +270,7 @@ export default function MyLeavesApproval() {
                 className={`capitalize ${
                   filterStatus === s
                     ? "bg-orange-500 hover:bg-orange-600 text-white"
-                    : "border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                    : "border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950"
                 }`}
                 onClick={() => setFilterStatus(s)}
               >
@@ -292,43 +282,14 @@ export default function MyLeavesApproval() {
               </Button>
             ))}
           </div>
-
-          <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg-white/5">
-            <Search className="h-4 w-4 mr-2 text-muted-foreground" />
-            <Input
-              placeholder="Search by leave type, reason, or comments..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="border-0 h-8 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-            />
-            {searchQuery && (
-              <Button variant="ghost" size="icon" onClick={() => setSearchQuery("")} className="h-6 w-6 p-0 text-muted-foreground">
-                <XCircle className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-
-          <div className="flex justify-between items-center text-sm text-muted-foreground">
-            <span>
-              Showing {list.length} of {leaves.length} leave requests
-            </span>
-            <span>
-              {filterStatus !== "all" && (
-                <Badge variant="outline" className="ml-2">
-                  Filtered by: {filterStatus}
-                </Badge>
-              )}
-              {searchQuery && (
-                <Badge variant="outline" className="ml-2">
-                  Search: "{searchQuery}"
-                </Badge>
-              )}
-            </span>
-          </div>
+          {(filterStatus !== "all" || searchQuery) && (
+            <div className="flex flex-wrap gap-2 items-center text-sm text-muted-foreground">
+              {filterStatus !== "all" && <Badge variant="outline">Filtered by: {filterStatus}</Badge>}
+              {searchQuery && <Badge variant="outline">Search: &quot;{searchQuery}&quot;</Badge>}
+            </div>
+          )}
         </CardContent>
       </Card>
-
-      {/* table */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500"></div>
         <CardHeader className="pb-2">
@@ -340,6 +301,7 @@ export default function MyLeavesApproval() {
           </CardTitle>
           <CardDescription>View details of all your leave requests</CardDescription>
         </CardHeader>
+
         <CardContent className="p-0">
           <div className="rounded-md border">
             <Table>
@@ -348,6 +310,7 @@ export default function MyLeavesApproval() {
                   <TableHead className="cursor-pointer" onClick={() => setSortKey("type")}>
                     <div className="flex items-center gap-1">Leave Type {sortKey === "type" && <ChevronDown className="h-4 w-4" />}</div>
                   </TableHead>
+
                   <TableHead className="cursor-pointer" onClick={() => setSortKey(sortKey === "newest" ? "oldest" : "newest")}>
                     <div className="flex items-center gap-1">
                       Date Range{" "}
@@ -372,24 +335,13 @@ export default function MyLeavesApproval() {
                     .fill(0)
                     .map((_, i) => (
                       <TableRow key={i}>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-20" />
-                        </TableCell>
+                        {Array(6)
+                          .fill(0)
+                          .map((__, j) => (
+                            <TableCell key={j}>
+                              <Skeleton className="h-6 w-full" />
+                            </TableCell>
+                          ))}
                       </TableRow>
                     ))
                 ) : list.length ? (
@@ -408,6 +360,7 @@ export default function MyLeavesApproval() {
                             {l.leaveType}
                           </Badge>
                         </TableCell>
+
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center">
@@ -420,6 +373,7 @@ export default function MyLeavesApproval() {
                             </div>
                           </div>
                         </TableCell>
+
                         <TableCell>
                           <div className="max-w-xs truncate">
                             {l.leaveReason ? (
@@ -429,6 +383,7 @@ export default function MyLeavesApproval() {
                             )}
                           </div>
                         </TableCell>
+
                         <TableCell>
                           <div className="flex items-center">
                             <div className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center mr-2">
@@ -437,6 +392,7 @@ export default function MyLeavesApproval() {
                             {l.approver?.email || l.approverId || "—"}
                           </div>
                         </TableCell>
+
                         <TableCell>
                           <div className="max-w-xs truncate">
                             {l.approverComments ? (
@@ -446,6 +402,7 @@ export default function MyLeavesApproval() {
                             )}
                           </div>
                         </TableCell>
+
                         <TableCell>
                           <StatusBadge status={l.status} />
                         </TableCell>
@@ -480,6 +437,7 @@ export default function MyLeavesApproval() {
             </Table>
           </div>
         </CardContent>
+
         <CardFooter className="text-xs text-muted-foreground text-center pt-4 pb-6 justify-center">
           Showing {list.length} {list.length === 1 ? "record" : "records"}
           {filterStatus !== "all" && ` filtered by "${filterStatus}" status`}

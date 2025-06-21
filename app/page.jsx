@@ -1,4 +1,4 @@
-// File: biz-web-app/app/page.jsx
+// app/page.jsx
 
 "use client";
 

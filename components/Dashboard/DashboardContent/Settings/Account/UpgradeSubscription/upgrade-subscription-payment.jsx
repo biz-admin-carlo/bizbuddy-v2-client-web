@@ -1,3 +1,4 @@
+// components/Dashboard/DashboardContent/Settings/Account/UpgradeSubscription/upgrade-subscription-payment.jsx
 "use client";
 
 import { useState } from "react";
@@ -11,7 +12,6 @@ import { motion } from "framer-motion";
 import { CreditCard, CheckCircle2, ShieldCheck, AlertCircle, Building, Sparkles, LockKeyhole } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-// Load your Stripe publishable key from env
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
 function PaymentForm({ plan, onPaymentSuccess }) {
@@ -28,7 +28,6 @@ function PaymentForm({ plan, onPaymentSuccess }) {
     setProcessing(true);
     setError(null);
 
-    // Bypass Stripe if the plan is free (price is 0 or less)
     if (plan.price <= 0) {
       try {
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/subscriptions/upgrade`, {
@@ -59,7 +58,6 @@ function PaymentForm({ plan, onPaymentSuccess }) {
       return;
     }
 
-    // Continue with Stripe payment flow for paid plans
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/payments/create-upgrade-payment-intent`, {
         method: "POST",

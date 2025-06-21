@@ -1,10 +1,10 @@
+// components/Home/FeaturesIcon.jsx
 "use client";
 
 import { motion, useMotionValue, useTransform, animate } from "framer-motion";
 import { useEffect, useState } from "react";
 import { features } from "@/lib/data";
 
-// Adjust as needed
 const CARD_SPACING = 150;
 const ROTATION_ANGLE = 25;
 
@@ -12,12 +12,9 @@ export default function FeaturesIcon() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
-
-  // Slight container rotation with framer-motion
   const rotationY = useMotionValue(0);
   const containerRotation = useTransform(rotationY, [-200, 200], [-5, 5]);
 
-  // Helpers
   const getCircularIndices = () => {
     const result = [];
     const total = features.length;
@@ -27,21 +24,15 @@ export default function FeaturesIcon() {
     return result;
   };
 
-  // Animate cards on first mount
   useEffect(() => {
     features.forEach((_, index) => {
       const element = document.getElementById(`feature-${index}`);
       if (element) {
-        animate(
-          element,
-          { opacity: [0, 1], y: [100, 0], scale: [0.5, 1] },
-          { duration: 0.6, delay: index * 0.1, ease: "easeOut" }
-        );
+        animate(element, { opacity: [0, 1], y: [100, 0], scale: [0.5, 1] }, { duration: 0.6, delay: index * 0.1, ease: "easeOut" });
       }
     });
   }, []);
 
-  // ------------------ DRAG LOGIC ------------------
   const handleTouchStart = (e) => {
     setIsDragging(true);
     setStartX(e.touches[0].clientX);
@@ -58,11 +49,8 @@ export default function FeaturesIcon() {
     const diff = startX - currentX;
 
     if (Math.abs(diff) > 50) {
-      // threshold for dragging
       const direction = diff > 0 ? 1 : -1;
-      setActiveIndex(
-        (prev) => (prev + direction + features.length) % features.length
-      );
+      setActiveIndex((prev) => (prev + direction + features.length) % features.length);
       setIsDragging(false);
     }
   };
@@ -71,25 +59,18 @@ export default function FeaturesIcon() {
     setIsDragging(false);
   };
 
-  // ------------------ CLICK LOGIC (LEFT / RIGHT) ------------------
   const handleContainerClick = (e) => {
-    // If the user was dragging, ignore the click
     if (isDragging) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
     const midX = rect.left + rect.width / 2;
-
-    // Click on left half => move "active" to the right (index - 1)
     if (e.clientX < midX) {
       setActiveIndex((prev) => (prev - 1 + features.length) % features.length);
-    }
-    // Right half => move "active" to the left (index + 1)
-    else {
+    } else {
       setActiveIndex((prev) => (prev + 1) % features.length);
     }
   };
 
-  // Returns the style for each card based on distance from the "active" center
   const getCardStyle = (index) => {
     const circularIndices = getCircularIndices();
     const currentPosition = circularIndices.indexOf(index);
@@ -97,8 +78,7 @@ export default function FeaturesIcon() {
 
     let distance = currentPosition - centerPosition;
     if (Math.abs(distance) > features.length / 2) {
-      distance =
-        distance > 0 ? distance - features.length : distance + features.length;
+      distance = distance > 0 ? distance - features.length : distance + features.length;
     }
 
     const scale = 1 - Math.abs(distance) * 0.1;
@@ -133,11 +113,7 @@ export default function FeaturesIcon() {
       onMouseLeave={handleDragEnd}
       onClick={handleContainerClick}
     >
-      <motion.div
-        className="flex items-center justify-center w-full h-full"
-        // Slight tilt to the container
-        style={{ rotateX: 10, rotateY: containerRotation }}
-      >
+      <motion.div className="flex items-center justify-center w-full h-full" style={{ rotateX: 10, rotateY: containerRotation }}>
         <div className="relative flex items-center justify-center">
           {features.map((feature, i) => {
             const style = getCardStyle(i);
@@ -164,7 +140,6 @@ export default function FeaturesIcon() {
                 initial={{ opacity: 0, y: 100, scale: 0.5 }}
               >
                 <motion.div
-                  // Card width / height changes with breakpoints
                   className="
                     w-56 h-72 sm:w-64 sm:h-80 md:w-72 md:h-96
                     rounded-xl shadow-xl
@@ -175,19 +150,11 @@ export default function FeaturesIcon() {
                   whileHover={{ scale: 1.05 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <motion.div
-                    whileHover={{ rotate: 360, scale: 1.2 }}
-                    transition={{ duration: 0.5 }}
-                    className="mb-6"
-                  >
+                  <motion.div whileHover={{ rotate: 360, scale: 1.2 }} transition={{ duration: 0.5 }} className="mb-6">
                     <feature.icon className="w-16 h-16 sm:w-20 sm:h-20" />
                   </motion.div>
-                  <p className="text-lg sm:text-xl font-medium text-center px-6">
-                    {feature.name}
-                  </p>
-                  <p className="mt-4 text-xs sm:text-sm text-center px-8 opacity-80">
-                    {feature.description || "Feature description goes here"}
-                  </p>
+                  <p className="text-lg sm:text-xl font-medium text-center px-6">{feature.name}</p>
+                  <p className="mt-4 text-xs sm:text-sm text-center px-8 opacity-80">{feature.description || "Feature description goes here"}</p>
                 </motion.div>
               </motion.div>
             );
