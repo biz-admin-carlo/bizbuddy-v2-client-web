@@ -2,11 +2,13 @@
 
 import ManageLeaveRequests from "@/components/Dashboard/DashboardContent/Settings/Admin/ManageLeaveRequests";
 import React from "react";
+import { Suspense } from "react";
+export const dynamic = "force-dynamic";
 
 export default function ManageLeaveRequestsPage() {
   return (
-    <div>
+    <Suspense fallback={<div className="p-6 text-center">Loading leave requests…</div>}>
       <ManageLeaveRequests />
-    </div>
+    </Suspense>
   );
 }
