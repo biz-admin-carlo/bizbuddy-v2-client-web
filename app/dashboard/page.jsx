@@ -1,10 +1,12 @@
-// File: biz-web-app/app/dashboard/page.jsx
+// app/dashboard/page.jsx
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Loader2, ArrowRight } from "lucide-react";
+
+export const dynamic = "force-dynamic";
 
 export default function DashboardHome() {
   const router = useRouter();

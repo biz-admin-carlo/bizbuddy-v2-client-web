@@ -11,6 +11,8 @@ import { MenuIcon, DoorClosedIcon as CloseIcon, Bell, Search } from "lucide-reac
 import useAuthStore from "@/store/useAuthStore";
 import Sidebar from "@/components/Dashboard/sidebar";
 
+export const dynamic = "force-dynamic";
+
 export default function DashboardLayout({ children }) {
   const { token, login } = useAuthStore();
   const router = useRouter();
@@ -75,7 +77,6 @@ export default function DashboardLayout({ children }) {
   return (
     <Suspense fallback={<DashboardSkeleton />}>
       <div className="min-h-screen bg-gradient-to-br from-neutral-50 via-white to-neutral-100 dark:from-neutral-900 dark:via-neutral-900 dark:to-neutral-900">
-        {/* Mobile Header */}
         <motion.header
           initial={{ y: -100 }}
           animate={{ y: 0 }}
