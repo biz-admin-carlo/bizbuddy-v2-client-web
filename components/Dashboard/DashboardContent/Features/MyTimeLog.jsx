@@ -1151,22 +1151,12 @@ const ScheduleDialog = ({ open, onOpenChange, scheduleList }) => (
                   <div className="text-sm">
                     <strong>Shift:</strong> <span className="capitalize">{s.shift?.shiftName || "—"}</span>
                   </div>
-
-                  <div className="text-sm grid grid-cols-2 gap-2">
-                    <span>
-                      <strong>Start (Local):</strong> {s.shift?.startTime ? fmtUTC(s.shift.startTime) : "—"}
-                    </span>
-                    <span>
-                      <strong>Start (UTC):</strong> {s.shift?.startTime ? fmtLocal(s.shift.startTime) : "—"}
-                    </span>
-                    <span>
-                      <strong>End (Local):</strong> {s.shift?.endTime ? fmtUTC(s.shift.endTime) : "—"}
-                    </span>
-                    <span>
-                      <strong>End (UTC):</strong> {s.shift?.endTime ? fmtLocal(s.shift.endTime) : "—"}
-                    </span>
+                  <div>
+                    <strong>Start</strong> {s.shift?.startTime ? fmtUTC(s.shift.startTime) : "—"}
                   </div>
-
+                  <div>
+                    <strong>End</strong> {s.shift?.endTime ? fmtUTC(s.shift.endTime) : "—"}
+                  </div>
                   <div className="text-sm">
                     <strong>Duration:</strong> {durationStr}
                   </div>

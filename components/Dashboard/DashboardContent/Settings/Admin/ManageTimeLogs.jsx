@@ -91,7 +91,7 @@ function ManageTimelogs() {
   });
 
   const [sortConfig, setSortConfig] = useState({
-    key: "duration",
+    key: "dateTimeIn",
     direction: "descending",
   });
 
@@ -934,19 +934,11 @@ function ScheduleDialog({ open, onOpenChange, scheduleList }) {
                     <div>
                       <strong>Shift:</strong> <span className="capitalize">{s.shift?.shiftName || "—"}</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <span>
-                        <strong>Start (UTC):</strong> {s.shift?.startTime ? fmtUTCTime(s.shift.startTime) : "—"}
-                      </span>
-                      <span>
-                        <strong>Start (LOCAL):</strong> {s.shift?.startTime ? fmtLocalTime(s.shift.startTime) : "—"}
-                      </span>
-                      <span>
-                        <strong>End (UTC):</strong> {s.shift?.endTime ? fmtUTCTime(s.shift.endTime) : "—"}
-                      </span>
-                      <span>
-                        <strong>End (LOCAL):</strong> {s.shift?.endTime ? fmtLocalTime(s.shift.endTime) : "—"}
-                      </span>
+                    <div>
+                      <strong>Start:</strong> {s.shift?.startTime ? fmtUTCTime(s.shift.startTime) : "—"}
+                    </div>
+                    <div>
+                      <strong>End:</strong> {s.shift?.endTime ? fmtUTCTime(s.shift.endTime) : "—"}
                     </div>
                     <div>
                       <strong>Duration:</strong> {durationStr}
