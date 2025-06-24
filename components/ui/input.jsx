@@ -9,12 +9,14 @@ const Input = React.forwardRef(({ className, type, ...props }, ref) => (
     type={type}
     ref={ref}
     className={cn(
-      "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-orange-500 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:border-neutral-700",
+      "w-full h-9 px-3 py-2 text-base bg-transparent placeholder:text-muted-foreground shadow-sm disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+      "rounded-lg border border-neutral-200 dark:border-neutral-800 focus:outline-none focus:ring-0 focus:border-orange-500 dark:focus:border-orange-500 focus:border-2",
       className
     )}
     {...props}
   />
 ));
+
 Input.displayName = "Input";
 
 export { Input };

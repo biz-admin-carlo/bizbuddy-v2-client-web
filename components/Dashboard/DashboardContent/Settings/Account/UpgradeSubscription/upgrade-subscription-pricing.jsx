@@ -147,7 +147,7 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
                     isPro ? "border-orange-500/50" : ""
                   }`}
                 >
-                  <div className={`h-1 w-full ${isPro ? "bg-orange-500" : "bg-gray-200 dark:bg-gray-700"}`}></div>
+                  <div className={`h-1 w-full ${isPro ? "bg-orange-500" : "bg-neutral-200 dark:bg-neutral-700"}`}></div>
                   <CardHeader className="pb-4">
                     <div className="flex justify-between items-center mb-2">
                       <CardTitle className="flex items-center text-xl">

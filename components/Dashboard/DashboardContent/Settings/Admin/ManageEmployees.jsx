@@ -313,13 +313,13 @@ export default function ManageEmployees() {
   const RoleBadge = ({ role }) => {
     switch ((role || "").toLowerCase()) {
       case "superadmin":
-        return <Badge className="bg-red-500 hover:bg-red-600 text-gray-800">Superadmin</Badge>;
+        return <Badge className="bg-red-500 hover:bg-red-600 text-neutral-800">Superadmin</Badge>;
       case "admin":
-        return <Badge className="bg-orange-500 hover:bg-orange-600 text-gray-800">Admin</Badge>;
+        return <Badge className="bg-orange-500 hover:bg-orange-600 text-neutral-800">Admin</Badge>;
       case "supervisor":
-        return <Badge className="bg-yellow-500 hover:bg-yellow-600 text-gray-800">Supervisor</Badge>;
+        return <Badge className="bg-yellow-500 hover:bg-yellow-600 text-neutral-800">Supervisor</Badge>;
       default:
-        return <Badge className="bg-teal-500 hover:bg-teal-600 text-gray-800">Employee</Badge>;
+        return <Badge className="bg-teal-500 hover:bg-teal-600 text-neutral-800">Employee</Badge>;
     }
   };
 
@@ -826,7 +826,7 @@ export default function ManageEmployees() {
       </Card>
 
       {/* employees table card */}
-      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10 text-gray-700 dark:text-gray-400">
+      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10 text-neutral-700 dark:text-neutral-400">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
@@ -918,7 +918,7 @@ export default function ManageEmployees() {
                     <TableRow key={i}>
                       {columnVisibility.map((c, j) => (
                         <TableCell key={j}>
-                          <Skeleton className="h-6 w-full bg-gray-200 dark:bg-gray-700" />
+                          <Skeleton className="h-6 w-full bg-neutral-200 dark:bg-neutral-700" />
                         </TableCell>
                       ))}
                     </TableRow>
@@ -934,7 +934,7 @@ export default function ManageEmployees() {
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, height: 0 }}
                           transition={{ duration: 0.2 }}
-                          className="border-b transition-colors hover:bg-muted/50 dark:hover:bg-gray-800/50"
+                          className="border-b transition-colors hover:bg-muted/50 dark:hover:bg-neutral-800/50"
                         >
                           {columnVisibility.includes("id") && <TableCell className="text-nowrap text-center text-sm">{emp.id}</TableCell>}
                           {columnVisibility.includes("employeeId") && (
@@ -1008,7 +1008,7 @@ export default function ManageEmployees() {
                   <TableRow>
                     <TableCell colSpan={columnVisibility.length} className="h-24 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
-                        <div className="w-16 h-16 bg-gray-200/5 dark:bg-gray-700/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <div className="w-16 h-16 bg-neutral-200/5 dark:bg-neutral-700/10 rounded-full flex items-center justify-center mx-auto mb-4">
                           <Users className="h-8 w-8 text-orange-500/50" />
                         </div>
                         <p className="text-sm">No employees match your filters.</p>
@@ -1035,7 +1035,7 @@ export default function ManageEmployees() {
       {/* ───────── dialogs & CSV guide, unchanged logic ───────── */}
       {/* create dialog */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="border-2 dark:border-white/10 dark:bg-gray-800/90">
+        <DialogContent className="border-2 dark:border-white/10 dark:bg-neutral-800/90">
           <div className="h-1 w-full bg-orange-500 -mt-4 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1149,7 +1149,7 @@ export default function ManageEmployees() {
 
       {/* edit dialog */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-md border-2 shadow-md dark:border-gray-800/30">
+        <DialogContent className="max-w-md border-2 shadow-md dark:border-neutral-800/30">
           <div className="h-1 w-full bg-orange-500 -mt-4 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1289,7 +1289,7 @@ export default function ManageEmployees() {
 
       {/* CSV import summary dialog */}
       <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-        <DialogContent className="max-w-md border-2 dark:border-gray-800/10 border-white">
+        <DialogContent className="max-w-md border-2 dark:border-neutral-800/10 border-white">
           <div className="h-1 w-full bg-orange-500 -mt-4 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1305,7 +1305,7 @@ export default function ManageEmployees() {
                 </span>
                 <span className="text-sm font-medium">{Math.round((importReport.processed / importReport.total) * 100)}%</span>
               </div>
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+              <div className="w-full bg-neutral-200 dark:bg-neutral-700 rounded-full h-2">
                 <div
                   className="bg-orange-500 h-2 rounded-full transition-all duration-300"
                   style={{
@@ -1358,7 +1358,7 @@ export default function ManageEmployees() {
 
       {/* CSV guide dialog */}
       <Dialog open={showInfoDialog} onOpenChange={setShowInfoDialog}>
-        <DialogContent className="max-w-lg border-2 dark:border-gray-800/10 dark:bg-gray-800/10">
+        <DialogContent className="max-w-lg border-2 dark:border-neutral-800/10 dark:bg-neutral-800/10">
           <div className="h-1 w-full bg-orange-500 -mt-4 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1370,7 +1370,7 @@ export default function ManageEmployees() {
             Your CSV <code>.csv</code> file must include the <strong>exact</strong> headers below. <br />
             <em>departmentId</em>, <em>employeeId</em>, and <em>hireDate</em> are optional; leave blank if not used.
           </p>
-          <pre className="bg-gray-100 dark:bg-gray-700/10 p-4 rounded-md text-sm font-mono overflow-x-auto">{CSV_TEMPLATE}</pre>
+          <pre className="bg-neutral-100 dark:bg-neutral-700/10 p-4 rounded-md text-sm font-mono overflow-x-auto">{CSV_TEMPLATE}</pre>
           <DialogFooter>
             <Button
               variant="outline"
@@ -1385,7 +1385,7 @@ export default function ManageEmployees() {
                 a.click();
                 URL.revokeObjectURL(url);
               }}
-              className="bg-gray-50 hover:bg-gray-100 dark:bg-gray-800/20 dark:hover:bg-gray-800/10"
+              className="bg-neutral-50 hover:bg-neutral-100 dark:bg-neutral-800/20 dark:hover:bg-neutral-800/10"
             >
               Download Sample CSV
             </Button>

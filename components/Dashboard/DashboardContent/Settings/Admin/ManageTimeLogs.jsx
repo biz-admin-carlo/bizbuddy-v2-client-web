@@ -642,7 +642,7 @@ function ManageTimelogs() {
         </CardContent>
       </Card>
 
-      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10 text-gray-600 dark:text-gray-300">
+      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10 text-neutral-600 dark:text-neutral-300">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2 flex justify-between items-start">
           <div>

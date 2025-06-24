@@ -218,13 +218,10 @@ function ManageLeaveRequests() {
     setSelectedLeave(null);
   }
 
-  /* -------------------------------------------- */
-  /* table helpers                                */
-  /* -------------------------------------------- */
   const StatusBadge = ({ status }) => (
     <span
       className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
-        statusColors[status] || "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
+        statusColors[status] || "bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-300"
       }`}
     >
       {statusIcons[status]}

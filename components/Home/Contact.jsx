@@ -42,7 +42,7 @@ export default function Contact() {
       <div className="flex flex-col items-center w-full mt-10">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
           <motion.div variants={itemVariants}>
-            <Card className="rounded-xl p-2 border-none shadow-xl bg-white dark:bg-neutral-800 h-full">
+            <Card className="rounded-xl p-2 border-none shadow-xl  h-full">
               <CardHeader>
                 <h3 className="flex items-center text-xl sm:text-2xl font-bold dark:text-neutral-200 text-neutral-800">
                   <MdOutlineContactSupport className="mr-2 text-orange-500" />
@@ -77,22 +77,8 @@ export default function Contact() {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  <Input
-                    id="subject"
-                    placeholder="Subject"
-                    value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                    className=" p-2 pl-3 bg-white dark:bg-neutral-800 "
-                    required
-                  />
-                  <Textarea
-                    id="message"
-                    placeholder="Your message"
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    className="bg-white dark:bg-neutral-800"
-                    required
-                  />
+                  <Input id="subject" placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} className="  " required />
+                  <Textarea id="message" placeholder="Your message" value={message} onChange={(e) => setMessage(e.target.value)} className="" required />
                   <Button
                     type="submit"
                     className="py-3 px-4 w-full font-semibold text-white rounded-lg text-sm bg-gradient-to-r from-orange-500 to-orange-600"

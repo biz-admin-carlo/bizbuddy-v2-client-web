@@ -122,7 +122,7 @@ export default function MyLeavesApproval() {
   const StatusBadge = ({ status }) => (
     <span
       className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
-        statusColors[status] || "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
+        statusColors[status] || "bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-300"
       }`}
     >
       {statusIcons[status]}
@@ -134,7 +134,6 @@ export default function MyLeavesApproval() {
     <div className="max-w-6xl mx-auto p-4 lg:px-10 px-2 space-y-8">
       <Toaster position="top-center" />
 
-      {/* ── page header ───────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
