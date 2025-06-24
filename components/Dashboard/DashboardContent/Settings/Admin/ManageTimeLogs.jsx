@@ -268,7 +268,9 @@ function ManageTimelogs() {
           const schedDur = diffMins(shiftStart.toISOString(), shiftEnd.toISOString());
           lateMins = t.timeIn && new Date(t.timeIn) > shiftStart ? diffMins(shiftStart.toISOString(), t.timeIn) : 0;
 
-          workInside = Math.max(0, schedDur - lateMins - lunchDeduct - excessCoffeeMins);
+          const insideRaw = Math.max(0, schedDur - lateMins - lunchDeduct - excessCoffeeMins);
+          workInside = Math.min(insideRaw, netMins);
+
           rawOtMins = t.timeOut && new Date(t.timeOut) > shiftEnd ? diffMins(shiftEnd.toISOString(), t.timeOut) : 0;
         } else {
           workInside = Math.min(netMins, effectiveCapUnscheduled);

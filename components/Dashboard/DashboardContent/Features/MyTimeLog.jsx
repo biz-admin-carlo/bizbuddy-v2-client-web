@@ -3,7 +3,7 @@
 "use client";
 
 import { Clock, Calendar, Download, Filter, RefreshCw, ChevronUp, ChevronDown, Trash2, Send } from "lucide-react";
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import useAuthStore from "@/store/useAuthStore";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -377,12 +377,11 @@ export default function MyTimeLog() {
       const coffeeMinsTotal = log.coffeeBreaks.reduce((m, b) => (b.start && b.end ? m + diffMins(b.start, b.end) : m), 0);
       const excessCoffeeMins = Math.max(0, coffeeMinsTotal - 30);
       const lunchMins = minLunchMins ? Math.max(log._lunchNum, minLunchMins) : log._lunchNum;
+      const netMins = Math.max(0, grossMins - lunchMins - excessCoffeeMins);
       const fullDevIn = getDevice(log, "in");
       const fullDevOut = getDevice(log, "out");
 
       if (scheduleList.length === 0) {
-        const netMins = grossMins - lunchMins - excessCoffeeMins;
-
         const inside = Math.min(netMins, unschedCap);
         const rawOtMins = Math.max(0, netMins - unschedCap);
 
@@ -416,7 +415,9 @@ export default function MyTimeLog() {
       const schedDur = diffMins(shiftStart, shiftEnd);
       const lateMins = log.timeIn && new Date(log.timeIn) > shiftStart ? diffMins(shiftStart, log.timeIn) : 0;
 
-      const insideWork = Math.max(0, schedDur - lateMins - lunchMins - excessCoffeeMins);
+      const insideRaw = Math.max(0, schedDur - lateMins - lunchMins - excessCoffeeMins);
+      const insideWork = Math.min(insideRaw, netMins);
+
       const rawOtMins = log.timeOut && new Date(log.timeOut) > shiftEnd ? diffMins(shiftEnd, log.timeOut) : 0;
 
       const approvedRec = (log.overtime || []).find((o) => o.status === "approved");
