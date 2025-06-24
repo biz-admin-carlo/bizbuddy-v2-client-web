@@ -2,17 +2,17 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-import { useEffect, useState } from "react";
-import { PlusCircle, Edit3, Trash2, ChevronUp, ChevronDown, Search, Clock, AlertCircle, RefreshCw, XCircle, Filter } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { PlusCircle, Edit3, Trash2, ChevronUp, ChevronDown, Clock, RefreshCw, Filter } from "lucide-react";
+import Link from "next/link";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -45,6 +45,16 @@ const totalHours = (startISO, endISO) => {
   return (diff / 36e5).toFixed(2);
 };
 
+const columnOptions = [
+  { value: "shiftName", label: "Shift Name" },
+  { value: "startTime", label: "Start" },
+  { value: "endTime", label: "End" },
+  { value: "differentialMultiplier", label: "Multiplier" },
+  { value: "totalHours", label: "Total hrs" },
+  { value: "createdAt", label: "Created At" },
+  { value: "updatedAt", label: "Updated At" },
+];
+
 function ManageShifts() {
   const { token } = useAuthStore();
   const API = process.env.NEXT_PUBLIC_API_URL;
@@ -75,10 +85,13 @@ function ManageShifts() {
   const [actionLoading, setActionLoading] = useState(false);
 
   const [filters, setFilters] = useState({ name: "" });
+
   const [sortConfig, setSortConfig] = useState({
     key: "shiftName",
     direction: "ascending",
   });
+
+  const [columnVisibility, setColumnVisibility] = useState(columnOptions.map((c) => c.value));
 
   useEffect(() => {
     if (token) fetchShifts();
@@ -105,26 +118,31 @@ function ManageShifts() {
     setRefreshing(false);
   };
 
-  const filteredSorted = () => {
+  const filteredSorted = useMemo(() => {
     const data = shifts.filter((s) => s.shiftName.toLowerCase().includes(filters.name.toLowerCase()));
     if (sortConfig.key) {
       data.sort((a, b) => {
-        let aVal = a[sortConfig.key];
-        let bVal = b[sortConfig.key];
-        if (sortConfig.key === "differentialMultiplier") {
-          aVal = Number(aVal);
-          bVal = Number(bVal);
-        } else {
-          aVal = (aVal ?? "").toString().toLowerCase();
-          bVal = (bVal ?? "").toString().toLowerCase();
-        }
+        const aVal =
+          sortConfig.key === "totalHours"
+            ? Number(totalHours(a.startTime, a.endTime))
+            : sortConfig.key === "differentialMultiplier"
+            ? Number(a[sortConfig.key])
+            : (a[sortConfig.key] ?? "").toString().toLowerCase();
+        const bVal =
+          sortConfig.key === "totalHours"
+            ? Number(totalHours(b.startTime, b.endTime))
+            : sortConfig.key === "differentialMultiplier"
+            ? Number(b[sortConfig.key])
+            : (b[sortConfig.key] ?? "").toString().toLowerCase();
         if (aVal < bVal) return sortConfig.direction === "ascending" ? -1 : 1;
         if (aVal > bVal) return sortConfig.direction === "ascending" ? 1 : -1;
         return 0;
       });
     }
     return data;
-  };
+  }, [shifts, filters, sortConfig]);
+
+  const toggleColumn = (c) => setColumnVisibility((p) => (p.includes(c) ? p.filter((x) => x !== c) : [...p, c]));
 
   const openCreate = () => {
     setCreateForm({
@@ -144,7 +162,7 @@ function ManageShifts() {
         shiftName: createForm.shiftName.trim(),
         startTime: toUtcIso(createForm.startTime),
         endTime: toUtcIso(createForm.endTime),
-        differentialMultiplier: Number.parseFloat(createForm.differentialMultiplier),
+        differentialMultiplier: parseFloat(createForm.differentialMultiplier),
       };
       const r = await fetch(`${API}/api/shifts/create`, {
         method: "POST",
@@ -185,7 +203,7 @@ function ManageShifts() {
         shiftName: editForm.shiftName.trim(),
         startTime: toUtcIso(editForm.startTime),
         endTime: toUtcIso(editForm.endTime),
-        differentialMultiplier: Number.parseFloat(editForm.differentialMultiplier),
+        differentialMultiplier: parseFloat(editForm.differentialMultiplier),
       };
       const r = await fetch(`${API}/api/shifts/${editForm.id}`, {
         method: "PUT",
@@ -233,6 +251,8 @@ function ManageShifts() {
     setShiftToDelete(null);
   };
 
+  const labelClass = "my-auto shrink-0 text-sm font-medium text-muted-foreground";
+
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
       <Toaster position="top-center" />
@@ -245,17 +265,17 @@ function ManageShifts() {
           <p className="text-muted-foreground mt-1">Create and manage shift templates for your organization</p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/manage-shift-schedules">Shift Schedules</Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/manage-locations">Locations</Link>
+          </Button>
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={refreshShifts}
-                  disabled={refreshing}
-                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                >
+                <Button variant="outline" size="icon" onClick={refreshShifts} disabled={refreshing}>
                   <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
                 </Button>
               </TooltipTrigger>
@@ -267,7 +287,7 @@ function ManageShifts() {
 
           <Dialog open={showCreate} onOpenChange={setShowCreate}>
             <DialogTrigger asChild>
-              <Button onClick={openCreate} className="bg-orange-500 hover:bg-orange-600 text-white font-semibold">
+              <Button className="bg-orange-500 hover:bg-orange-600 text-white font-semibold">
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Create Shift
               </Button>
@@ -324,81 +344,87 @@ function ManageShifts() {
           </Dialog>
         </div>
       </div>
+
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500"></div>
-        <CardHeader className="pb-2">
+        <div className="h-1 w-full bg-orange-500" />
+        <CardHeader className="pb-2 relative">
           <CardTitle className="flex items-center gap-2">
             <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
               <Filter className="h-5 w-5" />
             </div>
-            Search & Filter
+            Table Controls
           </CardTitle>
-          <CardDescription>Find shifts by name</CardDescription>
+          <CardDescription>Filter, sort, and choose visible columns</CardDescription>
+          <span className="absolute top-2 right-4 text-sm text-muted-foreground">
+            Showing {filteredSorted.length} of {shifts.length} shifts
+          </span>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-3 mb-4">
-            <div className="flex-1 min-w-[200px]">
-              <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg-white/5">
-                <Search className="h-4 w-4 mr-2 text-muted-foreground" />
-                <Input
-                  placeholder="Filter by shift name"
-                  value={filters.name}
-                  onChange={(e) => setFilters({ name: e.target.value })}
-                  className="border-0 h-8 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-                />
-                {filters.name && (
-                  <Button variant="ghost" size="icon" onClick={() => setFilters({ name: "" })} className="h-6 w-6 p-0 text-muted-foreground">
-                    <XCircle className="h-4 w-4" />
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Table:</span>
+              {columnOptions.map(({ value, label }) => {
+                const active = columnVisibility.includes(value);
+                return (
+                  <Button
+                    key={value}
+                    size="sm"
+                    variant="outline"
+                    className={active ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
+                    onClick={() => toggleColumn(value)}
+                  >
+                    {label}
                   </Button>
-                )}
-              </div>
+                );
+              })}
             </div>
-          </div>
-
-          <div className="flex justify-between items-center">
-            <div className="text-sm text-muted-foreground">
-              Showing {filteredSorted().length} of {shifts.length} shifts
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Sort:</span>
+              {columnOptions
+                .filter((o) => columnVisibility.includes(o.value))
+                .map(({ value, label }) => (
+                  <TooltipProvider key={value} delayDuration={300}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setSortConfig({
+                              key: value,
+                              direction: sortConfig.key === value && sortConfig.direction === "ascending" ? "descending" : "ascending",
+                            })
+                          }
+                          className={sortConfig.key === value ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
+                        >
+                          {label}
+                          {sortConfig.key === value &&
+                            (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Sort by {label.toLowerCase()}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ))}
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Sort by:</span>
-              {[
-                ["shiftName", "Name"],
-                ["differentialMultiplier", "Multiplier"],
-              ].map(([key, label]) => (
-                <TooltipProvider key={key} delayDuration={300}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setSortConfig({
-                            key,
-                            direction: sortConfig.key === key && sortConfig.direction === "ascending" ? "descending" : "ascending",
-                          })
-                        }
-                        className={sortConfig.key === key ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
-                      >
-                        {label}{" "}
-                        {sortConfig.key === key ? (
-                          sortConfig.direction === "ascending" ? (
-                            <ChevronUp className="ml-1 h-4 w-4" />
-                          ) : (
-                            <ChevronDown className="ml-1 h-4 w-4" />
-                          )
-                        ) : null}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Sort by {label.toLowerCase()}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ))}
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Filter:</span>
+              <Input
+                placeholder="Shift name"
+                value={filters.name}
+                onChange={(e) => setFilters((p) => ({ ...p, name: e.target.value }))}
+                className="h-8 max-w-xs"
+              />
+              {filters.name && (
+                <Button variant="outline" size="sm" onClick={() => setFilters({ name: "" })}>
+                  Clear Filter
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
+
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500"></div>
         <CardHeader className="pb-2">
@@ -415,14 +441,27 @@ function ManageShifts() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Shift Name</TableHead>
-                  <TableHead>Start</TableHead>
-                  <TableHead>End</TableHead>
-                  <TableHead>Multiplier</TableHead>
-                  <TableHead>Total hrs</TableHead>
-                  <TableHead>Created At</TableHead>
-                  <TableHead>Updated At</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  {columnOptions
+                    .filter((c) => columnVisibility.includes(c.value))
+                    .map(({ value, label }) => (
+                      <TableHead
+                        key={value}
+                        className="text-center text-nowrap cursor-pointer"
+                        onClick={() =>
+                          setSortConfig({
+                            key: value,
+                            direction: sortConfig.key === value && sortConfig.direction === "ascending" ? "descending" : "ascending",
+                          })
+                        }
+                      >
+                        <div className="flex items-center justify-center">
+                          {label}
+                          {sortConfig.key === value &&
+                            (sortConfig.direction === "ascending" ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />)}
+                        </div>
+                      </TableHead>
+                    ))}
+                  <TableHead className="text-center text-nowrap">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -431,18 +470,16 @@ function ManageShifts() {
                     .fill(0)
                     .map((_, i) => (
                       <TableRow key={i}>
-                        {Array(8)
-                          .fill(0)
-                          .map((__, j) => (
-                            <TableCell key={j}>
-                              <Skeleton className="h-6 w-full" />
-                            </TableCell>
-                          ))}
+                        {columnVisibility.concat("actions").map((__, j) => (
+                          <TableCell key={j}>
+                            <Skeleton className="h-6 w-full" />
+                          </TableCell>
+                        ))}
                       </TableRow>
                     ))
-                ) : filteredSorted().length ? (
+                ) : filteredSorted.length ? (
                   <AnimatePresence>
-                    {filteredSorted().map((s) => (
+                    {filteredSorted.map((s) => (
                       <motion.tr
                         key={s.id}
                         initial={{ opacity: 0, y: 10 }}
@@ -451,36 +488,15 @@ function ManageShifts() {
                         transition={{ duration: 0.2 }}
                         className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
                       >
-                        <TableCell className="font-medium">
-                          <div className="flex items-center">
-                            <div className="w-2 h-2 rounded-full bg-orange-500 mr-2" />
-                            {s.shiftName}
-                          </div>
-                        </TableCell>
+                        {columnVisibility.includes("shiftName") && <TableCell>{s.shiftName}</TableCell>}
+                        {columnVisibility.includes("startTime") && <TableCell>{fmtClock(s.startTime)}</TableCell>}
+                        {columnVisibility.includes("endTime") && <TableCell>{fmtClock(s.endTime)}</TableCell>}
+                        {columnVisibility.includes("differentialMultiplier") && <TableCell>{s.differentialMultiplier}x</TableCell>}
+                        {columnVisibility.includes("totalHours") && <TableCell>{totalHours(s.startTime, s.endTime)}</TableCell>}
+                        {columnVisibility.includes("createdAt") && <TableCell className="text-nowrap">{fmtDateTime(s.createdAt)}</TableCell>}
+                        {columnVisibility.includes("updatedAt") && <TableCell className="text-nowrap">{fmtDateTime(s.updatedAt)}</TableCell>}
                         <TableCell>
-                          <div className="flex items-center">
-                            <Clock className="h-3 w-3 mr-1 text-orange-500" />
-                            {fmtClock(s.startTime)}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center">
-                            <Clock className="h-3 w-3 mr-1 text-orange-500" />
-                            {fmtClock(s.endTime)}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="border-orange-500/30 text-orange-700 dark:text-orange-400">
-                            {s.differentialMultiplier}x
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className="bg-orange-500 hover:bg-orange-600 text-white">{totalHours(s.startTime, s.endTime)} hrs</Badge>
-                        </TableCell>
-                        <TableCell>{fmtDateTime(s.createdAt)}</TableCell>
-                        <TableCell>{fmtDateTime(s.updatedAt)}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
+                          <div className="flex justify-center gap-1">
                             <TooltipProvider delayDuration={300}>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -523,7 +539,7 @@ function ManageShifts() {
                   </AnimatePresence>
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-32 text-center">
+                    <TableCell colSpan={columnVisibility.length + 1} className="h-32 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
                         <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                           <Clock className="h-8 w-8 text-orange-500/50" />
@@ -543,6 +559,7 @@ function ManageShifts() {
           </div>
         </CardContent>
       </Card>
+
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
         <DialogContent className="border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -589,13 +606,14 @@ function ManageShifts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       <Dialog open={showDelete} onOpenChange={setShowDelete}>
         <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
           <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="p-2 rounded-full bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400">
-                <AlertCircle className="h-5 w-5" />
+                <Clock className="h-5 w-5" />
               </div>
               Delete Shift
             </DialogTitle>

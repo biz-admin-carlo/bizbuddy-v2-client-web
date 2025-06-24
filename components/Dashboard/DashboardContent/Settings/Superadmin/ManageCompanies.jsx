@@ -3,10 +3,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building2, Edit3, Trash2, ChevronUp, ChevronDown, Search, CreditCard, AlertCircle, RefreshCw, Download } from "lucide-react";
+import { Building2, Edit3, Trash2, ChevronUp, ChevronDown, RefreshCw, Download, CreditCard, AlertCircle, Search } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,6 +20,17 @@ import { motion, AnimatePresence } from "framer-motion";
 const COUNTRY_OPTS = ["Philippines", "United States", "Canada", "Japan"];
 const CURRENCY_OPTS = ["PHP", "USD", "CAD", "JPY", "EUR"];
 const LANGUAGE_OPTS = ["English", "Filipino", "Japanese", "French"];
+
+const columnOptions = [
+  { value: "id", label: "ID" },
+  { value: "name", label: "Name" },
+  { value: "country", label: "Country" },
+  { value: "currency", label: "Currency" },
+  { value: "language", label: "Language" },
+  { value: "startDate", label: "Start Date" },
+  { value: "endDate", label: "Expiration" },
+];
+
 const BLANK_FORM = {
   name: "",
   country: null,
@@ -49,20 +59,32 @@ function firstRelevantSub(subs) {
 function ManageCompanies() {
   const { token } = useAuthStore();
   const API = process.env.NEXT_PUBLIC_API_URL;
+
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(false);
+
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState({ ...BLANK_FORM, id: "" });
+
   const [showDelete, setShowDelete] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
+
   const [submitting, setSubmitting] = useState(false);
+
   const [showDetails, setShowDetails] = useState(false);
   const [details, setDetails] = useState(null);
   const [detailsLoad, setDetailsLoad] = useState(false);
+
   const [sort, setSort] = useState({ key: "name", direction: "ascending" });
+
   const [filterName, setFilterName] = useState("");
+
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  const [columnVisibility, setColumnVisibility] = useState(columnOptions.map((c) => c.value));
+
+  const toggleColumn = (key) => setColumnVisibility((p) => (p.includes(key) ? p.filter((x) => x !== key) : [...p, key]));
 
   useEffect(() => {
     if (token) fetchCompanies();
@@ -123,8 +145,21 @@ function ManageCompanies() {
     const filtered = companies.filter((c) => (filterName ? c.name.toLowerCase().includes(filterName.toLowerCase()) : true));
     if (!sort.key) return filtered;
     return [...filtered].sort((a, b) => {
-      const aVal = (a[sort.key] ?? "").toString().toLowerCase();
-      const bVal = (b[sort.key] ?? "").toString().toLowerCase();
+      let aVal;
+      let bVal;
+      if (sort.key === "startDate") {
+        aVal = firstRelevantSub(a.Subscription)?.startDate || "";
+        bVal = firstRelevantSub(b.Subscription)?.startDate || "";
+      } else if (sort.key === "endDate") {
+        aVal = firstRelevantSub(a.Subscription)?.endDate || "";
+        bVal = firstRelevantSub(b.Subscription)?.endDate || "";
+      } else if (sort.key === "id") {
+        aVal = a.id;
+        bVal = b.id;
+      } else {
+        aVal = (a[sort.key] ?? "").toString().toLowerCase();
+        bVal = (b[sort.key] ?? "").toString().toLowerCase();
+      }
       if (aVal < bVal) return sort.direction === "ascending" ? -1 : 1;
       if (aVal > bVal) return sort.direction === "ascending" ? 1 : -1;
       return 0;
@@ -217,6 +252,8 @@ function ManageCompanies() {
     setDetailsLoad(false);
   }
 
+  const labelClass = "my-auto shrink-0 text-sm font-medium text-muted-foreground";
+
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
       <Toaster position="top-center" />
@@ -232,29 +269,17 @@ function ManageCompanies() {
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={refreshData}
-                  disabled={refreshing}
-                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                >
+                <Button variant="outline" size="icon" onClick={refreshData} disabled={refreshing}>
                   <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Refresh data</TooltipContent>
+              <TooltipContent>Refresh table</TooltipContent>
             </Tooltip>
           </TooltipProvider>
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={exportCSV}
-                  disabled={exporting || !listed().length}
-                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                >
+                <Button variant="outline" size="icon" onClick={exportCSV} disabled={exporting || !listed().length}>
                   <Download className={`h-4 w-4 ${exporting ? "animate-spin" : ""}`} />
                 </Button>
               </TooltipTrigger>
@@ -263,64 +288,87 @@ function ManageCompanies() {
           </TooltipProvider>
         </div>
       </div>
+
+      {/* Table Controls */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-2 relative">
           <CardTitle className="flex items-center gap-2">
-            <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
+            <div className="p-2 rounded-full bg-orange-500/10 text-orange-500">
               <Search className="h-5 w-5" />
             </div>
-            Search & Filter
+            Table Controls
           </CardTitle>
-          <CardDescription>Find companies by name</CardDescription>
+          <CardDescription>Show, hide, sort, and filter columns</CardDescription>
+          <span className="absolute top-2 right-4 text-sm text-muted-foreground">
+            Showing {listed().length} of {companies.length} companies
+          </span>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-3 mb-4">
-            <div className="flex-1 min-w-[200px]">
-              <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg-white/5">
-                <Search className="h-4 w-4 mr-2 text-muted-foreground" />
-                <Input
-                  placeholder="Filter by company name"
-                  value={filterName}
-                  onChange={(e) => setFilterName(e.target.value)}
-                  className="border-0 h-8 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-                />
-              </div>
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Table:</span>
+              {columnOptions.map(({ value, label }) => {
+                const active = columnVisibility.includes(value);
+                return (
+                  <Button
+                    key={value}
+                    size="sm"
+                    variant="outline"
+                    className={active ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
+                    onClick={() => toggleColumn(value)}
+                  >
+                    {label}
+                  </Button>
+                );
+              })}
             </div>
-            {filterName && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setFilterName("")}
-                className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-              >
-                Clear Filter
-              </Button>
-            )}
-          </div>
 
-          <div className="flex justify-between items-center">
-            <div className="text-sm text-muted-foreground">
-              Showing {listed().length} of {companies.length} companies
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Sort:</span>
+              {[
+                { key: "name", label: "Name" },
+                { key: "country", label: "Country" },
+                { key: "currency", label: "Currency" },
+                { key: "language", label: "Language" },
+                { key: "startDate", label: "Start Date" },
+                { key: "endDate", label: "Expiration" },
+              ]
+                .filter((o) => columnVisibility.includes(o.key))
+                .map(({ key, label }) => (
+                  <Button
+                    key={key}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => requestSort(key)}
+                    className={sort.key === key ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
+                  >
+                    {label}
+                    {arrow(sort.key === key, sort.direction)}
+                  </Button>
+                ))}
             </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              Sort by:
-              {["name", "country", "startDate", "endDate"].map((key) => (
+
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Filter:</span>
+              <Input placeholder="Company name" value={filterName} onChange={(e) => setFilterName(e.target.value)} className="h-8 max-w-xs" />
+
+              {filterName && (
                 <Button
-                  key={key}
                   variant="outline"
                   size="sm"
-                  onClick={() => requestSort(key)}
-                  className={sort.key === key ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
+                  onClick={() => setFilterName("")}
+                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
                 >
-                  {key === "startDate" ? "Start" : key === "endDate" ? "Expiration" : key.charAt(0).toUpperCase() + key.slice(1)}{" "}
-                  {arrow(sort.key === key, sort.direction)}
+                  Clear
                 </Button>
-              ))}
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Companies Table */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
@@ -330,39 +378,30 @@ function ManageCompanies() {
             </div>
             Companies
           </CardTitle>
-          <CardDescription>Manage tenant companies</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ID</TableHead>
-                  {["name", "country", "currency", "language", "start", "expires"].map((h) => {
-                    const isSortable = ["name", "country", "currency", "language"].includes(h);
-                    const sortKey = h === "start" ? "startDate" : h === "expires" ? "endDate" : h;
-                    return (
+                  {columnOptions
+                    .filter((c) => columnVisibility.includes(c.value))
+                    .map(({ value, label }) => (
                       <TableHead
-                        key={h}
-                        className={isSortable || h === "start" || h === "expires" ? "cursor-pointer" : ""}
-                        onClick={
-                          h === "start"
-                            ? () => requestSort("startDate")
-                            : h === "expires"
-                            ? () => requestSort("endDate")
-                            : isSortable
-                            ? () => requestSort(h)
+                        key={value}
+                        className="cursor-pointer text-center"
+                        onClick={() =>
+                          ["startDate", "endDate"].includes(value) || ["id", "name", "country", "currency", "language"].includes(value)
+                            ? requestSort(value)
                             : undefined
                         }
                       >
-                        <div className="flex items-center capitalize">
-                          {h === "start" ? "Start Date" : h === "expires" ? "Expiration" : h}
-                          {isSortable || h === "start" || h === "expires" ? arrow(sort.key === sortKey, sort.direction) : null}
+                        <div className="flex justify-center items-center">
+                          {label} {arrow(sort.key === value, sort.direction)}
                         </div>
                       </TableHead>
-                    );
-                  })}
-                  <TableHead className="text-right">Actions</TableHead>
+                    ))}
+                  <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
 
@@ -370,13 +409,11 @@ function ManageCompanies() {
                 {loading ? (
                   [...Array(5)].map((_, i) => (
                     <TableRow key={i}>
-                      {Array(8)
-                        .fill(null)
-                        .map((__, j) => (
-                          <TableCell key={j}>
-                            <Skeleton className="h-6 w-full" />
-                          </TableCell>
-                        ))}
+                      {columnVisibility.concat("actions").map((__, j) => (
+                        <TableCell key={j}>
+                          <Skeleton className="h-6 w-full" />
+                        </TableCell>
+                      ))}
                     </TableRow>
                   ))
                 ) : listed().length ? (
@@ -394,15 +431,15 @@ function ManageCompanies() {
                           transition={{ duration: 0.2 }}
                           className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
                         >
-                          <TableCell className="text-sm font-mono text-orange-700 dark:text-orange-400">{c.id}</TableCell>
-                          <TableCell className="font-medium capitalize">{c.name}</TableCell>
-                          <TableCell className="capitalize">{c.country || "—"}</TableCell>
-                          <TableCell>{c.currency || "—"}</TableCell>
-                          <TableCell>{c.language || "—"}</TableCell>
-                          <TableCell>{startDate}</TableCell>
-                          <TableCell>{endDate}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
+                          {columnVisibility.includes("id") && <TableCell className="text-center">{c.id}</TableCell>}
+                          {columnVisibility.includes("name") && <TableCell className="text-center">{c.name}</TableCell>}
+                          {columnVisibility.includes("country") && <TableCell className="text-center">{c.country || "—"}</TableCell>}
+                          {columnVisibility.includes("currency") && <TableCell className="text-center">{c.currency || "—"}</TableCell>}
+                          {columnVisibility.includes("language") && <TableCell className="text-center">{c.language || "—"}</TableCell>}
+                          {columnVisibility.includes("startDate") && <TableCell className="text-center">{startDate}</TableCell>}
+                          {columnVisibility.includes("endDate") && <TableCell className="text-center">{endDate}</TableCell>}
+                          <TableCell className="text-center">
+                            <div className="flex justify-center gap-1">
                               <TooltipProvider delayDuration={300}>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -467,7 +504,7 @@ function ManageCompanies() {
                   </AnimatePresence>
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-32 text-center">
+                    <TableCell colSpan={columnVisibility.length + 1} className="h-32 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
                         <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                           <Building2 className="h-8 w-8 text-orange-500/50" />
@@ -487,6 +524,8 @@ function ManageCompanies() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Delete Dialog */}
       <Dialog open={showDelete} onOpenChange={setShowDelete}>
         <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
           <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
@@ -518,6 +557,8 @@ function ManageCompanies() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Details Dialog */}
       <Dialog open={showDetails} onOpenChange={setShowDetails}>
         <DialogContent className="max-w-2xl border-2 dark:border-white/10 overflow-y-auto max-h-[90vh]">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -570,6 +611,8 @@ function ManageCompanies() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Edit Dialog */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
         <DialogContent className="border-2 dark:border-white/10 max-w-lg">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />

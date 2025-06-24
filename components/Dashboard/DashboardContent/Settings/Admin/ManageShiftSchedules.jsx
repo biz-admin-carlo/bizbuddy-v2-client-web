@@ -3,7 +3,23 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PlusCircle, Edit3, Trash2, Search, Calendar, AlertCircle, RefreshCw, XCircle, Filter, Check, Info, ChevronDown, Mail } from "lucide-react";
+import {
+  PlusCircle,
+  Edit3,
+  Trash2,
+  Search,
+  Calendar,
+  AlertCircle,
+  RefreshCw,
+  Filter,
+  Check,
+  Info,
+  ChevronUp,
+  ChevronDown,
+  ChevronDown as IconChevronDown,
+  Mail,
+} from "lucide-react";
+import Link from "next/link";
 import { toast, Toaster } from "sonner";
 import { RRule } from "rrule";
 import { format } from "date-fns";
@@ -128,7 +144,7 @@ function MultiUserSelect({ list, setList, users, singleSelect = false }) {
     <div className="relative" ref={ref}>
       <Button variant="outline" className="w-full justify-between" onClick={() => setOpen((o) => !o)}>
         {labelForList(selected, users, "Select user(s)")}
-        <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+        <IconChevronDown className="ml-2 h-4 w-4 opacity-50" />
       </Button>
 
       {open && (
@@ -148,6 +164,16 @@ function MultiUserSelect({ list, setList, users, singleSelect = false }) {
     </div>
   );
 }
+
+const columnOptions = [
+  { value: "shiftName", label: "Shift" },
+  { value: "days", label: "Days" },
+  { value: "startDate", label: "Start" },
+  { value: "endDate", label: "End" },
+  { value: "user", label: "User" },
+  { value: "createdAt", label: "Created At" },
+  { value: "updatedAt", label: "Updated At" },
+];
 
 function ManageShiftSchedules() {
   const { token } = useAuthStore();
@@ -189,6 +215,7 @@ function ManageShiftSchedules() {
     key: "startDate",
     direction: "descending",
   });
+  const [columnVisibility, setColumnVisibility] = useState(columnOptions.map((c) => c.value));
 
   useEffect(() => {
     token && fetchAll();
@@ -256,24 +283,39 @@ function ManageShiftSchedules() {
     return shiftOk && emailOk;
   };
 
+  const getSortValue = (s, k) => {
+    switch (k) {
+      case "shiftName":
+        return (shiftMap[s.shiftId] || "").toLowerCase();
+      case "days":
+        return parseRRule(s.recurrencePattern).join("");
+      case "startDate":
+        return new Date(s.startDate).getTime();
+      case "endDate":
+        return s.endDate ? new Date(s.endDate).getTime() : 0;
+      case "user":
+        return (userMap[s.assignedUserId] || "").toLowerCase();
+      case "createdAt":
+      case "updatedAt":
+        return new Date(s[k]).getTime();
+      default:
+        return 0;
+    }
+  };
+
   const filteredSorted = () => {
     const data = schedules.filter(passesFilters);
     if (!sortConfig.key) return data;
     return [...data].sort((a, b) => {
-      let A = a[sortConfig.key],
-        B = b[sortConfig.key];
-      if (sortConfig.key === "startDate") {
-        A = new Date(A).getTime();
-        B = new Date(B).getTime();
-      } else {
-        A = (A ?? "").toString().toLowerCase();
-        B = (B ?? "").toString().toLowerCase();
-      }
+      const A = getSortValue(a, sortConfig.key);
+      const B = getSortValue(b, sortConfig.key);
       if (A < B) return sortConfig.direction === "ascending" ? -1 : 1;
       if (A > B) return sortConfig.direction === "ascending" ? 1 : -1;
       return 0;
     });
   };
+
+  const toggleColumn = (c) => setColumnVisibility((p) => (p.includes(c) ? p.filter((x) => x !== c) : [...p, c]));
 
   const handleDeptSelect = (deptId) => {
     if (deptId === "none") {
@@ -406,6 +448,8 @@ function ManageShiftSchedules() {
     setShowShiftInfo(true);
   };
 
+  const labelClass = "my-auto shrink-0 text-sm font-medium text-muted-foreground";
+
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
       <Toaster position="top-center" />
@@ -418,21 +462,21 @@ function ManageShiftSchedules() {
           <p className="text-muted-foreground mt-1">Create and manage recurring shift schedules</p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/manage-shifts">Shifts</Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/manage-locations">Locations</Link>
+          </Button>
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={refreshData}
-                  disabled={refreshing}
-                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                >
+                <Button variant="outline" size="icon" onClick={refreshData} disabled={refreshing}>
                   <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Refresh data</TooltipContent>
+              <TooltipContent>Refresh Table</TooltipContent>
             </Tooltip>
           </TooltipProvider>
           <Dialog open={showCreate} onOpenChange={setShowCreate}>
@@ -555,57 +599,97 @@ function ManageShiftSchedules() {
           </Dialog>
         </div>
       </div>
+
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500"></div>
-        <CardHeader className="pb-2">
+        <div className="h-1 w-full bg-orange-500" />
+        <CardHeader className="pb-2 relative">
           <CardTitle className="flex items-center gap-2">
             <Filter className="h-5 w-5 text-orange-500" />
-            Search & Filter
+            Table Controls
           </CardTitle>
-          <CardDescription>Filter schedules by shift name or user email</CardDescription>
+          <CardDescription>Filter, sort, and choose visible columns</CardDescription>
+          <span className="absolute top-2 right-4 text-sm text-muted-foreground">
+            Showing {filteredSorted().length} of {schedules.length} schedules
+          </span>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-3 mb-4">
-            <div className="flex-1 min-w-[220px]">
-              <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg-white/5">
-                <Search className="h-4 w-4 mr-2 text-muted-foreground" />
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Table:</span>
+              {columnOptions.map(({ value, label }) => {
+                const active = columnVisibility.includes(value);
+                return (
+                  <Button
+                    key={value}
+                    size="sm"
+                    variant="outline"
+                    className={active ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
+                    onClick={() => toggleColumn(value)}
+                  >
+                    {label}
+                  </Button>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Sort:</span>
+              {columnOptions
+                .filter((o) => columnVisibility.includes(o.value))
+                .map(({ value, label }) => (
+                  <TooltipProvider key={value} delayDuration={300}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setSortConfig({
+                              key: value,
+                              direction: sortConfig.key === value && sortConfig.direction === "ascending" ? "descending" : "ascending",
+                            })
+                          }
+                          className={sortConfig.key === value ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
+                        >
+                          {label}
+                          {sortConfig.key === value &&
+                            (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Sort by {label.toLowerCase()}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ))}
+            </div>
+
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Filter:</span>
+              <div className="flex gap-3">
                 <Input
                   placeholder="Shift name"
                   value={filters.name}
                   onChange={(e) => setFilters((p) => ({ ...p, name: e.target.value }))}
-                  className="border-0 h-8 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+                  className="h-8 max-w-xs"
                 />
-              </div>
-            </div>
-            <div className="flex-1 min-w-[220px]">
-              <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg:white/5">
-                <Mail className="h-4 w-4 mr-2 text-muted-foreground" />
+
                 <Input
                   placeholder="User email"
                   value={filters.email}
                   onChange={(e) => setFilters((p) => ({ ...p, email: e.target.value }))}
-                  className="border-0 h-8 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+                  className="h-8 max-w-xs"
                 />
               </div>
+
+              {(filters.name || filters.email) && (
+                <Button variant="outline" size="sm" onClick={() => setFilters({ name: "", email: "" })}>
+                  Clear Filter
+                </Button>
+              )}
             </div>
-
-            {(filters.name || filters.email) && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setFilters({ name: "", email: "" })}
-                className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-              >
-                Clear
-              </Button>
-            )}
           </div>
-
-          <p className="text-sm text-muted-foreground">
-            Showing {filteredSorted().length} of {schedules.length} schedules
-          </p>
         </CardContent>
       </Card>
+
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500"></div>
         <CardHeader className="pb-2">
@@ -619,27 +703,38 @@ function ManageShiftSchedules() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Shift</TableHead>
-                  <TableHead>Days</TableHead>
-                  <TableHead>Start</TableHead>
-                  <TableHead>End</TableHead>
-                  <TableHead>User</TableHead>
-                  <TableHead>Created&nbsp;At</TableHead>
-                  <TableHead>Updated&nbsp;At</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  {columnOptions
+                    .filter((c) => columnVisibility.includes(c.value))
+                    .map(({ value, label }) => (
+                      <TableHead
+                        key={value}
+                        className="text-center text-nowrap cursor-pointer"
+                        onClick={() =>
+                          setSortConfig({
+                            key: value,
+                            direction: sortConfig.key === value && sortConfig.direction === "ascending" ? "descending" : "ascending",
+                          })
+                        }
+                      >
+                        <div className="flex items-center justify-center">
+                          {label}
+                          {sortConfig.key === value &&
+                            (sortConfig.direction === "ascending" ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />)}
+                        </div>
+                      </TableHead>
+                    ))}
+                  <TableHead className="text-center text-nowrap">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   [...Array(5)].map((_, i) => (
                     <TableRow key={i}>
-                      {Array(8)
-                        .fill(null)
-                        .map((__, j) => (
-                          <TableCell key={j}>
-                            <Skeleton className="h-6 w-full" />
-                          </TableCell>
-                        ))}
+                      {columnVisibility.concat("actions").map((__, j) => (
+                        <TableCell key={j}>
+                          <Skeleton className="h-6 w-full" />
+                        </TableCell>
+                      ))}
                     </TableRow>
                   ))
                 ) : filteredSorted().length ? (
@@ -653,28 +748,35 @@ function ManageShiftSchedules() {
                         transition={{ duration: 0.2 }}
                         className="border-b transition-colors hover:bg-muted/50"
                       >
-                        <TableCell className="font-medium">
-                          <Button variant="link" className="p-0 text-left flex items-center" onClick={() => openShiftInfo(s.shiftId)}>
-                            <div className="w-2 h-2 rounded-full bg-orange-500 mr-2" />
-                            {shiftMap[s.shiftId] || "—"}
-                          </Button>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {parseRRule(s.recurrencePattern).map((d) => (
-                              <Badge key={d} variant="outline" className="border-orange-500/30 text-orange-700 dark:text-orange-400">
-                                {DAY_NAME[d] || d}
-                              </Badge>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell>{s.startDate.slice(0, 10)}</TableCell>
-                        <TableCell>{s.endDate ? s.endDate.slice(0, 10) : "—"}</TableCell>
-                        <TableCell>{userMap[s.assignedUserId] || "—"}</TableCell>
-                        <TableCell>{fmtDateTime(s.createdAt)}</TableCell>
-                        <TableCell>{fmtDateTime(s.updatedAt)}</TableCell>
+                        {columnVisibility.includes("shiftName") && (
+                          <TableCell>
+                            <Badge
+                              variant="link"
+                              className="cursor-pointer hover:bg-orange-600 bg-orange-500 text-neutral-50"
+                              onClick={() => openShiftInfo(s.shiftId)}
+                            >
+                              {shiftMap[s.shiftId] || "—"}
+                            </Badge>
+                          </TableCell>
+                        )}
+                        {columnVisibility.includes("days") && (
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1 justify-center">
+                              {parseRRule(s.recurrencePattern).map((d) => (
+                                <Badge key={d} variant="outline">
+                                  {DAY_NAME[d] || d}
+                                </Badge>
+                              ))}
+                            </div>
+                          </TableCell>
+                        )}
+                        {columnVisibility.includes("startDate") && <TableCell>{s.startDate.slice(0, 10)}</TableCell>}
+                        {columnVisibility.includes("endDate") && <TableCell>{s.endDate ? s.endDate.slice(0, 10) : "—"}</TableCell>}
+                        {columnVisibility.includes("user") && <TableCell>{userMap[s.assignedUserId] || "—"}</TableCell>}
+                        {columnVisibility.includes("createdAt") && <TableCell>{fmtDateTime(s.createdAt)}</TableCell>}
+                        {columnVisibility.includes("updatedAt") && <TableCell>{fmtDateTime(s.updatedAt)}</TableCell>}
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
+                          <div className="flex gap-1 justify-center">
                             <TooltipProvider delayDuration={300}>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -713,7 +815,7 @@ function ManageShiftSchedules() {
                   </AnimatePresence>
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-32 text-center">
+                    <TableCell colSpan={columnVisibility.length + 1} className="h-32 text-center">
                       No schedules
                     </TableCell>
                   </TableRow>
@@ -723,8 +825,9 @@ function ManageShiftSchedules() {
           </div>
         </CardContent>
       </Card>
+
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
-        <DialogContent className="border-2 dark:border:white/10 max-w-xl">
+        <DialogContent className="border-2 dark:border-white/10 max-w-xl">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -807,6 +910,7 @@ function ManageShiftSchedules() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       <Dialog open={showDelete} onOpenChange={setShowDelete}>
         <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
           <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
@@ -848,6 +952,7 @@ function ManageShiftSchedules() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       <Dialog open={showShiftInfo} onOpenChange={setShowShiftInfo}>
         {selectedShift && (
           <DialogContent className="border-2 dark:border-white/10 max-w-md">

@@ -100,11 +100,17 @@ export default function MyShiftSchedule() {
   };
 
   const safeFormat = (date, fmtStr) => (isValid(date) ? format(date, fmtStr) : "Invalid date");
-  const safeTimeFormat = (s) => {
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? "Invalid time" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const safeTimeFormat = (t) => {
+    const d = new Date(t);
+    return isNaN(d.getTime())
+      ? "Invalid time"
+      : d.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+          timeZone: "UTC",
+        });
   };
-
   const totalHoursToday = useMemo(() => {
     return shiftsToday.reduce((total, shift) => {
       const hours = Number.parseFloat(hoursBetween(shift.shift.startTime, shift.shift.endTime));

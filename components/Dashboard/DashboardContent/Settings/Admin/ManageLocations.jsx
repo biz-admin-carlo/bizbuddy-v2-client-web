@@ -11,10 +11,8 @@ import {
   Users2,
   ChevronUp,
   ChevronDown,
-  Search,
   MapPin,
   RefreshCw,
-  XCircle,
   Filter,
   AlertCircle,
   UserCheck,
@@ -22,6 +20,7 @@ import {
   ExternalLink,
   Info,
 } from "lucide-react";
+import Link from "next/link";
 import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import useAuthStore from "@/store/useAuthStore";
@@ -114,7 +113,15 @@ function LocationPicker({ lat, lng, radius, onChange }) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://osm.org/copyright">OpenStreetMap</a> contributors'
         />
-        <Circle center={position} radius={Number.parseInt(radius || 500, 10)} pathOptions={{ color: "#f97316", fillColor: "#f97316", fillOpacity: 0.2 }} />
+        <Circle
+          center={position}
+          radius={Number.parseInt(radius || 500, 10)}
+          pathOptions={{
+            color: "#f97316",
+            fillColor: "#f97316",
+            fillOpacity: 0.2,
+          }}
+        />
         <Marker
           position={position}
           draggable
@@ -131,9 +138,19 @@ function LocationPicker({ lat, lng, radius, onChange }) {
   );
 }
 
+const columnOptions = [
+  { value: "name", label: "Name" },
+  { value: "latitude", label: "Latitude" },
+  { value: "longitude", label: "Longitude" },
+  { value: "radius", label: "Radius" },
+  { value: "users", label: "Users" },
+  { value: "map", label: "Map" },
+];
+
 function ManageLocations() {
   const { token } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
   const [deviceLoc, setDeviceLoc] = useState({
     latitude: null,
     longitude: null,
@@ -159,6 +176,7 @@ function ManageLocations() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({
     name: "",
@@ -168,6 +186,7 @@ function ManageLocations() {
   });
   const [createLoading, setCreateLoading] = useState(false);
   const [useLocLoadingCreate, setUseLocLoadingCreate] = useState(false);
+
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({
     id: null,
@@ -178,9 +197,11 @@ function ManageLocations() {
   });
   const [editLoading, setEditLoading] = useState(false);
   const [useLocLoadingEdit, setUseLocLoadingEdit] = useState(false);
+
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [locationToDelete, setLocationToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [assignedUsers, setAssignedUsers] = useState([]);
@@ -188,11 +209,13 @@ function ManageLocations() {
   const [selectedUserId, setSelectedUserId] = useState("");
   const [userActionLoading, setUserActionLoading] = useState(false);
   const [loadingUserId, setLoadingUserId] = useState(null);
+
   const [filters, setFilters] = useState({ name: "" });
   const [sortConfig, setSortConfig] = useState({
     key: "name",
     direction: "ascending",
   });
+  const [columnVisibility, setColumnVisibility] = useState(columnOptions.map((c) => c.value));
 
   useEffect(() => {
     if (!token) return;
@@ -209,8 +232,7 @@ function ManageLocations() {
       const j = await res.json();
       if (res.ok) setLocations(j.data || []);
       else toast.message(j.error || "Failed to fetch locations.");
-    } catch (e) {
-      console.error(e);
+    } catch {
       toast.message("Failed to fetch locations.");
     }
     setLoading(false);
@@ -224,8 +246,7 @@ function ManageLocations() {
       const j = await res.json();
       if (res.ok) setUsers(j.data || []);
       else toast.message(j.error || "Failed to fetch users.");
-    } catch (e) {
-      console.error(e);
+    } catch {
       toast.message("Failed to fetch users.");
     }
   }
@@ -239,8 +260,7 @@ function ManageLocations() {
       if (res.ok) return j.data || [];
       toast.message(j.error || "Failed to fetch assigned users.");
       return [];
-    } catch (e) {
-      console.error(e);
+    } catch {
       toast.message("Failed to fetch assigned users.");
       return [];
     }
@@ -248,37 +268,42 @@ function ManageLocations() {
 
   const refreshData = async () => {
     setRefreshing(true);
-    try {
-      await Promise.all([fetchLocations(), fetchUsers()]);
-      toast.message("Data refreshed successfully");
-    } catch (e) {
-      console.error(e);
-      toast.message("Failed to refresh data");
-    }
+    await Promise.all([fetchLocations(), fetchUsers()]);
     setRefreshing(false);
+  };
+
+  const getSortValue = (l, k) => {
+    switch (k) {
+      case "name":
+        return l.name.toLowerCase();
+      case "latitude":
+        return Number(l.latitude);
+      case "longitude":
+        return Number(l.longitude);
+      case "radius":
+        return Number(l.radius);
+      case "users":
+        return l.LocationRestriction?.filter((r) => r.restrictionStatus).length;
+      case "map":
+        return 0;
+      default:
+        return 0;
+    }
   };
 
   function getFilteredAndSorted() {
     const data = locations.filter((l) => l.name.toLowerCase().includes(filters.name.toLowerCase()));
-
-    if (sortConfig.key) {
-      data.sort((a, b) => {
-        let aVal = a[sortConfig.key];
-        let bVal = b[sortConfig.key];
-        if (sortConfig.key === "radius") {
-          aVal = Number(aVal);
-          bVal = Number(bVal);
-        } else {
-          aVal = (aVal ?? "").toString().toLowerCase();
-          bVal = (bVal ?? "").toString().toLowerCase();
-        }
-        if (aVal < bVal) return sortConfig.direction === "ascending" ? -1 : 1;
-        if (aVal > bVal) return sortConfig.direction === "ascending" ? 1 : -1;
-        return 0;
-      });
-    }
-    return data;
+    if (!sortConfig.key) return data;
+    return [...data].sort((a, b) => {
+      const A = getSortValue(a, sortConfig.key);
+      const B = getSortValue(b, sortConfig.key);
+      if (A < B) return sortConfig.direction === "ascending" ? -1 : 1;
+      if (A > B) return sortConfig.direction === "ascending" ? 1 : -1;
+      return 0;
+    });
   }
+
+  const toggleColumn = (c) => setColumnVisibility((p) => (p.includes(c) ? p.filter((x) => x !== c) : [...p, c]));
 
   function openCreate() {
     setCreateForm({
@@ -294,7 +319,6 @@ function ManageLocations() {
     setUseLocLoadingCreate(true);
     const loc = await getPreciseBrowserLocation();
     setUseLocLoadingCreate(false);
-
     if (loc.latitude && loc.longitude) {
       setCreateForm((p) => ({
         ...p,
@@ -333,8 +357,7 @@ function ManageLocations() {
         setShowCreateModal(false);
         fetchLocations();
       } else toast.message(j.error || "Failed to create location.");
-    } catch (e) {
-      console.error(e);
+    } catch {
       toast.message("Failed to create location.");
     }
     setCreateLoading(false);
@@ -394,8 +417,7 @@ function ManageLocations() {
         setShowEditModal(false);
         fetchLocations();
       } else toast.message(j.error || "Failed to update location.");
-    } catch (e) {
-      console.error(e);
+    } catch {
       toast.message("Failed to update location.");
     }
     setEditLoading(false);
@@ -419,8 +441,7 @@ function ManageLocations() {
         toast.message(j.message || "Location deleted.");
         setLocations((prev) => prev.filter((l) => l.id !== locationToDelete.id));
       } else toast.message(j.error || "Failed to delete location.");
-    } catch (e) {
-      console.error(e);
+    } catch {
       toast.message("Failed to delete location.");
     }
     setShowDeleteModal(false);
@@ -457,8 +478,7 @@ function ManageLocations() {
         setAvailableUsers((prev) => prev.filter((u) => u.id !== selectedUserId));
         setSelectedUserId("");
       } else toast.message(j.error || "Failed to assign user.");
-    } catch (e) {
-      console.error(e);
+    } catch {
       toast.message("Failed to assign user.");
     }
     setUserActionLoading(false);
@@ -482,12 +502,13 @@ function ManageLocations() {
         setAssignedUsers((prev) => prev.filter((u) => u.id !== userId));
         setAvailableUsers((prev) => [...prev, removed]);
       } else toast.message(j.error || "Failed to remove user.");
-    } catch (e) {
-      console.error(e);
+    } catch {
       toast.message("Failed to remove user.");
     }
     setLoadingUserId(null);
   }
+
+  const labelClass = "my-auto shrink-0 text-sm font-medium text-muted-foreground";
 
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
@@ -540,23 +561,21 @@ function ManageLocations() {
             )}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/manage-shifts">Shifts</Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/manage-shift-schedules">Shift&nbsp;Schedules</Link>
+          </Button>
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={refreshData}
-                  disabled={refreshing}
-                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                >
+                <Button variant="outline" size="icon" onClick={refreshData} disabled={refreshing}>
                   <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>
-                <p>Refresh data</p>
-              </TooltipContent>
+              <TooltipContent>Refresh table</TooltipContent>
             </Tooltip>
           </TooltipProvider>
 
@@ -567,18 +586,15 @@ function ManageLocations() {
                 Create Location
               </Button>
             </DialogTrigger>
-            <DialogContent className="w-[90vw]  sm:max-w-lg     md:max-w-xl max-h-[90vh] overflow-y-auto  border-2 dark:border-white/10">
-              <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
+            <DialogContent className="w-[90vw] sm:max-w-lg md:max-w-xl max-h-[90vh] overflow-y-auto border-2 dark:border-white/10">
+              <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
-                    <PlusCircle className="h-5 w-5" />
-                  </div>
+                  <PlusCircle className="h-5 w-5 text-orange-500" />
                   Create New Location
                 </DialogTitle>
                 <DialogDescription>Add a new geofenced location to your organization</DialogDescription>
               </DialogHeader>
-
               <div className="space-y-4 py-4">
                 <LocationPicker
                   lat={createForm.latitude}
@@ -602,7 +618,7 @@ function ManageLocations() {
                   {useLocLoadingCreate ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MapPin className="h-4 w-4 mr-2" />}
                   Use Current Location
                 </Button>
-                <div className="grid:grid-cols-4 items-center gap-4 text-sm">
+                <div className="grid grid-cols-4 items-center gap-4 text-sm">
                   <label className="text-right font-medium" htmlFor="name">
                     Location Name
                   </label>
@@ -634,12 +650,7 @@ function ManageLocations() {
                       id="longitude"
                       className="col-span-3"
                       value={createForm.longitude}
-                      onChange={(e) =>
-                        setCreateForm((p) => ({
-                          ...p,
-                          longitude: e.target.value,
-                        }))
-                      }
+                      onChange={(e) => setCreateForm((p) => ({ ...p, longitude: e.target.value }))}
                     />
                   </div>
                 </div>
@@ -664,12 +675,12 @@ function ManageLocations() {
                   {createLoading ? (
                     <span className="flex items-center">
                       <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path
                           className="opacity-75"
                           fill="currentColor"
                           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
+                        />
                       </svg>
                       Creating…
                     </span>
@@ -682,98 +693,87 @@ function ManageLocations() {
           </Dialog>
         </div>
       </div>
+
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-2 relative">
           <CardTitle className="flex items-center gap-2">
-            <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
-              <Filter className="h-5 w-5" />
-            </div>
-            Search & Filter
+            <Filter className="h-5 w-5 text-orange-500" />
+            Table Controls
           </CardTitle>
-          <CardDescription>Find locations by name</CardDescription>
+          <CardDescription>Filter, sort, and choose columns</CardDescription>
+          <span className="absolute top-2 right-4 text-sm text-muted-foreground">
+            Showing {getFilteredAndSorted().length} of {locations.length} locations
+          </span>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-3 mb-4">
-            <div className="flex-1 min-w-[200px]">
-              <div className="flex items-center border rounded-md px-3 py-2 bg-black/5 dark:bg-white/5">
-                <Search className="h-4 w-4 mr-2 text-muted-foreground" />
-                <Input
-                  placeholder="Filter by location name"
-                  value={filters.name}
-                  onChange={(e) => setFilters({ name: e.target.value })}
-                  className="border-0 h-8 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-                />
-                {filters.name && (
-                  <Button variant="ghost" size="icon" onClick={() => setFilters({ name: "" })} className="h-6 w-6 p-0 text-muted-foreground">
-                    <XCircle className="h-4 w-4" />
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Table:</span>
+              {columnOptions.map(({ value, label }) => {
+                const active = columnVisibility.includes(value);
+                return (
+                  <Button
+                    key={value}
+                    size="sm"
+                    variant="outline"
+                    className={active ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
+                    onClick={() => toggleColumn(value)}
+                  >
+                    {label}
                   </Button>
-                )}
-              </div>
+                );
+              })}
             </div>
-          </div>
 
-          <div className="flex justify-between items-center">
-            <div className="text-sm text-muted-foreground">
-              Showing {getFilteredAndSorted().length} of {locations.length} locations
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Sort:</span>
+              {columnOptions
+                .filter((o) => columnVisibility.includes(o.value))
+                .map(({ value, label }) => (
+                  <TooltipProvider key={value} delayDuration={300}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setSortConfig({
+                              key: value,
+                              direction: sortConfig.key === value && sortConfig.direction === "ascending" ? "descending" : "ascending",
+                            })
+                          }
+                          className={sortConfig.key === value ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}
+                        >
+                          {label}
+                          {sortConfig.key === value &&
+                            (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Sort by {label.toLowerCase()}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ))}
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Sort by:</span>
-              <TooltipProvider delayDuration={300}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setSortConfig({
-                          key: "name",
-                          direction: sortConfig.key === "name" && sortConfig.direction === "ascending" ? "descending" : "ascending",
-                        })
-                      }
-                      className={`${sortConfig.key === "name" ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}`}
-                    >
-                      Name
-                      {sortConfig.key === "name" &&
-                        (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Sort by location name</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <TooltipProvider delayDuration={300}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setSortConfig({
-                          key: "radius",
-                          direction: sortConfig.key === "radius" && sortConfig.direction === "ascending" ? "descending" : "ascending",
-                        })
-                      }
-                      className={`${sortConfig.key === "radius" ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400" : ""}`}
-                    >
-                      Radius
-                      {sortConfig.key === "radius" &&
-                        (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Sort by radius size</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className={labelClass}>Filter:</span>
+              <Input placeholder="Location name" value={filters.name} onChange={(e) => setFilters({ name: e.target.value })} className="h-8 max-w-xs" />
+              {filters.name && (
+                <Button variant="outline" size="sm" onClick={() => setFilters({ name: "" })}>
+                  Clear Filter
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
+
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
-            <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
-              <MapPin className="h-5 w-5" />
-            </div>
+            <MapPin className="h-5 w-5 text-orange-500" />
             Locations
           </CardTitle>
           <CardDescription>Manage your organization’s geofenced locations</CardDescription>
@@ -783,59 +783,40 @@ function ManageLocations() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead
-                    className="cursor-pointer"
-                    onClick={() =>
-                      setSortConfig({
-                        key: "name",
-                        direction: sortConfig.key === "name" && sortConfig.direction === "ascending" ? "descending" : "ascending",
-                      })
-                    }
-                  >
-                    <div className="flex items-center">
-                      Name
-                      {sortConfig.key === "name" &&
-                        (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                    </div>
-                  </TableHead>
-                  <TableHead>Latitude</TableHead>
-                  <TableHead>Longitude</TableHead>
-                  <TableHead
-                    className="cursor-pointer"
-                    onClick={() =>
-                      setSortConfig({
-                        key: "radius",
-                        direction: sortConfig.key === "radius" && sortConfig.direction === "ascending" ? "descending" : "ascending",
-                      })
-                    }
-                  >
-                    <div className="flex items-center">
-                      Radius (m)
-                      {sortConfig.key === "radius" &&
-                        (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                    </div>
-                  </TableHead>
-                  <TableHead>Users</TableHead>
-                  <TableHead className="text-center">Map</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  {columnOptions
+                    .filter((c) => columnVisibility.includes(c.value))
+                    .map(({ value, label }) => (
+                      <TableHead
+                        key={value}
+                        className="text-center text-nowrap cursor-pointer"
+                        onClick={() =>
+                          setSortConfig({
+                            key: value,
+                            direction: sortConfig.key === value && sortConfig.direction === "ascending" ? "descending" : "ascending",
+                          })
+                        }
+                      >
+                        <div className="flex items-center justify-center">
+                          {label}
+                          {sortConfig.key === value &&
+                            (sortConfig.direction === "ascending" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                        </div>
+                      </TableHead>
+                    ))}
+                  <TableHead className="text-center text-nowrap">Actions</TableHead>
                 </TableRow>
               </TableHeader>
-
               <TableBody>
                 {loading ? (
-                  Array(5)
-                    .fill(0)
-                    .map((_, i) => (
-                      <TableRow key={i}>
-                        {Array(7)
-                          .fill(0)
-                          .map((__, j) => (
-                            <TableCell key={j}>
-                              <Skeleton className="h-6 w-full" />
-                            </TableCell>
-                          ))}
-                      </TableRow>
-                    ))
+                  [...Array(5)].map((_, i) => (
+                    <TableRow key={i}>
+                      {columnVisibility.concat("actions").map((__, j) => (
+                        <TableCell key={j}>
+                          <Skeleton className="h-6 w-full" />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
                 ) : getFilteredAndSorted().length ? (
                   <AnimatePresence>
                     {getFilteredAndSorted().map((loc) => {
@@ -850,45 +831,39 @@ function ManageLocations() {
                           transition={{ duration: 0.2 }}
                           className="border-b transition-colors hover:bg-muted/50"
                         >
-                          <TableCell className="font-medium">
-                            <div className="flex items-center">
-                              <div className="w-2 h-2 rounded-full bg-orange-500 mr-2" />
-                              <span className="capitalize">{loc.name}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>{loc.latitude}</TableCell>
-                          <TableCell>{loc.longitude}</TableCell>
+                          {columnVisibility.includes("name") && <TableCell>{loc.name}</TableCell>}
+                          {columnVisibility.includes("latitude") && <TableCell>{loc.latitude}</TableCell>}
+                          {columnVisibility.includes("longitude") && <TableCell>{loc.longitude}</TableCell>}
+                          {columnVisibility.includes("radius") && <TableCell>{loc.radius}</TableCell>}
+                          {columnVisibility.includes("users") && (
+                            <TableCell>
+                              <Badge className="bg-orange-500 hover:bg-orange-600 text-white cursor-pointer" onClick={() => openUsers(loc)}>
+                                <Users2 className="h-3 w-3 mr-1" />
+                                {assigned}
+                              </Badge>
+                            </TableCell>
+                          )}
+                          {columnVisibility.includes("map") && (
+                            <TableCell className="text-center">
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => window.open(mapUrl, "_blank", "noopener")}
+                                      className="text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                                    >
+                                      <ExternalLink className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Open in Google Maps</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </TableCell>
+                          )}
                           <TableCell>
-                            <Badge className="bg-orange-500 hover:bg-orange-600 text-white">{loc.radius ?? 500}m</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                            >
-                              <Users2 className="h-3 w-3 mr-1" />
-                              {assigned}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => window.open(mapUrl, "_blank", "noopener")}
-                                    className="text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                                  >
-                                    <ExternalLink className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Open in Google Maps</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
+                            <div className="flex justify-center gap-1">
                               <TooltipProvider delayDuration={300}>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -902,22 +877,6 @@ function ManageLocations() {
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>Edit location</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-
-                              <TooltipProvider delayDuration={300}>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => openUsers(loc)}
-                                      className="text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                                    >
-                                      <Users2 className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Manage users</TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
 
@@ -944,17 +903,12 @@ function ManageLocations() {
                   </AnimatePresence>
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-32 text-center">
+                    <TableCell colSpan={columnVisibility.length + 1} className="h-32 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
                         <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                           <MapPin className="h-8 w-8 text-orange-500/50" />
                         </div>
-                        <p>No locations found matching your filters</p>
-                        {filters.name && (
-                          <Button variant="link" onClick={() => setFilters({ name: "" })} className="text-orange-500 hover:text-orange-600 mt-2">
-                            Clear all filters
-                          </Button>
-                        )}
+                        <p>No locations found</p>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -964,14 +918,13 @@ function ManageLocations() {
           </div>
         </CardContent>
       </Card>
+
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="w-[90vw]  sm:max-w-lg     md:max-w-xl max-h-[90vh] overflow-y-auto  border-2 dark:border-white/10">
+        <DialogContent className="w-[90vw] sm:max-w-lg md:max-w-xl max-h-[90vh] overflow-y-auto border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
-                <Edit3 className="h-5 w-5" />
-              </div>
+              <Edit3 className="h-5 w-5 text-orange-500" />
               Edit Location
             </DialogTitle>
             <DialogDescription>Update location information</DialogDescription>
@@ -999,7 +952,6 @@ function ManageLocations() {
               {useLocLoadingEdit ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MapPin className="h-4 w-4 mr-2" />}
               Use Current Location
             </Button>
-
             <div className="grid grid-cols-4 items-center gap-4 text-sm">
               <label className="text-right font-medium" htmlFor="e-name">
                 Location Name
@@ -1012,7 +964,6 @@ function ManageLocations() {
                 placeholder="Enter location name"
               />
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div className="grid grid-cols-4 items-center gap-4 text-sm">
                 <label className="text-right font-medium" htmlFor="e-latitude">
@@ -1037,7 +988,6 @@ function ManageLocations() {
                 />
               </div>
             </div>
-
             <div className="grid grid-cols-4 items-center gap-4 text-sm">
               <label className="text-right font-medium" htmlFor="e-radius">
                 Radius (m)
@@ -1051,7 +1001,6 @@ function ManageLocations() {
               />
             </div>
           </div>
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditModal(false)}>
               Cancel
@@ -1060,12 +1009,12 @@ function ManageLocations() {
               {editLoading ? (
                 <span className="flex items-center">
                   <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path
                       className="opacity-75"
                       fill="currentColor"
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
+                    />
                   </svg>
                   Saving…
                 </span>
@@ -1076,14 +1025,13 @@ function ManageLocations() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       <Dialog open={showUsersModal} onOpenChange={setShowUsersModal}>
         <DialogContent className="w-[90vw] sm:max-w-lg md:max-w-xl max-h-[90vh] overflow-y-auto border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
-                <Users2 className="h-5 w-5" />
-              </div>
+              <Users2 className="h-5 w-5 text-orange-500" />
               Manage Users – {currentLocation?.name}
             </DialogTitle>
             <DialogDescription>Assign or remove users from this location</DialogDescription>
@@ -1185,7 +1133,6 @@ function ManageLocations() {
               </Button>
             </div>
           </div>
-
           <DialogFooter>
             <Button onClick={() => setShowUsersModal(false)} className="bg-orange-500 hover:bg-orange-600 text-white">
               Done
@@ -1193,19 +1140,17 @@ function ManageLocations() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
         <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
           <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <div className="p-2 rounded-full bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400">
-                <AlertCircle className="h-5 w-5" />
-              </div>
+              <AlertCircle className="h-5 w-5 text-red-500" />
               Delete Location
             </DialogTitle>
             <DialogDescription>Are you sure you want to delete this location? This action cannot be undone.</DialogDescription>
           </DialogHeader>
-
           {locationToDelete && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4 my-4">
               <p className="text-sm text-red-600 dark:text-red-400">
@@ -1214,8 +1159,7 @@ function ManageLocations() {
               </p>
             </div>
           )}
-
-          <DialogFooter className="flex justify-between sm:justify-between">
+          <DialogFooter className="flex justify-between">
             <Button
               variant="outline"
               onClick={() => setShowDeleteModal(false)}
@@ -1223,7 +1167,7 @@ function ManageLocations() {
             >
               Cancel
             </Button>
-            <Button variant="destructive" onClick={confirmDelete} className="bg-red-500 hover:bg-red-600">
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleteLoading} className="bg-red-500 hover:bg-red-600">
               {deleteLoading ? (
                 <span className="flex items-center">
                   <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
