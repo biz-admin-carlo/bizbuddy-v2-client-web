@@ -12,14 +12,26 @@ export default function DashboardHomeClient() {
 
   useEffect(() => {
     setIsRedirecting(true);
-    const t = setTimeout(() => router.replace("/dashboard/overview"), 800);
+    const t = setTimeout(
+      () => router.replace("/dashboard/employee/overview"),
+      800
+    );
     return () => clearTimeout(t);
   }, [router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-white to-orange-50 dark:from-neutral-900 dark:via-neutral-800 dark:to-neutral-900">
-      <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5 }} className="text-center p-8">
-        <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }} className="inline-block mb-6">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
+        className="text-center p-8"
+      >
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+          className="inline-block mb-6"
+        >
           <div className="w-16 h-16 bg-gradient-to-r from-orange-500 to-orange-600 rounded-full flex items-center justify-center shadow-lg">
             <Loader2 className="w-8 h-8 text-white" />
           </div>

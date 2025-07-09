@@ -161,7 +161,12 @@ function FAQ() {
   };
 
   return (
-    <motion.section className="py-10 md:py-10 mx-auto px-4 w-full max-w-7xl" initial="hidden" animate="visible" variants={containerVariants}>
+    <motion.section
+      className="py-10 md:py-10 mx-auto px-4 w-full max-w-7xl"
+      initial="hidden"
+      animate="visible"
+      variants={containerVariants}
+    >
       <motion.h2
         className="text-orange-500 font-bold text-center pb-2 max-w-7xl mx-auto text-xl sm:text-2xl md:text-4xl lg:text-5xl capitalize"
         variants={itemVariants}

@@ -34,7 +34,9 @@ export default function SignInPage() {
     setLoading(true);
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/account/get-user-email?email=${encodeURIComponent(formData.email.trim().toLowerCase())}`
+        `${process.env.NEXT_PUBLIC_API_URL}/api/account/get-user-email?email=${encodeURIComponent(
+          formData.email.trim().toLowerCase()
+        )}`
       );
       const data = await res.json();
       if (res.status === 404) {
@@ -120,12 +122,23 @@ export default function SignInPage() {
           <p className="text-neutral-600 dark:text-neutral-400 mt-2">Sign in to access your account</p>
         </motion.div>
 
-        <motion.div className="max-w-md mx-auto mb-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
+        <motion.div
+          className="max-w-md mx-auto mb-6"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+        >
           <div className="flex items-center justify-center space-x-4">
             <div className={`w-3 h-3 rounded-full ${step === 1 ? "bg-orange-500" : "bg-green-500"}`}></div>
-            <div className={`h-0.5 w-8 ${step === 2 ? "bg-orange-500" : step > 2 ? "bg-green-500" : "bg-neutral-300 dark:bg-neutral-700"}`}></div>
             <div
-              className={`w-3 h-3 rounded-full ${step === 2 ? "bg-orange-500" : step > 2 ? "bg-green-500" : "bg-neutral-300 dark:bg-neutral-700"}`}
+              className={`h-0.5 w-8 ${
+                step === 2 ? "bg-orange-500" : step > 2 ? "bg-green-500" : "bg-neutral-300 dark:bg-neutral-700"
+              }`}
+            ></div>
+            <div
+              className={`w-3 h-3 rounded-full ${
+                step === 2 ? "bg-orange-500" : step > 2 ? "bg-green-500" : "bg-neutral-300 dark:bg-neutral-700"
+              }`}
             ></div>
           </div>
         </motion.div>
@@ -159,7 +172,12 @@ export default function SignInPage() {
             >
               {loading ? (
                 <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <svg
+                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path
                       className="opacity-75"
@@ -184,7 +202,12 @@ export default function SignInPage() {
             </button>
             {error && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5 mr-2 flex-shrink-0"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
                   <path
                     fillRule="evenodd"
                     d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
@@ -321,7 +344,12 @@ export default function SignInPage() {
                 >
                   {loading ? (
                     <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <svg
+                        className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path
                           className="opacity-75"
@@ -349,7 +377,12 @@ export default function SignInPage() {
 
             {error && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5 mr-2 flex-shrink-0"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
                   <path
                     fillRule="evenodd"
                     d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"

@@ -2,24 +2,23 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { MenuIcon, DoorClosedIcon as CloseIcon } from "lucide-react";
-
 import useAuthStore from "@/store/useAuthStore";
 import Sidebar from "@/components/Dashboard/sidebar";
-import { Skeleton } from "@/components/ui/skeleton";
+import PageLoader from "@/components/Dashboard/PageLoader";
 import DashboardSkeleton from "./DashboardSkeleton";
 
 export default function DashboardLayoutClient({ children }) {
   const { token, login } = useAuthStore();
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const pathname = usePathname();
 
-  const [user, setUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isRouteChanging, setIsRouteChanging] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -31,31 +30,27 @@ export default function DashboardLayoutClient({ children }) {
             login(parsed.state.token);
             return;
           }
-        } catch (err) {
-          console.error("Error parsing auth storage:", err);
-        }
+        } catch (_) {}
       }
       router.push("/sign-in");
-      setIsLoading(false);
+      setIsLoadingAuth(false);
     } else {
-      try {
-        const decoded = { sub: "123" };
-        setUser(decoded);
-        setIsLoading(false);
-      } catch (err) {
-        console.error("Token decode failed:", err);
-        router.push("/sign-in");
-        setIsLoading(false);
-      }
+      setIsLoadingAuth(false);
     }
   }, [token, login, router]);
 
   useEffect(() => {
-    if (!isLoading) {
+    if (!isLoadingAuth) {
       const t = setTimeout(() => setIsReady(true), 50);
       return () => clearTimeout(t);
     }
-  }, [isLoading]);
+  }, [isLoadingAuth]);
+
+  useEffect(() => {
+    if (!isRouteChanging) return;
+    const t = setTimeout(() => setIsRouteChanging(false), 200);
+    return () => clearTimeout(t);
+  }, [pathname, isRouteChanging]);
 
   useEffect(() => {
     const onResize = () => window.innerWidth >= 768 && setIsSidebarOpen(false);
@@ -63,23 +58,27 @@ export default function DashboardLayoutClient({ children }) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  if (isLoading || !isReady) return <DashboardSkeleton />;
-  if (!token || !user) return null;
+  if (isLoadingAuth || !isReady) return <DashboardSkeleton />;
+  if (!token) return null;
 
   return (
     <Suspense fallback={<DashboardSkeleton />}>
+      {isRouteChanging && <PageLoader />}
+
       <div className="min-h-screen bg-gradient-to-br from-neutral-50 via-white to-neutral-100 dark:from-neutral-900 dark:via-neutral-900 dark:to-neutral-900">
         <motion.header
           initial={{ y: -100 }}
           animate={{ y: 0 }}
-          className="md:hidden sticky top-0 z-40 bg-white/80 dark:bg-neutral-900/80 backdrop-blur-lg border-b border-neutral-200 dark:border-neutral-700"
+          className="md:hidden sticky top-0 z-40 bg-white/80 dark:bg-neutral-900/80
+                     backdrop-blur-lg border-b border-neutral-200 dark:border-neutral-700"
         >
           <div className="flex items-center justify-between px-4 py-3">
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+              className="p-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600
+                         text-white shadow-lg hover:shadow-xl transition-all duration-200"
             >
               <motion.div animate={{ rotate: isSidebarOpen ? 90 : 0 }} transition={{ duration: 0.2 }}>
                 {isSidebarOpen ? <CloseIcon className="w-5 h-5" /> : <MenuIcon className="w-5 h-5" />}
@@ -106,7 +105,11 @@ export default function DashboardLayoutClient({ children }) {
           )}
         </AnimatePresence>
 
-        <Sidebar isSidebarOpen={isSidebarOpen} closeSidebar={() => setIsSidebarOpen(false)} />
+        <Sidebar
+          isSidebarOpen={isSidebarOpen}
+          closeSidebar={() => setIsSidebarOpen(false)}
+          onNavigateStart={() => setIsRouteChanging(true)}
+        />
 
         <motion.main
           initial={{ opacity: 0 }}
@@ -120,7 +123,9 @@ export default function DashboardLayoutClient({ children }) {
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.1 }}
-              className="bg-white/60 dark:bg-neutral-900/60 backdrop-blur-sm rounded-2xl shadow-sm border border-neutral-200/50 dark:border-neutral-700/50 min-h-[calc(100vh-8rem)] md:min-h-[calc(100vh-6rem)]"
+              className="bg-white/60 dark:bg-neutral-900/60 backdrop-blur-sm rounded-2xl
+                         shadow-sm border border-neutral-200/50 dark:border-neutral-700/50
+                         min-h-[calc(100vh-8rem)] md:min-h-[calc(100vh-6rem)]"
             >
               {children}
             </motion.div>

@@ -1,4 +1,4 @@
-// File: biz-web-app/components/Pricing/PlanCard.jsx
+// components/Pricing/PlanCard.jsx
 
 "use client";
 
@@ -107,11 +107,21 @@ export default function PriceCard({ plan }) {
               }}
             >
               {plan.features[featureKey] ? (
-                <svg className="w-5 h-5 mr-3 text-green-500 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="w-5 h-5 mr-3 text-green-500 dark:text-green-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               ) : (
-                <svg className="w-5 h-5 mr-3 text-red-500 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="w-5 h-5 mr-3 text-red-500 dark:text-red-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               )}

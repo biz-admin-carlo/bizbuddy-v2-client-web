@@ -10,8 +10,6 @@ export const metadata = {
   description: "BizBuddy web application for time-keeping, payroll and leaves.",
 };
 
-const version = "2.0.0";
-
 export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
@@ -20,7 +18,7 @@ export default function RootLayout({ children }) {
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <NavBar />
           <main className="pt-16">{children}</main>
-          <BizChat clientId="socckVI7VnKfbO5Jf6f6" />
+          {/* <BizChat clientId="socckVI7VnKfbO5Jf6f6" /> */}
         </ThemeProvider>
       </body>
     </html>

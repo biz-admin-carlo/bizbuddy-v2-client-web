@@ -82,7 +82,6 @@ export function DateTimePicker({ value, onChange, placeholder }) {
         <div className="flex flex-col sm:flex-row">
           <Calendar mode="single" selected={date} onSelect={handleDateSelect} initialFocus />
           <div className="flex flex-row divide-x border-t sm:border-t-0 sm:divide-x">
-            {/* Hour Picker */}
             <ScrollArea className="h-[200px] w-[70px]">
               <div className="flex flex-col p-2 gap-1">
                 {Array.from({ length: 12 }, (_, i) => i + 1).map((hour) => (
@@ -98,26 +97,31 @@ export function DateTimePicker({ value, onChange, placeholder }) {
               </div>
               <ScrollBar orientation="vertical" />
             </ScrollArea>
-
-            {/* Minute Picker */}
             <ScrollArea className="h-[200px] w-[70px]">
               <div className="flex flex-col p-2 gap-1">
                 {Array.from({ length: 12 }, (_, i) => i * 5).map((minute) => (
-                  <Button key={minute} size="sm" variant={date && date.getMinutes() === minute ? "default" : "ghost"} onClick={() => setMinute(minute)}>
+                  <Button
+                    key={minute}
+                    size="sm"
+                    variant={date && date.getMinutes() === minute ? "default" : "ghost"}
+                    onClick={() => setMinute(minute)}
+                  >
                     {minute.toString().padStart(2, "0")}
                   </Button>
                 ))}
               </div>
               <ScrollBar orientation="vertical" />
             </ScrollArea>
-
-            {/* AM/PM Picker */}
             <div className="flex flex-col justify-center p-2 gap-1">
               {["AM", "PM"].map((ampm) => (
                 <Button
                   key={ampm}
                   size="sm"
-                  variant={date && ((ampm === "AM" && date.getHours() < 12) || (ampm === "PM" && date.getHours() >= 12)) ? "default" : "ghost"}
+                  variant={
+                    date && ((ampm === "AM" && date.getHours() < 12) || (ampm === "PM" && date.getHours() >= 12))
+                      ? "default"
+                      : "ghost"
+                  }
                   onClick={() => setAmPm(ampm)}
                 >
                   {ampm}

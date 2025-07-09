@@ -44,14 +44,22 @@ function KeyFeatures() {
   };
 
   return (
-    <motion.div className="w-full py-2 md:py-14 px-4 sm:px-6 lg:px-8 lg:py-28 lg:my-6 " initial="hidden" animate="visible" variants={containerVariants}>
+    <motion.div
+      className="w-full py-2 md:py-14 px-4 sm:px-6 lg:px-8 lg:py-28 lg:my-6 "
+      initial="hidden"
+      animate="visible"
+      variants={containerVariants}
+    >
       <motion.div className="mb-8" variants={itemVariants}>
         <h2 className="text-orange-500 mb-10 font-bold text-center pb-2 max-w-7xl mx-auto text-xl sm:text-2xl md:text-4xl lg:text-5xl capitalize">
           Key Features
         </h2>
       </motion.div>
       <div className="flex flex-col lg:flex-row gap-8 lg:gap-16 items-center justify-center">
-        <motion.div className="w-full lg:w-3/5 h-[30vh] sm:h-[40vh] lg:h-[60vh] relative overflow-hidden rounded-3xl" variants={itemVariants}>
+        <motion.div
+          className="w-full lg:w-3/5 h-[30vh] sm:h-[40vh] lg:h-[60vh] relative overflow-hidden rounded-3xl"
+          variants={itemVariants}
+        >
           <AnimatePresence mode="wait">
             <motion.img
               key={currentImageIndex}

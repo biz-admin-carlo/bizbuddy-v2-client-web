@@ -108,7 +108,9 @@ function DataDisplay() {
                 transition={{ delay: 0.8 + index * 0.1, duration: 0.6 }}
                 className="text-center bg-gradient-to-t from-red-600 via-orange-600 to-orange-400 backdrop-blur-sm rounded-lg p-4 transform hover:scale-105 transition-transform flex-1 min-w-[150px] max-w-[200px]"
               >
-                <p className="text-3xl font-bold text-white mb-1">{typeof data.quantity === "number" ? data.quantity.toLocaleString() : data.quantity}</p>
+                <p className="text-3xl font-bold text-white mb-1">
+                  {typeof data.quantity === "number" ? data.quantity.toLocaleString() : data.quantity}
+                </p>
                 <p className="text-sm text-white/90">{data.metric}</p>
               </motion.div>
             ))}
@@ -141,7 +143,9 @@ function DataDisplay() {
                 >
                   <X className="size-5" />
                 </button>
-                <h3 className="text-xl font-bold text-white">{qrModalType === "app" ? "Download for iOS" : "Download for Android"}</h3>
+                <h3 className="text-xl font-bold text-white">
+                  {qrModalType === "app" ? "Download for iOS" : "Download for Android"}
+                </h3>
                 <p className="text-white/90 text-sm mt-1">Scan the QR code to download BizBuddy</p>
               </div>
 
@@ -169,7 +173,9 @@ function DataDisplay() {
                       <Smartphone className="size-5 text-red-600" />
                       <span className="font-medium">Open your camera app</span>
                     </div>
-                    <p className="text-sm text-neutral-600 dark:text-neutral-400 pl-7">Point your camera at the QR code to scan it</p>
+                    <p className="text-sm text-neutral-600 dark:text-neutral-400 pl-7">
+                      Point your camera at the QR code to scan it
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -177,12 +183,16 @@ function DataDisplay() {
                       <Download className="size-5 text-red-600" />
                       <span className="font-medium">Install BizBuddy</span>
                     </div>
-                    <p className="text-sm text-neutral-600 dark:text-neutral-400 pl-7">Tap the notification and follow the instructions to install</p>
+                    <p className="text-sm text-neutral-600 dark:text-neutral-400 pl-7">
+                      Tap the notification and follow the instructions to install
+                    </p>
                   </div>
                   <div className="pt-2">
                     <p className="text-sm text-neutral-500 dark:text-neutral-400">Or visit directly:</p>
                     <a
-                      href={qrModalType === "app" ? "https://apps.apple.com/bizbuddy" : "https://play.google.com/store/apps/bizbuddy"}
+                      href={
+                        qrModalType === "app" ? "https://apps.apple.com/bizbuddy" : "https://play.google.com/store/apps/bizbuddy"
+                      }
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-500 dark:hover:text-red-400 transition-colors"

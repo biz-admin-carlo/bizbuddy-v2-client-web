@@ -1,4 +1,4 @@
-// File: biz-web-app/components/Partial/Navbar/UserMenu.jsx
+// components/Partial/Navbar/UserMenu.jsx
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -17,7 +17,6 @@ export default function UserMenu() {
   const menuRef = useRef(null);
 
   useEffect(() => {
-    console.log("Token in UserMenu:", token);
     if (token) {
       setIsLoading(true);
       fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/account/profile`, {
@@ -29,7 +28,6 @@ export default function UserMenu() {
             console.error("Error fetching profile:", data.error);
             logout();
           } else if (data.data) {
-            console.log("UserMenu signedInUser data:", data.data);
             setProfile(data.data);
           }
         })
@@ -61,7 +59,10 @@ export default function UserMenu() {
   const firstInitial = userProfile?.firstName ? userProfile.firstName.charAt(0) : "";
   const lastInitial = userProfile?.lastName ? userProfile.lastName.charAt(0) : "";
   const initials = (firstInitial + lastInitial).toUpperCase() || "?";
-  const fullName = userProfile?.firstName && userProfile?.lastName ? `${userProfile.firstName} ${userProfile.lastName}` : user?.username || "User";
+  const fullName =
+    userProfile?.firstName && userProfile?.lastName
+      ? `${userProfile.firstName} ${userProfile.lastName}`
+      : user?.username || "User";
 
   const getRoleColor = (role) => {
     switch (role?.toLowerCase()) {
@@ -97,8 +98,10 @@ export default function UserMenu() {
         }`}
       >
         <Avatar className="w-10 h-10 border-2 border-white dark:border-neutral-700 shadow-md">
-          <AvatarImage src={userProfile?.avatarUrl || "/placeholder.svg"} alt={fullName} />
-          <AvatarFallback className="bg-gradient-to-br from-orange-500 to-orange-600 text-white font-semibold">{initials}</AvatarFallback>
+          <AvatarImage src={userProfile?.avatarUrl} alt={fullName} />
+          <AvatarFallback className="bg-gradient-to-br from-orange-500 to-orange-600 text-white font-semibold">
+            {initials}
+          </AvatarFallback>
         </Avatar>
         <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }} className="hidden sm:block">
           <ChevronDown className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
@@ -119,8 +122,10 @@ export default function UserMenu() {
             <div className="px-6 py-4 border-b border-neutral-200 dark:border-neutral-700 bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-950 dark:to-orange-900 rounded-t-2xl">
               <div className="flex items-center gap-3">
                 <Avatar className="w-12 h-12 border-2 border-white dark:border-neutral-700">
-                  <AvatarImage src={userProfile?.avatarUrl || "/placeholder.svg"} alt={fullName} />
-                  <AvatarFallback className="bg-gradient-to-br from-orange-500 to-orange-600 text-white font-semibold">{initials}</AvatarFallback>
+                  <AvatarImage src={userProfile?.avatarUrl} alt={fullName} />
+                  <AvatarFallback className="bg-gradient-to-br from-orange-500 to-orange-600 text-white font-semibold">
+                    {initials}
+                  </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 truncate">{fullName}</p>

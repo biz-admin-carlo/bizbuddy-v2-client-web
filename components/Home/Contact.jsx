@@ -36,7 +36,10 @@ export default function Contact() {
 
   return (
     <motion.div className="py-10 mx-auto px-4 w-full max-w-7xl " initial="hidden" animate="visible" variants={containerVariants}>
-      <motion.h2 className="text-orange-500 font-bold text-center pb-2 text-xl sm:text-2xl md:text-4xl lg:text-5xl capitalize" variants={itemVariants}>
+      <motion.h2
+        className="text-orange-500 font-bold text-center pb-2 text-xl sm:text-2xl md:text-4xl lg:text-5xl capitalize"
+        variants={itemVariants}
+      >
         Get in Touch
       </motion.h2>
       <div className="flex flex-col items-center w-full mt-10">
@@ -53,7 +56,10 @@ export default function Contact() {
                 <div className="space-y-4">
                   <div className="flex items-center space-x-2 bg-orange-50 dark:bg-neutral-900 p-2 rounded-xl text-neutral-600 dark:text-neutral-400">
                     <MdOutlineEmail className="w-6 h-6 text-white bg-orange-500 p-1 rounded-xl" />
-                    <Link href="mailto:info@bizsolutions.us" className="text-xs sm:text-sm hover:text-orange-500 transition-colors">
+                    <Link
+                      href="mailto:info@bizsolutions.us"
+                      className="text-xs sm:text-sm hover:text-orange-500 transition-colors"
+                    >
                       info@bizsolutions.us
                     </Link>
                   </div>
@@ -77,8 +83,22 @@ export default function Contact() {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  <Input id="subject" placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} className="  " required />
-                  <Textarea id="message" placeholder="Your message" value={message} onChange={(e) => setMessage(e.target.value)} className="" required />
+                  <Input
+                    id="subject"
+                    placeholder="Subject"
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    className="  "
+                    required
+                  />
+                  <Textarea
+                    id="message"
+                    placeholder="Your message"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    className=""
+                    required
+                  />
                   <Button
                     type="submit"
                     className="py-3 px-4 w-full font-semibold text-white rounded-lg text-sm bg-gradient-to-r from-orange-500 to-orange-600"

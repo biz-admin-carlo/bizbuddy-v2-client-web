@@ -43,7 +43,9 @@ function TrustedPartners() {
   return (
     <div className="w-full my-5 py-16 -mb-9 md:py-28 flex flex-col items-center overflow-hidden bg-gradient-to-b from-orange-50/40 via-white to-orange-50/40 dark:from-black/90 dark:via-neutral-900 dark:to-black/90">
       <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
-        <h2 className="text-orange-500 font-bold text-center pb-6 text-2xl sm:text-3xl md:text-4xl lg:text-5xl capitalize">Our Trusted Partners</h2>
+        <h2 className="text-orange-500 font-bold text-center pb-6 text-2xl sm:text-3xl md:text-4xl lg:text-5xl capitalize">
+          Our Trusted Partners
+        </h2>
 
         <p className="text-center text-neutral-600 dark:text-neutral-300 max-w-2xl mx-auto mb-12 text-sm sm:text-base">
           We collaborate with industry leaders to deliver exceptional solutions and services to our clients
@@ -55,7 +57,11 @@ function TrustedPartners() {
         <div className="absolute right-0 w-20 h-full z-10 bg-gradient-to-l from-white dark:from-neutral-950 to-transparent"></div>
 
         <div className="overflow-hidden w-full py-8" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
-          <motion.div animate={controls} initial={{ x: "0%" }} className="flex items-center gap-16 sm:gap-24 md:gap-32 lg:gap-40 w-[200%]">
+          <motion.div
+            animate={controls}
+            initial={{ x: "0%" }}
+            className="flex items-center gap-16 sm:gap-24 md:gap-32 lg:gap-40 w-[200%]"
+          >
             {partnersForMarquee.map((partner, index) => (
               <motion.div
                 key={index}
@@ -65,7 +71,7 @@ function TrustedPartners() {
               >
                 <div className="relative bg-white dark:bg-neutral-600 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 flex items-center justify-center">
                   <Image
-                    src={partner.src || "/placeholder.svg"}
+                    src={partner.src}
                     alt={partner.name || `Trusted Partner ${index + 1}`}
                     width={200}
                     height={200}

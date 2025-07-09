@@ -10,27 +10,21 @@ const useAuthStore = create(
       token: null,
       isHydrated: false,
       login: (token) => {
-        console.log("Setting token:", token);
         set({ token });
       },
       logout: () => {
-        console.log("Logging out");
         set({ token: null });
       },
       setHydrated: (hydrated) => set({ isHydrated: hydrated }),
       get user() {
         const { token } = get();
         if (!token) {
-          console.log("No token found");
           return null;
         }
-        console.log("Token to decode:", token);
         try {
           const decoded = jwtDecode(token);
-          console.log("Decoded token:", decoded);
           return decoded;
         } catch (err) {
-          console.error("Failed to decode token:", err);
           return null;
         }
       },
@@ -41,7 +35,6 @@ const useAuthStore = create(
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.setHydrated(true);
-          console.log("Auth store rehydrated");
         }
       },
     }

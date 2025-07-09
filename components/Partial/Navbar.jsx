@@ -101,7 +101,7 @@ export default function NavBar() {
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center justify-between h-16">
           <motion.div whileHover={{ scale: 1.05 }}>
-            <Link href="/" className="flex items-center">
+            <Link href="/" className="flex items-center pl-16">
               <img src="/logo.png" alt="Bizbuddy title and logo" width={120} height={45} className="h-10 w-auto" />
             </Link>
           </motion.div>

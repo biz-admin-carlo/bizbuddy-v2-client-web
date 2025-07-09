@@ -1,4 +1,4 @@
-// biz-web-app/components/Theme/ThemeToggle.jsx
+// components/Theme/ThemeToggle.jsx
 
 "use client";
 

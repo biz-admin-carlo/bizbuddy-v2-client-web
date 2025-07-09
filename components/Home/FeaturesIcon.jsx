@@ -28,7 +28,11 @@ export default function FeaturesIcon() {
     features.forEach((_, index) => {
       const element = document.getElementById(`feature-${index}`);
       if (element) {
-        animate(element, { opacity: [0, 1], y: [100, 0], scale: [0.5, 1] }, { duration: 0.6, delay: index * 0.1, ease: "easeOut" });
+        animate(
+          element,
+          { opacity: [0, 1], y: [100, 0], scale: [0.5, 1] },
+          { duration: 0.6, delay: index * 0.1, ease: "easeOut" }
+        );
       }
     });
   }, []);
@@ -154,7 +158,9 @@ export default function FeaturesIcon() {
                     <feature.icon className="w-16 h-16 sm:w-20 sm:h-20" />
                   </motion.div>
                   <p className="text-lg sm:text-xl font-medium text-center px-6">{feature.name}</p>
-                  <p className="mt-4 text-xs sm:text-sm text-center px-8 opacity-80">{feature.description || "Feature description goes here"}</p>
+                  <p className="mt-4 text-xs sm:text-sm text-center px-8 opacity-80">
+                    {feature.description || "Feature description goes here"}
+                  </p>
                 </motion.div>
               </motion.div>
             );

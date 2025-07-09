@@ -2,8 +2,8 @@
 "use client";
 
 import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
+import { AnimatePresence, motion } from "framer-motion";
 import { X, Smartphone, Download } from "lucide-react";
 
 export default function LandingHero() {
@@ -56,8 +56,8 @@ export default function LandingHero() {
             transition={{ delay: 0.8, duration: 0.6 }}
             className=" text-base md:text-lg text-black font-medium"
           >
-            <span className="text-white">Bizbuddy</span> is accessible on Google Play, Appstore, Windows, Mac, and Web. Track time effortlessly across all
-            your devices and stay productive anywhere, anytime!
+            <span className="text-white">Bizbuddy</span> is accessible on Google Play, Appstore, Windows, Mac, and Web. Track time
+            effortlessly across all your devices and stay productive anywhere, anytime!
           </motion.p>
         </div>
 
@@ -109,7 +109,13 @@ export default function LandingHero() {
             ease: "easeInOut",
           }}
         >
-          <Image src="/landing-hero-image.png" alt="Devices" width={700} height={700} className="w-[150%] h-auto object-contain" />
+          <Image
+            src="/landing-hero-image.png"
+            alt="Devices"
+            width={700}
+            height={700}
+            className="w-[150%] h-auto object-contain"
+          />
         </motion.div>
       </motion.div>
       <AnimatePresence>
@@ -138,7 +144,9 @@ export default function LandingHero() {
                 >
                   <X className="size-5" />
                 </button>
-                <h3 className="text-xl font-bold text-white">{qrModalType === "app" ? "Download for iOS" : "Download for Android"}</h3>
+                <h3 className="text-xl font-bold text-white">
+                  {qrModalType === "app" ? "Download for iOS" : "Download for Android"}
+                </h3>
                 <p className="text-white/90 text-sm mt-1">Scan the QR code to download BizBuddy</p>
               </div>
               <div className="p-6 flex flex-col md:flex-row items-center gap-6">
@@ -165,7 +173,9 @@ export default function LandingHero() {
                       <Smartphone className="size-5 text-red-600" />
                       <span className="font-medium">Open your camera app</span>
                     </div>
-                    <p className="text-sm text-neutral-600 dark:text-neutral-400 pl-7">Point your camera at the QR code to scan it</p>
+                    <p className="text-sm text-neutral-600 dark:text-neutral-400 pl-7">
+                      Point your camera at the QR code to scan it
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -173,12 +183,16 @@ export default function LandingHero() {
                       <Download className="size-5 text-red-600" />
                       <span className="font-medium">Install BizBuddy</span>
                     </div>
-                    <p className="text-sm text-neutral-600 dark:text-neutral-400 pl-7">Tap the notification and follow the instructions to install</p>
+                    <p className="text-sm text-neutral-600 dark:text-neutral-400 pl-7">
+                      Tap the notification and follow the instructions to install
+                    </p>
                   </div>
                   <div className="pt-2">
                     <p className="text-sm text-neutral-500 dark:text-neutral-400">Or visit directly:</p>
                     <a
-                      href={qrModalType === "app" ? "https://apps.apple.com/bizbuddy" : "https://play.google.com/store/apps/bizbuddy"}
+                      href={
+                        qrModalType === "app" ? "https://apps.apple.com/bizbuddy" : "https://play.google.com/store/apps/bizbuddy"
+                      }
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-500 dark:hover:text-red-400 transition-colors"

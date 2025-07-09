@@ -1,131 +1,166 @@
-// File: biz-web-app/components/Dashboard/DashboardContent/sidebar.jsx
+// components/Dashboard/DashboardContent/sidebar.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import useAuthStore from "@/store/useAuthStore";
+import { useEffect, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { DoorClosedIcon as CloseIcon, Lock, ChevronDown, Building2, User } from "lucide-react";
-import useAuthStore from "@/store/useAuthStore";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const originalFeaturesItems = [
-  { id: "overview", label: "Overview", children: [{ id: "overview", label: "Overview" }] },
+const EmployeePanelItems = [
+  {
+    id: "overview",
+    label: "Overview",
+    children: [{ id: "employee/overview", label: "Overview" }],
+  },
+  {
+    id: "my-profile",
+    label: "Profile",
+    children: [
+      {
+        id: "employee/personal-employment-identifications",
+        label: "Personal & Employment Identification",
+      },
+      { id: "employee/employment-details", label: "Employment Details" },
+    ],
+  },
   {
     id: "time-keeping",
     label: "Time Keeping",
     children: [
-      { id: "my-punch", label: "Punch" },
-      { id: "my-time-log", label: "My Timelogs" },
-      { id: "my-shift-schedule", label: "My Schedule" },
+      { id: "employee/punch", label: "Punch" },
+      { id: "employee/punch-logs", label: "Punch logs" },
+      { id: "employee/schedule", label: "Schedule" },
     ],
   },
   {
     id: "leaves",
     label: "Leaves",
     children: [
-      { id: "my-leave-requests", label: "Request" },
-      { id: "my-leave-approvals", label: "Approval" },
+      { id: "employee/leave-request", label: "Leave Request" },
+      { id: "employee/leave-logs", label: "Leave Logs" },
     ],
   },
-  { id: "my-payroll", label: "My Payroll", children: [{ id: "my-payroll", label: "My Payroll" }] },
+  {
+    id: "payroll",
+    label: "Payroll",
+    children: [{ id: "employee/payroll", label: "Payroll" }],
+  },
 ];
 
-const originalSettingsItems = [
+const CompanyPanelItems = [
   {
-    id: "departments",
-    label: "Departments",
-    children: [{ id: "manage-departments", label: "Departments" }],
-  },
-  {
-    id: "employees",
-    label: "Employees",
+    id: "organizations&people",
+    label: "Organizations & People",
     children: [
-      { id: "manage-employees", label: "Employees" },
-      { id: "manage-timelogs", label: "Timelogs" },
-      { id: "manage-overtime-requests", label: "Overtime Requests" },
-      { id: "manage-leave-requests", label: "Leave Requests" },
+      { id: "company/departments", label: "Departments" },
+      { id: "company/employees", label: "Employees" },
     ],
   },
   {
-    id: "shifts",
-    label: "Shifts & Locations",
+    id: "punch-logs",
+    label: "Punch logs & Overtimes & Leaves",
     children: [
-      { id: "manage-shifts", label: "Shifts" },
-      { id: "manage-shift-schedules", label: "Shift Schedules" },
-      { id: "manage-locations", label: "Locations" },
+      { id: "company/punch-logs", label: "Employees Punch logs" },
+      { id: "company/overtime-requests", label: "Employees Overtime Requests" },
+      { id: "company/leave-requests", label: "Employees Leave Requests" },
+    ],
+  },
+  {
+    id: "shifts&schedules&locations",
+    label: "Shifts & Schedules & Locations",
+    children: [
+      { id: "company/shifts", label: "Company Shift Templates" },
+      { id: "company/schedules", label: "Employees Schedule" },
+      { id: "company/locations", label: "Employees Location Restriction" },
     ],
   },
   {
     id: "account",
-    label: "Account",
+    label: "Settings",
     children: [
-      { id: "subscription", label: "Subscription" },
-      { id: "manage-company-settings", label: "Settings" },
-      { id: "settings", label: "Deletion" },
+      { id: "company/profile", label: "Profile" },
+      { id: "company/subscription", label: "Subscription" },
+      { id: "company/configurations", label: "Configurations" },
+      { id: "company/deletion", label: "Deletion" },
     ],
   },
 ];
 
-function getFeaturesWithLock(items, plan) {
-  if (plan === "free") {
-    const allow = new Set(["my-time-log", "my-punch"]);
-    return items.map((g) => ({
-      ...g,
-      children: g.children.map((c) => ({
-        ...c,
-        locked: !allow.has(c.id),
-        requiredPlan: allow.has(c.id) ? null : "Basic",
-      })),
-    }));
+const ReferralPanelItems = [
+  {
+    id: "referral",
+    label: "Referral",
+    children: [{ id: "referral/referral", label: "Referral" }],
+  },
+];
+
+const FREE_ALLOWED = new Set([
+  "employee/punch",
+  "employee/punch-logs",
+  "company/punch-logs",
+  "company/deletion",
+  "company/profile",
+  "company/subscription",
+]);
+
+function lockChildByPlan(child, plan) {
+  switch (plan) {
+    case "pro":
+      return { ...child, locked: false, requiredPlan: null };
+    case "basic": {
+      const locked = child.id === "company/locations";
+      return {
+        ...child,
+        locked,
+        requiredPlan: locked ? "Pro" : null,
+      };
+    }
+    default: {
+      const locked = !FREE_ALLOWED.has(child.id);
+      return {
+        ...child,
+        locked,
+        requiredPlan: locked ? "Basic" : null,
+      };
+    }
   }
-  return items.map((g) => ({
-    ...g,
-    children: g.children.map((c) => ({ ...c, locked: false, requiredPlan: null })),
-  }));
 }
 
-function getSettingsWithLock(items, plan, role) {
-  let out;
-  if (plan === "free") {
-    out = items.map((g) =>
-      g.id === "account"
-        ? {
-            ...g,
-            children: g.children.map((c) => ({ ...c, locked: false, requiredPlan: null })),
-          }
-        : {
-            ...g,
-            children: g.children.map((c) => ({
-              ...c,
-              locked: true,
-              requiredPlan: "Basic",
-            })),
-          }
-    );
-  } else {
-    out = items.map((g) => ({
-      ...g,
-      children: g.children.map((c) => ({ ...c, locked: false, requiredPlan: null })),
-    }));
-  }
+function filterCompanyPanelByRole(items, role) {
+  const r = role.toLowerCase();
+  if (r === "employee") return [];
+  if (r === "supervisor") return items.filter((g) => ["organizations&people", "punch-logs"].includes(g.id));
+  return items;
+}
 
-  const r = role?.toLowerCase();
-  if (r === "superadmin") {
-    out = [
-      ...out,
-      {
-        id: "companies",
-        label: "Companies",
-        children: [{ id: "manage-companies", label: "Manage Companies", locked: false, requiredPlan: null }],
-      },
-    ];
-  } else if (r === "employee") {
-    out = out.filter((g) => g.id === "account");
-  }
-  return out;
+function getBizBuddyItems(role) {
+  return role.toLowerCase() === "superadmin"
+    ? [
+        {
+          id: "referrer",
+          label: "Referrer",
+          children: [{ id: "bizbuddy/referrers", label: "Referrer" }],
+        },
+        {
+          id: "subscribers",
+          label: "Subscribers",
+          children: [{ id: "bizbuddy/subscribers", label: "Subscribers" }],
+        },
+      ]
+    : [];
+}
+
+function applyPlanLock(groups, plan) {
+  return groups.map((g) => ({
+    ...g,
+    children: g.children.map((c) => lockChildByPlan(c, plan)),
+  }));
 }
 
 function SidebarSkeleton() {
@@ -162,18 +197,17 @@ function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle 
       <motion.button
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
-        className="flex justify-between items-center w-full px-4 py-3 rounded-xl
-                   bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700
-                   hover:bg-gradient-to-r hover:from-orange-50 hover:to-orange-50 
-                   dark:hover:from-orange-900 dark:hover:to-orange-900
-                   hover:border-orange-200 dark:hover:border-orange-700
-                   transition-all duration-200 text-sm font-medium
-                   shadow-sm hover:shadow-md"
         onClick={() => onToggle(item.id)}
+        className="flex w-full items-center justify-between rounded-xl border
+                   border-neutral-200 bg-white px-4 py-3 text-sm font-medium
+                   shadow-sm transition-all duration-200 hover:border-orange-200
+                   hover:bg-gradient-to-r hover:from-orange-50 hover:to-orange-50
+                   dark:border-neutral-700 dark:bg-neutral-900 dark:hover:border-orange-700
+                   dark:hover:from-orange-900 dark:hover:to-orange-900"
       >
         <span className="text-neutral-700 dark:text-neutral-200">{item.label}</span>
         <motion.div animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronDown className="w-4 h-4 text-neutral-500" />
+          <ChevronDown className="h-4 w-4 text-neutral-500" />
         </motion.div>
       </motion.button>
 
@@ -186,15 +220,28 @@ function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle 
             transition={{ duration: 0.3, ease: "easeInOut" }}
             className="mt-2 ml-2 space-y-1 overflow-hidden"
           >
-            {item.children.map((c, index) => {
+            {item.children.map((c, i) => {
               const route = `/dashboard/${c.id}`;
               const active = currentPath === route;
+
               return (
-                <motion.li key={c.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }}>
-                  <button
-                    onClick={() => !c.locked && onNavigate(route)}
-                    disabled={c.locked}
-                    className={`flex items-center justify-between w-full text-left rounded-lg
+                <motion.li
+                  key={c.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                >
+                  <Link
+                    href={c.locked ? "#" : route}
+                    prefetch={false}
+                    onClick={(e) => {
+                      if (c.locked) {
+                        e.preventDefault();
+                        return;
+                      }
+                      onNavigate(route);
+                    }}
+                    className={`flex w-full items-center justify-between rounded-lg
                                 px-4 py-2.5 text-sm transition-all duration-200
                                 border-l-2 ml-2
                                 ${
@@ -204,17 +251,21 @@ function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle 
                                 }
                                 ${c.locked ? "cursor-not-allowed opacity-60" : "hover:shadow-sm"}`}
                   >
-                    <span className={active ? "text-orange-700 dark:text-orange-300" : "text-neutral-600 dark:text-neutral-300"}>{c.label}</span>
+                    <span className={active ? "text-orange-700 dark:text-orange-300" : "text-neutral-600 dark:text-neutral-300"}>
+                      {c.label}
+                    </span>
+
                     {c.locked && c.requiredPlan && (
                       <Badge
                         variant="outline"
-                        className="ml-2 flex items-center gap-1 text-xs bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300"
+                        className="ml-2 flex items-center gap-1 bg-amber-50 text-xs text-amber-700
+                                   dark:bg-amber-950 dark:text-amber-300 border-amber-200 dark:border-amber-800"
                       >
                         {c.requiredPlan}
-                        <Lock className="w-3 h-3" />
+                        <Lock className="h-3 w-3" />
                       </Badge>
                     )}
-                  </button>
+                  </Link>
                 </motion.li>
               );
             })}
@@ -237,20 +288,19 @@ function SidebarUserInfo({ profileData, plan }) {
     <motion.div
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="p-6 border-b border-neutral-200 dark:border-neutral-700 bg-gradient-to-br from-white to-neutral-50 dark:from-neutral-900 dark:to-neutral-800"
+      className="p-4 border-b border-neutral-200 dark:border-neutral-700 bg-gradient-to-br from-white to-neutral-50 dark:from-neutral-900 dark:to-neutral-800"
     >
       <div className="flex flex-col items-center text-center">
-        <motion.div whileHover={{ scale: 1.05 }} className="relative mb-3">
-          <Avatar className="w-16 h-16 border-2 border-white dark:border-neutral-700 shadow-lg">
-            <AvatarImage src={prof.avatarUrl || "/placeholder.svg"} alt={name} />
+        <motion.div whileHover={{ scale: 1.05 }} className="relative mb-2">
+          <Avatar className="w-14 h-14 border-2 border-white dark:border-neutral-700 shadow-lg">
+            <AvatarImage src={prof.avatarUrl} alt={name} />
             <AvatarFallback className="bg-gradient-to-br from-orange-500 to-orange-600 text-white font-semibold text-lg">
               {initials.toUpperCase() || "?"}
             </AvatarFallback>
           </Avatar>
-          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 border-2 border-white dark:border-neutral-900 rounded-full"></div>
         </motion.div>
 
-        <div className="mb-3">
+        <div className="mb-1">
           <h3 className="font-semibold text-base text-neutral-800 dark:text-neutral-100 ">{name}</h3>
           <p className="text-sm text-neutral-500 dark:text-neutral-400 capitalize flex items-center justify-center gap-1">
             <User className="w-3 h-3" />
@@ -261,24 +311,24 @@ function SidebarUserInfo({ profileData, plan }) {
         <div className="w-full flex justify-between items-center">
           <div className="flex items-center justify-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
             <Building2 className="w-4 h-4" />
-            <span className="">{comp.name || "No Company"}</span>
+            <span>{comp.name || "No Company"}</span>
           </div>
-          <Badge className={`capitalize cursor-pointer`}>{plan} Plan</Badge>
+          <Badge className="capitalize">{plan} Plan</Badge>
         </div>
       </div>
     </motion.div>
   );
 }
 
-export default function Sidebar({ isSidebarOpen, closeSidebar }) {
+export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart }) {
   const { token } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
-
   const [profileData, setProfileData] = useState(null);
   const [plan, setPlan] = useState("free");
   const [openDropdown, setOpenDropdown] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     if (!token) return;
@@ -292,20 +342,29 @@ export default function Sidebar({ isSidebarOpen, closeSidebar }) {
           setProfileData(d.data);
           const p = d.data.subscription?.plan?.name?.toLowerCase() || "free";
           setPlan(p);
+          useAuthStore.setState((state) => ({ ...state, plan: p }));
         }
       })
       .catch((e) => console.error("Profile fetch error:", e))
       .finally(() => setLoading(false));
   }, [token]);
 
-  const role = profileData?.user?.role || "employee";
-  const features = getFeaturesWithLock(originalFeaturesItems, plan);
-  const settings = getSettingsWithLock(originalSettingsItems, plan, role);
-
   const navigate = (route) => {
+    if (onNavigateStart) onNavigateStart();
     closeSidebar && closeSidebar();
-    router.push(route);
+    startTransition(() => router.push(route));
   };
+
+  const role = profileData?.user?.role || "employee";
+  const roleLower = role.toLowerCase();
+
+  const features = applyPlanLock(EmployeePanelItems, plan);
+
+  const settings = applyPlanLock(filterCompanyPanelByRole(CompanyPanelItems, roleLower), plan);
+
+  const bizbuddy = getBizBuddyItems(role);
+
+  const referral = ReferralPanelItems;
 
   const toggle = (id) => setOpenDropdown(openDropdown === id ? null : id);
 
@@ -324,7 +383,6 @@ export default function Sidebar({ isSidebarOpen, closeSidebar }) {
           />
         )}
       </AnimatePresence>
-
       <motion.div
         initial={{ x: -320 }}
         animate={{ x: isSidebarOpen ? 0 : -320 }}
@@ -355,30 +413,104 @@ export default function Sidebar({ isSidebarOpen, closeSidebar }) {
             <>
               <SidebarUserInfo profileData={profileData} plan={plan} />
 
-              <div className="flex-1 overflow-y-auto px-4 py-6 space-y-8 scrollbar-thin scrollbar-thumb-neutral-300 dark:scrollbar-thumb-neutral-600">
+              <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 scrollbar-thin scrollbar-thumb-neutral-300 dark:scrollbar-thumb-neutral-600">
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-                  <h2 className="mb-4 px-2 text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-2">
+                  <h2 className="mb-2 px-2 text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-2">
                     <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
                     Employee Panel
                   </h2>
-                  <ul className="space-y-2">
+                  <ul className="space-y-1">
                     {features.map((g, index) => (
-                      <motion.div key={g.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 + index * 0.05 }}>
-                        <CollapsibleNavItem item={g} currentPath={pathname} onNavigate={navigate} expanded={openDropdown === g.id} onToggle={toggle} />
+                      <motion.div
+                        key={g.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.1 + index * 0.05 }}
+                      >
+                        <CollapsibleNavItem
+                          item={g}
+                          currentPath={pathname}
+                          onNavigate={navigate}
+                          expanded={openDropdown === g.id}
+                          onToggle={toggle}
+                        />
                       </motion.div>
                     ))}
                   </ul>
                 </motion.div>
+                {settings.length > 0 && (
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                    <h2 className="mb-2 px-2 text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-2">
+                      <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                      Company Panel
+                    </h2>
+                    <ul className="space-y-1">
+                      {settings.map((g, index) => (
+                        <motion.div
+                          key={g.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.2 + index * 0.05 }}
+                        >
+                          <CollapsibleNavItem
+                            item={g}
+                            currentPath={pathname}
+                            onNavigate={navigate}
+                            expanded={openDropdown === g.id}
+                            onToggle={toggle}
+                          />
+                        </motion.div>
+                      ))}
+                    </ul>
+                  </motion.div>
+                )}
+                {bizbuddy.length > 0 && (
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+                    <h2 className="mb-2 px-2 text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-2">
+                      <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                      BizBuddy Panel
+                    </h2>
+                    <ul className="space-y-1">
+                      {bizbuddy.map((g, index) => (
+                        <motion.div
+                          key={g.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.3 + index * 0.05 }}
+                        >
+                          <CollapsibleNavItem
+                            item={g}
+                            currentPath={pathname}
+                            onNavigate={navigate}
+                            expanded={openDropdown === g.id}
+                            onToggle={toggle}
+                          />
+                        </motion.div>
+                      ))}
+                    </ul>
+                  </motion.div>
+                )}
 
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-                  <h2 className="mb-4 px-2 text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-2">
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+                  <h2 className="mb-2 px-2 text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-2">
                     <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                    Management Panel
+                    Referral Panel
                   </h2>
-                  <ul className="space-y-2">
-                    {settings.map((g, index) => (
-                      <motion.div key={g.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 + index * 0.05 }}>
-                        <CollapsibleNavItem item={g} currentPath={pathname} onNavigate={navigate} expanded={openDropdown === g.id} onToggle={toggle} />
+                  <ul className="space-y-1">
+                    {referral.map((g, index) => (
+                      <motion.div
+                        key={g.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.4 + index * 0.05 }}
+                      >
+                        <CollapsibleNavItem
+                          item={g}
+                          currentPath={pathname}
+                          onNavigate={navigate}
+                          expanded={openDropdown === g.id}
+                          onToggle={toggle}
+                        />
                       </motion.div>
                     ))}
                   </ul>
