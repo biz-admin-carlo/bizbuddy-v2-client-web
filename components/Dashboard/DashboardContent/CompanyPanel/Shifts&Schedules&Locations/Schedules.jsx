@@ -459,7 +459,7 @@ export default function Schedules() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" asChild>
-            <Link href="/dashboard/manage-shifts">Shifts</Link>
+            <Link href="/dashboard/company/shifts">Shifts</Link>
           </Button>
           <TooltipProvider delayDuration={300}>
             <Tooltip>

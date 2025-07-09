@@ -137,8 +137,8 @@ function LocationPicker({ lat, lng, radius, onChange }) {
 }
 
 const columnOptions = [
-  { value: "id", label: "ID" },
-  { value: "name", label: "Name" },
+  { value: "id", label: "Location ID" },
+  { value: "name", label: "Location Name" },
   { value: "latitude", label: "Latitude" },
   { value: "longitude", label: "Longitude" },
   { value: "radius", label: "Radius" },
@@ -662,10 +662,10 @@ export default function Locations() {
 
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" asChild>
-            <Link href="/dashboard/manage-shifts">Shifts</Link>
+            <Link href="/dashboard/company/shifts">Shifts</Link>
           </Button>
           <Button variant="outline" asChild>
-            <Link href="/dashboard/manage-shift-schedules">Shift&nbsp;Schedules</Link>
+            <Link href="/dashboard/company/schedules">Shift&nbsp;Schedules</Link>
           </Button>
 
           <TooltipProvider delayDuration={300}>
