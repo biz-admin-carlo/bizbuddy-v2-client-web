@@ -69,8 +69,8 @@ export default function Departments() {
     });
 
   const columnOptions = [
-    { value: "id", label: "ID" },
-    { value: "name", label: "Department" },
+    { value: "id", label: "Department ID" },
+    { value: "name", label: "Department Name" },
     { value: "supervisor", label: "Supervisor" },
     { value: "userCount", label: "User Count" },
     { value: "createdAt", label: "Created At" },
@@ -498,8 +498,8 @@ export default function Departments() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {columnVisibility.includes("id") && <TableHead>ID</TableHead>}
-                  {columnVisibility.includes("name") && <TableHead>Department</TableHead>}
+                  {columnVisibility.includes("id") && <TableHead>Department ID</TableHead>}
+                  {columnVisibility.includes("name") && <TableHead>Department Name</TableHead>}
                   {columnVisibility.includes("supervisor") && <TableHead>Supervisor</TableHead>}
                   {columnVisibility.includes("userCount") && <TableHead>User Count</TableHead>}
                   {columnVisibility.includes("createdAt") && <TableHead>Created At</TableHead>}

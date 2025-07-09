@@ -45,8 +45,8 @@ import { fmtMMDDYYYY, fmtMMDDYYYY_hhmma } from "@/lib/dateTimeFormatter";
 const val = (v) => (v?.trim() ? v.trim() : undefined);
 
 const headerMap = {
-  id: "ID",
-  employeeId: "Employee ID",
+  id: "Employee ID",
+  employeeId: "Company Employee ID",
   name: "Name",
   email: "Email",
   role: "Role",
@@ -165,8 +165,8 @@ export default function Employees() {
   });
 
   const columnOptions = [
-    { value: "id", label: "ID" },
-    { value: "employeeId", label: "Employee ID" },
+    { value: "id", label: "Employee ID" },
+    { value: "employeeId", label: "Company Employee ID" },
     { value: "name", label: "Name" },
     { value: "email", label: "Email" },
     { value: "role", label: "Role" },
@@ -995,7 +995,7 @@ export default function Employees() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Employee ID</label>
+              <label className="text-sm font-medium">Company Employee ID</label>
               <Input
                 value={createForm.employeeId}
                 onChange={(e) => setCreateForm({ ...createForm, employeeId: e.target.value })}
@@ -1172,7 +1172,7 @@ export default function Employees() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Employee ID</label>
+              <label className="text-sm font-medium">Company Employee ID</label>
               <Input value={editForm.employeeId} onChange={(e) => setEditForm({ ...editForm, employeeId: e.target.value })} />
             </div>
             <div className="space-y-2">

@@ -18,8 +18,6 @@ import {
   AlertCircle,
   FileText,
   Eye,
-  Smartphone,
-  MapPin,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
@@ -36,6 +34,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { fmtMMDDYYYY_hhmma } from "@/lib/dateTimeFormatter";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -67,12 +66,8 @@ const diffHours = (inTs, outTs) => {
   return +(ms / 3_600_000).toFixed(2);
 };
 
-/* ───── component ───── */
-
 export default function EmployeesOvertimeRequests() {
   const { token } = useAuthStore();
-
-  /* ---------- state ---------- */
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sortKey, setSortKey] = useState("requestedNewest");
@@ -85,10 +80,9 @@ export default function EmployeesOvertimeRequests() {
   const [logOpen, setLogOpen] = useState(false);
   const [logData, setLogData] = useState(null);
 
-  /* ---------- column visibility ---------- */
   const columnOptions = [
-    { value: "otId", label: "OT ID" },
-    { value: "requester", label: "Requester" },
+    { value: "otId", label: "Overtime ID" },
+    { value: "requester", label: "Requester Email" },
     { value: "timeLogId", label: "TimeLog ID" },
     { value: "otHours", label: "OT (h)" },
     { value: "lateHours", label: "Late (h)" },
@@ -99,7 +93,6 @@ export default function EmployeesOvertimeRequests() {
   ];
   const [columnVisibility, setColumnVisibility] = useState(columnOptions.map((o) => o.value));
 
-  /* ---------- filters ---------- */
   const [filters, setFilters] = useState({
     otIds: ["all"],
     reqs: ["all"],
@@ -118,7 +111,6 @@ export default function EmployeesOvertimeRequests() {
       return { ...prev, [key]: list.length ? list : ["all"] };
     });
 
-  /* ---------- fetching ---------- */
   const fetchRows = useCallback(async () => {
     if (!token) return;
     setLoading(true);
@@ -144,7 +136,6 @@ export default function EmployeesOvertimeRequests() {
     fetchRows();
   }, [fetchRows]);
 
-  /* ---------- helpers ---------- */
   const StatusBadge = ({ status }) => (
     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${statusClasses[status] || ""}`}>
       {statusIcons[status]} {status}
@@ -158,7 +149,6 @@ export default function EmployeesOvertimeRequests() {
 
   const lateVal = (r) => (r.lateHours != null ? Number(r.lateHours).toFixed(2) : r.timeLog?.lateHours ?? "—");
 
-  /* ---------- filter options ---------- */
   const otIdOpts = useMemo(() => [...new Set(rows.map((r) => r.id))].map((v) => ({ value: v, label: v })), [rows]);
   const reqOpts = useMemo(
     () => [...new Set(rows.map((r) => r.requester?.email || r.requester?.username || "—"))].map((v) => ({ value: v, label: v })),
@@ -190,12 +180,10 @@ export default function EmployeesOvertimeRequests() {
     [rows]
   );
 
-  /* ---------- derived list ---------- */
   const viewRows = useMemo(() => {
     let list = [...rows];
     const f = filters;
 
-    /* apply filters */
     if (!f.otIds.includes("all")) list = list.filter((r) => f.otIds.includes(r.id));
     if (!f.reqs.includes("all")) list = list.filter((r) => f.reqs.includes(r.requester?.email || r.requester?.username || "—"));
     if (!f.tlIds.includes("all")) list = list.filter((r) => f.tlIds.includes(r.timeLogId || "—"));
@@ -204,7 +192,6 @@ export default function EmployeesOvertimeRequests() {
     if (!f.reasons.includes("all")) list = list.filter((r) => f.reasons.includes(r.requesterReason || "—"));
     if (!f.statuses.includes("all")) list = list.filter((r) => f.statuses.includes(r.status));
 
-    /* sorting */
     const cmpStr = (a, b) => a.localeCompare(b);
     const cmpNum = (a, b) => a - b;
     const dir = (asc) => (asc ? 1 : -1);
@@ -276,7 +263,6 @@ export default function EmployeesOvertimeRequests() {
     return list;
   }, [rows, filters, sortKey]);
 
-  /* ---------- actions helpers ---------- */
   const openDialog = (type, row) => {
     setDialogType(type);
     setSelected(row);
@@ -331,7 +317,6 @@ export default function EmployeesOvertimeRequests() {
     setActionLoading(false);
   };
 
-  /* ---------- reusable filter row ---------- */
   const FilterRow = ({ label, options, selKey }) => (
     <MultiSelect
       options={options}
@@ -342,12 +327,9 @@ export default function EmployeesOvertimeRequests() {
     />
   );
 
-  /* ---------- render ---------- */
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
-      <Toaster richColors />
-
-      {/* page header */}
+      <Toaster position="top-center" richColors />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
         <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
           <Clock className="h-7 w-7 text-orange-500" />
@@ -364,8 +346,6 @@ export default function EmployeesOvertimeRequests() {
           </Tooltip>
         </TooltipProvider>
       </div>
-
-      {/* table controls */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
@@ -377,13 +357,10 @@ export default function EmployeesOvertimeRequests() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* column selector */}
           <div className="flex flex-wrap gap-3 items-center">
             <span className="text-sm font-medium text-muted-foreground">Column:</span>
             <ColumnSelector options={columnOptions} visible={columnVisibility} setVisible={setColumnVisibility} />
           </div>
-
-          {/* filters */}
           <div className="flex flex-wrap gap-3 items-center">
             <span className="text-sm font-medium text-muted-foreground">Filter:</span>
             <FilterRow label="OT IDs" options={otIdOpts} selKey="otIds" />
@@ -404,8 +381,6 @@ export default function EmployeesOvertimeRequests() {
           </div>
         </CardContent>
       </Card>
-
-      {/* main table */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
@@ -420,10 +395,8 @@ export default function EmployeesOvertimeRequests() {
         <CardContent className="p-0">
           <div className="rounded-md border">
             <Table>
-              {/* ---------- header ---------- */}
               <TableHeader>
                 <TableRow>
-                  {/* OT ID */}
                   {columnVisibility.includes("otId") && (
                     <TableHead
                       className="cursor-pointer text-center whitespace-nowrap"
@@ -440,14 +413,13 @@ export default function EmployeesOvertimeRequests() {
                     </TableHead>
                   )}
 
-                  {/* Requester */}
                   {columnVisibility.includes("requester") && (
                     <TableHead
                       className="cursor-pointer text-center whitespace-nowrap"
                       onClick={() => setSortKey((p) => (p === "requesterAsc" ? "requesterDesc" : "requesterAsc"))}
                     >
                       <div className="flex items-center justify-center gap-1">
-                        Requester
+                        Requester Email
                         {sortKey === "requesterAsc" ? (
                           <ChevronDown className="h-4 w-4" />
                         ) : sortKey === "requesterDesc" ? (
@@ -457,7 +429,6 @@ export default function EmployeesOvertimeRequests() {
                     </TableHead>
                   )}
 
-                  {/* TimeLog ID */}
                   {columnVisibility.includes("timeLogId") && (
                     <TableHead
                       className="cursor-pointer text-center whitespace-nowrap"
@@ -474,7 +445,6 @@ export default function EmployeesOvertimeRequests() {
                     </TableHead>
                   )}
 
-                  {/* OT */}
                   {columnVisibility.includes("otHours") && (
                     <TableHead
                       className="cursor-pointer text-center whitespace-nowrap"
@@ -491,7 +461,6 @@ export default function EmployeesOvertimeRequests() {
                     </TableHead>
                   )}
 
-                  {/* Late */}
                   {columnVisibility.includes("lateHours") && (
                     <TableHead
                       className="cursor-pointer text-center whitespace-nowrap"
@@ -508,7 +477,6 @@ export default function EmployeesOvertimeRequests() {
                     </TableHead>
                   )}
 
-                  {/* Reason */}
                   {columnVisibility.includes("reason") && (
                     <TableHead
                       className="cursor-pointer text-center whitespace-nowrap"
@@ -525,7 +493,6 @@ export default function EmployeesOvertimeRequests() {
                     </TableHead>
                   )}
 
-                  {/* Status */}
                   {columnVisibility.includes("status") && (
                     <TableHead
                       className="cursor-pointer text-center whitespace-nowrap"
@@ -558,7 +525,6 @@ export default function EmployeesOvertimeRequests() {
                     </TableHead>
                   )}
 
-                  {/* Updated At */}
                   {columnVisibility.includes("updatedAt") && (
                     <TableHead
                       className="cursor-pointer text-center whitespace-nowrap"
@@ -621,20 +587,14 @@ export default function EmployeesOvertimeRequests() {
                           </TableCell>
                         )}
                         {columnVisibility.includes("createdAt") && (
-                          <TableCell className="text-center text-nowrap italic text-muted-foreground text-xs">
-                            {fmt(r.createdAt)}
-                          </TableCell>
+                          <TableCell className="text-center text-nowrap">{fmtMMDDYYYY_hhmma(r.createdAt)}</TableCell>
                         )}
                         {columnVisibility.includes("updatedAt") && (
-                          <TableCell className="text-center text-nowrap italic text-muted-foreground text-xs">
-                            {fmt(r.updatedAt)}
-                          </TableCell>
+                          <TableCell className="text-center text-nowrap">{fmtMMDDYYYY_hhmma(r.updatedAt)}</TableCell>
                         )}
 
-                        {/* ---------- actions ---------- */}
                         <TableCell className="text-center whitespace-nowrap">
                           <div className="flex justify-center gap-1">
-                            {/* View Time Log */}
                             <TooltipProvider delayDuration={300}>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -654,7 +614,6 @@ export default function EmployeesOvertimeRequests() {
                               </Tooltip>
                             </TooltipProvider>
 
-                            {/* Details */}
                             <TooltipProvider delayDuration={300}>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -674,7 +633,6 @@ export default function EmployeesOvertimeRequests() {
                               </Tooltip>
                             </TooltipProvider>
 
-                            {/* Approve / Reject */}
                             {r.status === "pending" && (
                               <>
                                 <TooltipProvider delayDuration={300}>
@@ -711,7 +669,6 @@ export default function EmployeesOvertimeRequests() {
                               </>
                             )}
 
-                            {/* Delete */}
                             <TooltipProvider delayDuration={300}>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -750,8 +707,6 @@ export default function EmployeesOvertimeRequests() {
         </CardContent>
       </Card>
 
-      {/* ---------- dialogs ---------- */}
-      {/* approve / reject */}
       <Dialog open={!!dialogType} onOpenChange={(o) => !o && closeDialog()}>
         <DialogContent className="sm:max-w-md border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -772,13 +727,13 @@ export default function EmployeesOvertimeRequests() {
           {selected && (
             <div className="border rounded-md p-3 bg-muted/50 text-sm space-y-1">
               <p>
-                <strong>OT ID:</strong> {selected.id}
+                <strong>Overtime ID:</strong> {selected.id}
               </p>
               <p>
-                <strong>TimeLog ID:</strong> {selected.timeLogId}
+                <strong>Punch log ID:</strong> {selected.timeLogId}
               </p>
               <p>
-                <strong>Requester:</strong> {selected.requester?.email || selected.requester?.username}
+                <strong>Requester Email:</strong> {selected.requester?.email || selected.requester?.username}
               </p>
               <p>
                 <strong>OT Hours:</strong> {otVal(selected)}
@@ -823,7 +778,6 @@ export default function EmployeesOvertimeRequests() {
         </DialogContent>
       </Dialog>
 
-      {/* details */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="sm:max-w-md border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -846,20 +800,20 @@ export default function EmployeesOvertimeRequests() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-muted-foreground">OT ID</p>
+                  <p className="text-sm text-muted-foreground">Overtime ID</p>
                   <p className="font-mono text-xs">{selected.id}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">TimeLog ID</p>
+                  <p className="text-sm text-muted-foreground">Punch log ID</p>
                   <p className="font-mono text-xs">{selected.timeLogId}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Requester</p>
+                  <p className="text-sm text-muted-foreground">Requester Email</p>
                   <p className="font-medium">{selected.requester?.email || selected.requester?.username}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Requested At</p>
-                  <p className="font-medium">{fmt(selected.createdAt)}</p>
+                  <p className="font-medium">{fmtMMDDYYYY_hhmma(selected.createdAt)}</p>
                 </div>
               </div>
 
@@ -911,11 +865,11 @@ export default function EmployeesOvertimeRequests() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-muted-foreground">Time In</p>
-                  <p className="font-medium">{fmt(logData.timeIn)}</p>
+                  <p className="font-medium">{fmtMMDDYYYY_hhmma(logData.timeIn)}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Time Out</p>
-                  <p className="font-medium">{fmt(logData.timeOut)}</p>
+                  <p className="font-medium">{fmtMMDDYYYY_hhmma(logData.timeOut)}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Status</p>
@@ -974,13 +928,13 @@ export default function EmployeesOvertimeRequests() {
           {selected && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4 my-4 space-y-1 text-sm">
               <p>
-                <strong>OT ID:</strong> {selected.id}
+                <strong>Overtime ID:</strong> {selected.id}
               </p>
               <p>
-                <strong>TimeLog ID:</strong> {selected.timeLogId}
+                <strong>Punch log ID:</strong> {selected.timeLogId}
               </p>
               <p>
-                <strong>Requester:</strong> {selected.requester?.email || selected.requester?.username}
+                <strong>Requester Email:</strong> {selected.requester?.email || selected.requester?.username}
               </p>
               <p>
                 <strong>OT Hours:</strong> {otVal(selected)}

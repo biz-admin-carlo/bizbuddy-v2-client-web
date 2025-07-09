@@ -31,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
+import { fmtMMDDYYYY_hhmma } from "@/lib/dateTimeFormatter";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -48,15 +49,6 @@ const statusIcons = {
   rejected: <XCircle className="h-3 w-3 mr-1" />,
 };
 
-const formatDate = (d) =>
-  new Date(d).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
 export default function EmployeesLeaveRequests() {
   const { token } = useAuthStore();
 
@@ -71,7 +63,7 @@ export default function EmployeesLeaveRequests() {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
   const columnOptions = [
-    { value: "requester", label: "Requester" },
+    { value: "requester", label: "Requester Email" },
     { value: "leaveType", label: "Leave Type" },
     { value: "dateRange", label: "Date Range" },
     { value: "reason", label: "Reason" },
@@ -344,14 +336,13 @@ export default function EmployeesLeaveRequests() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {/* requester */}
                   {columnVisibility.includes("requester") && (
                     <TableHead
                       className="cursor-pointer whitespace-nowrap"
                       onClick={() => setSortKey((p) => (p === "requesterAsc" ? "requesterDesc" : "requesterAsc"))}
                     >
                       <div className="flex items-center justify-center gap-1">
-                        Requester
+                        Requester Email
                         {sortKey === "requesterAsc" ? (
                           <ChevronDown className="h-4 w-4" />
                         ) : sortKey === "requesterDesc" ? (
@@ -361,7 +352,6 @@ export default function EmployeesLeaveRequests() {
                     </TableHead>
                   )}
 
-                  {/* leave type */}
                   {columnVisibility.includes("leaveType") && (
                     <TableHead
                       className="cursor-pointer whitespace-nowrap"
@@ -378,7 +368,6 @@ export default function EmployeesLeaveRequests() {
                     </TableHead>
                   )}
 
-                  {/* date range */}
                   {columnVisibility.includes("dateRange") && (
                     <TableHead
                       className="cursor-pointer whitespace-nowrap"
@@ -394,11 +383,7 @@ export default function EmployeesLeaveRequests() {
                       </div>
                     </TableHead>
                   )}
-
-                  {/* reason */}
                   {columnVisibility.includes("reason") && <TableHead className="whitespace-nowrap text-center">Reason</TableHead>}
-
-                  {/* status */}
                   {columnVisibility.includes("status") && (
                     <TableHead
                       className="cursor-pointer whitespace-nowrap"
@@ -414,8 +399,6 @@ export default function EmployeesLeaveRequests() {
                       </div>
                     </TableHead>
                   )}
-
-                  {/* created at */}
                   {columnVisibility.includes("createdAt") && (
                     <TableHead
                       className="cursor-pointer whitespace-nowrap"
@@ -431,8 +414,6 @@ export default function EmployeesLeaveRequests() {
                       </div>
                     </TableHead>
                   )}
-
-                  {/* updated at */}
                   {columnVisibility.includes("updatedAt") && (
                     <TableHead
                       className="cursor-pointer whitespace-nowrap"
@@ -454,7 +435,6 @@ export default function EmployeesLeaveRequests() {
               </TableHeader>
 
               <TableBody>
-                {/* loading skeletons */}
                 {loading ? (
                   [...Array(5)].map((_, i) => (
                     <TableRow key={i}>
@@ -491,11 +471,11 @@ export default function EmployeesLeaveRequests() {
                             <div className="flex flex-col gap-1">
                               <span className="text-nowrap">
                                 <Calendar className="inline h-3 w-3 mr-1 text-orange-500" />
-                                From: {formatDate(l.startDate)}
+                                From: {fmtMMDDYYYY_hhmma(l.startDate)}
                               </span>
                               <span className="text-nowrap">
                                 <Calendar className="inline h-3 w-3 mr-1 text-orange-500" />
-                                To: {formatDate(l.endDate)}
+                                To: {fmtMMDDYYYY_hhmma(l.endDate)}
                               </span>
                             </div>
                           </TableCell>
@@ -515,14 +495,10 @@ export default function EmployeesLeaveRequests() {
                           </TableCell>
                         )}
                         {columnVisibility.includes("createdAt") && (
-                          <TableCell className="text-center text-nowrap italic text-muted-foreground text-xs">
-                            {formatDate(l.createdAt)}
-                          </TableCell>
+                          <TableCell className="text-center text-nowrap">{fmtMMDDYYYY_hhmma(l.createdAt)}</TableCell>
                         )}
                         {columnVisibility.includes("updatedAt") && (
-                          <TableCell className="text-center text-nowrap italic text-muted-foreground text-xs">
-                            {formatDate(l.updatedAt)}
-                          </TableCell>
+                          <TableCell className="text-center text-nowrap">{fmtMMDDYYYY_hhmma(l.updatedAt)}</TableCell>
                         )}
                         <TableCell>
                           <div className="flex justify-center gap-1">
@@ -622,9 +598,6 @@ export default function EmployeesLeaveRequests() {
           </div>
         </CardContent>
       </Card>
-
-      {/* dialogs are unchanged below */}
-      {/* approve / reject dialog */}
       <Dialog open={!!dialogType} onOpenChange={(o) => !o && closeDialog()}>
         <DialogContent className="sm:max-w-lg border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
@@ -652,7 +625,7 @@ export default function EmployeesLeaveRequests() {
             <div className="bg-black/5 dark:bg-white/5 rounded-lg p-4 mb-4 border border-black/10 dark:border-white/10">
               <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
                 <div>
-                  <span className="text-muted-foreground">Requester:</span>{" "}
+                  <span className="text-muted-foreground">Requester Email:</span>{" "}
                   <span className="font-medium">{selectedLeave.User?.email || selectedLeave.requester?.username || "—"}</span>
                 </div>
                 <div>
@@ -661,11 +634,11 @@ export default function EmployeesLeaveRequests() {
                 </div>
                 <div>
                   <span className="text-muted-foreground">Start Date:</span>{" "}
-                  <span className="font-medium">{formatDate(selectedLeave.startDate)}</span>
+                  <span className="font-medium">{fmtMMDDYYYY_hhmma(selectedLeave.startDate)}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">End Date:</span>{" "}
-                  <span className="font-medium">{formatDate(selectedLeave.endDate)}</span>
+                  <span className="font-medium">{fmtMMDDYYYY_hhmma(selectedLeave.endDate)}</span>
                 </div>
                 {selectedLeave.reason && (
                   <div className="col-span-2 mt-2 pt-2 border-t border-black/10 dark:border-white/10">
@@ -729,7 +702,6 @@ export default function EmployeesLeaveRequests() {
         </DialogContent>
       </Dialog>
 
-      {/* details dialog */}
       <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
         <DialogContent className="sm:max-w-lg border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
@@ -752,7 +724,7 @@ export default function EmployeesLeaveRequests() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Requester</p>
+                  <p className="text-sm text-muted-foreground">Requester Email</p>
                   <p className="font-medium">{selectedLeave.User?.email || selectedLeave.requester?.username || "—"}</p>
                 </div>
                 <div className="space-y-1">
@@ -761,11 +733,11 @@ export default function EmployeesLeaveRequests() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Start Date</p>
-                  <p className="font-medium">{formatDate(selectedLeave.startDate)}</p>
+                  <p className="font-medium">{fmtMMDDYYYY_hhmma(selectedLeave.startDate)}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">End Date</p>
-                  <p className="font-medium">{formatDate(selectedLeave.endDate)}</p>
+                  <p className="font-medium">{fmtMMDDYYYY_hhmma(selectedLeave.endDate)}</p>
                 </div>
               </div>
 
@@ -805,7 +777,7 @@ export default function EmployeesLeaveRequests() {
                     <div>
                       <p className="text-sm font-medium">Request Created</p>
                       <p className="text-xs text-muted-foreground">
-                        {formatDate(selectedLeave.createdAt || selectedLeave.startDate)}
+                        {fmtMMDDYYYY_hhmma(selectedLeave.createdAt || selectedLeave.startDate)}
                       </p>
                     </div>
                   </div>
@@ -828,7 +800,7 @@ export default function EmployeesLeaveRequests() {
                       <div>
                         <p className="text-sm font-medium capitalize">Request {selectedLeave.status}</p>
                         <p className="text-xs text-muted-foreground">
-                          {formatDate(selectedLeave.updatedAt || selectedLeave.startDate)}
+                          {fmtMMDDYYYY_hhmma(selectedLeave.updatedAt || selectedLeave.startDate)}
                         </p>
                       </div>
                     </div>
@@ -873,7 +845,6 @@ export default function EmployeesLeaveRequests() {
         </DialogContent>
       </Dialog>
 
-      {/* delete confirmation */}
       <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
         <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
           <div className="h-1 w-full bg-red-500 -mt-6 mb-4"></div>
@@ -902,11 +873,11 @@ export default function EmployeesLeaveRequests() {
                 </div>
                 <div>
                   <span className="opacity-70">Start Date:</span>{" "}
-                  <span className="font-medium">{formatDate(selectedLeave.startDate)}</span>
+                  <span className="font-medium">{fmtMMDDYYYY_hhmma(selectedLeave.startDate)}</span>
                 </div>
                 <div>
                   <span className="opacity-70">End Date:</span>{" "}
-                  <span className="font-medium">{formatDate(selectedLeave.endDate)}</span>
+                  <span className="font-medium">{fmtMMDDYYYY_hhmma(selectedLeave.endDate)}</span>
                 </div>
                 <div className="col-span-2">
                   <span className="opacity-70">Status:</span>{" "}
