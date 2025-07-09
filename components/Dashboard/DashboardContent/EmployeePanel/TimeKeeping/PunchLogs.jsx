@@ -175,7 +175,7 @@ export default function PunchLogs() {
   const [schedForDialog, setSchedForDialog] = useState([]);
 
   const columnOptions = [
-    { value: "id", label: "Timelog ID" },
+    { value: "id", label: "Punch log ID" },
     { value: "schedule", label: "Schedule" },
     { value: "dateTimeIn", label: "DateTimeIn" },
     { value: "dateTimeOut", label: "DateTimeOut" },
@@ -669,7 +669,7 @@ export default function PunchLogs() {
           <div>
             <CardTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-orange-500" />
-              Timelogs
+              Punch logs
             </CardTitle>
             <CardDescription>All recorded time entries</CardDescription>
           </div>
@@ -744,7 +744,7 @@ export default function PunchLogs() {
       <ConfirmDeleteDialog
         open={delOpen}
         setOpen={setDelOpen}
-        title="Delete Timelog"
+        title="Delete Punch log"
         description={selected ? `Remove timelog ${selected.id} – ${safeDate(selected.timeIn)} ?` : ""}
         loading={deleteLoading}
         onConfirm={deleteLog}
