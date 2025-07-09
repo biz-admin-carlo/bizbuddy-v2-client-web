@@ -361,13 +361,7 @@ export default function LeaveLogs() {
                       >
                         {columnVisibility.includes("id") && <TableCell>{l.id}</TableCell>}
 
-                        {columnVisibility.includes("leaveType") && (
-                          <TableCell>
-                            <Badge variant="outline" className="capitalize">
-                              {l.leaveType}
-                            </Badge>
-                          </TableCell>
-                        )}
+                        {columnVisibility.includes("leaveType") && <TableCell>{l.leaveType}</TableCell>}
 
                         {columnVisibility.includes("dateRange") && (
                           <TableCell className="text-nowrap">

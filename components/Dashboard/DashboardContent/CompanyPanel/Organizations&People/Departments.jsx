@@ -1,4 +1,4 @@
-// components/Dashboard/DashboardContent/Settings/Admin/ManageDepartments.jsx
+// components/Dashboard/DashboardContent/CompanyPanel/Organizations&People/Departments.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
@@ -30,11 +30,11 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { fmtMMDDYYYY_hhmma } from "@/lib/dateTimeFormatter";
 
 export default function Departments() {
   const { token } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
-
   const [profileData, setProfileData] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
@@ -44,35 +44,21 @@ export default function Departments() {
   const [exporting, setExporting] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createDeptForm, setCreateDeptForm] = useState({
-    name: "",
-    supervisorId: "",
-  });
-
+  const [createDeptForm, setCreateDeptForm] = useState({ name: "", supervisorId: "" });
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editDeptForm, setEditDeptForm] = useState({
-    id: "",
-    name: "",
-    supervisorId: "",
-  });
-
+  const [editDeptForm, setEditDeptForm] = useState({ id: "", name: "", supervisorId: "" });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [departmentToDelete, setDepartmentToDelete] = useState(null);
-
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [usersDeptName, setUsersDeptName] = useState("");
   const [supervisorUser, setSupervisorUser] = useState(null);
   const [deptMembers, setDeptMembers] = useState([]);
-
   const [sortConfig] = useState({ key: "id", direction: "ascending" });
-
   const [filters, setFilters] = useState({
     deptIds: ["all"],
     supervisorIds: ["all"],
   });
-
   const toggleListFilter = (key, val) =>
     setFilters((prev) => {
       if (val === "all") return { ...prev, [key]: ["all"] };
@@ -87,6 +73,8 @@ export default function Departments() {
     { value: "name", label: "Department" },
     { value: "supervisor", label: "Supervisor" },
     { value: "userCount", label: "User Count" },
+    { value: "createdAt", label: "Created At" },
+    { value: "updatedAt", label: "Updated At" },
   ];
   const [columnVisibility, setColumnVisibility] = useState(columnOptions.map((o) => o.value));
 
@@ -94,9 +82,7 @@ export default function Departments() {
 
   useEffect(() => {
     if (!token) return;
-    fetch(`${API_URL}/api/account/profile`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    fetch(`${API_URL}/api/account/profile`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then((j) => {
         if (j?.data?.company?.id) setProfileData(j.data);
@@ -106,17 +92,13 @@ export default function Departments() {
   }, [token, API_URL]);
 
   useEffect(() => {
-    if (token && profileData?.company?.id) {
-      refreshData();
-    }
+    if (token && profileData?.company?.id) refreshData();
   }, [token, profileData]);
 
   const fetchDepartments = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/departments`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`${API_URL}/api/departments`, { headers: { Authorization: `Bearer ${token}` } });
       const j = await res.json();
       if (j?.data) setDepartments(j.data);
       else toast.message(j.error || "Failed to fetch departments.");
@@ -128,9 +110,7 @@ export default function Departments() {
 
   const fetchAllUsers = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/employee?all=1`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`${API_URL}/api/employee?all=1`, { headers: { Authorization: `Bearer ${token}` } });
       const j = await res.json();
       if (j?.data) setAllUsers(j.data);
       else toast.message("Failed to fetch users.");
@@ -161,8 +141,6 @@ export default function Departments() {
     setUserCounts(map);
   }, [departments, allUsers]);
 
-  const clearAllFilters = () => setFilters({ deptIds: ["all"], supervisorIds: ["all"] });
-
   const processedDepartments = useMemo(() => {
     const withCounts = departments.map((d) => ({
       ...d,
@@ -171,33 +149,11 @@ export default function Departments() {
     }));
 
     let filtered = [...withCounts];
-
     if (!filters.deptIds.includes("all")) filtered = filtered.filter((d) => filters.deptIds.includes(d.id));
     if (!filters.supervisorIds.includes("all"))
       filtered = filtered.filter((d) => d.supervisor && filters.supervisorIds.includes(d.supervisor.id));
 
-    const getVal = (item, key) => {
-      switch (key) {
-        case "id":
-          return item.id;
-        case "name":
-          return item.name.toLowerCase();
-        case "supervisor":
-          return item.supervisorName.toLowerCase();
-        case "userCount":
-          return item.totalUsers;
-        default:
-          return "";
-      }
-    };
-
-    filtered.sort((a, b) => {
-      const aVal = getVal(a, sortConfig.key);
-      const bVal = getVal(b, sortConfig.key);
-      if (aVal < bVal) return sortConfig.direction === "ascending" ? -1 : 1;
-      if (aVal > bVal) return sortConfig.direction === "ascending" ? 1 : -1;
-      return 0;
-    });
+    filtered.sort((a, b) => (a.id < b.id ? (sortConfig.direction === "ascending" ? -1 : 1) : 1));
     return filtered;
   }, [departments, userCounts, filters, sortConfig]);
 
@@ -214,6 +170,10 @@ export default function Departments() {
           return r.supervisorName || "—";
         case "userCount":
           return r.totalUsers;
+        case "createdAt":
+          return fmtMMDDYYYY_hhmma(r.createdAt);
+        case "updatedAt":
+          return fmtMMDDYYYY_hhmma(r.updatedAt);
         default:
           return "";
       }
@@ -230,9 +190,7 @@ export default function Departments() {
     setExporting(true);
     try {
       const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-      const blob = new Blob([buildCSV(rows)], {
-        type: "text/csv;charset=utf-8;",
-      });
+      const blob = new Blob([buildCSV(rows)], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -247,10 +205,7 @@ export default function Departments() {
   };
 
   const exportPDF = () => {
-    if (!processedDepartments.length) {
-      toast.message("No rows to export");
-      return;
-    }
+    if (!processedDepartments.length) return toast.message("No rows to export");
     setPdfExporting(true);
     const visibleCols = columnOptions.filter((c) => columnVisibility.includes(c.value));
     const tableHead = [visibleCols.map((c) => c.label)];
@@ -264,6 +219,10 @@ export default function Departments() {
           return r.supervisorName || "—";
         case "userCount":
           return r.totalUsers;
+        case "createdAt":
+          return fmtMMDDYYYY_hhmma(r.createdAt);
+        case "updatedAt":
+          return fmtMMDDYYYY_hhmma(r.updatedAt);
         default:
           return "";
       }
@@ -284,7 +243,6 @@ export default function Departments() {
     toast.message("PDF exported");
     setPdfExporting(false);
   };
-
   const openUsersModal = (dept) => {
     setUsersDeptName(dept.name);
     setSupervisorUser(dept.supervisor || null);
@@ -294,7 +252,6 @@ export default function Departments() {
     setDeptMembers(members);
     setShowUsersModal(true);
   };
-
   const handleCreateDepartment = async () => {
     setLoading(true);
     try {
@@ -304,10 +261,7 @@ export default function Departments() {
       };
       const res = await fetch(`${API_URL}/api/departments/create`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload),
       });
       const j = await res.json();
@@ -341,10 +295,7 @@ export default function Departments() {
       };
       const res = await fetch(`${API_URL}/api/departments/update/${editDeptForm.id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload),
       });
       const j = await res.json();
@@ -412,6 +363,7 @@ export default function Departments() {
             onClick={exportPDF}
             disabled={pdfExporting || !processedDepartments.length}
           />
+
           <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
             <DialogTrigger asChild>
               <Button className="bg-orange-500 hover:bg-orange-600 text-white font-semibold">
@@ -438,12 +390,7 @@ export default function Departments() {
                   <Input
                     id="dept-name"
                     value={createDeptForm.name}
-                    onChange={(e) =>
-                      setCreateDeptForm({
-                        ...createDeptForm,
-                        name: e.target.value,
-                      })
-                    }
+                    onChange={(e) => setCreateDeptForm({ ...createDeptForm, name: e.target.value })}
                     className="col-span-3"
                     placeholder="Enter department name"
                   />
@@ -486,13 +433,12 @@ export default function Departments() {
           </Dialog>
         </div>
       </div>
+
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2 relative">
           <CardTitle className="flex items-center gap-2">
-            <div className="p-2 rounded-full bg-orange-500/10 text-orange-500">
-              <Filter className="h-5 w-5" />
-            </div>
+            <Filter className="h-5 w-5 text-orange-500" />
             Table Controls
           </CardTitle>
           <span className="absolute top-2 right-4 text-sm text-muted-foreground">
@@ -505,13 +451,11 @@ export default function Departments() {
               <span className={labelClass}>Column:</span>
               <ColumnSelector options={columnOptions} visible={columnVisibility} setVisible={setColumnVisibility} />
             </div>
+
             <div className="flex flex-wrap gap-3 items-center">
               <span className={labelClass}>Filter:</span>
               <MultiSelect
-                options={departments.map((d) => ({
-                  value: d.id,
-                  label: d.name,
-                }))}
+                options={departments.map((d) => ({ value: d.id, label: d.name }))}
                 selected={filters.deptIds}
                 onChange={(v) => toggleListFilter("deptIds", v)}
                 allLabel="All departments"
@@ -545,9 +489,7 @@ export default function Departments() {
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
-            <div className="p-2 rounded-full bg-orange-500/10 text-orange-500">
-              <Building className="h-5 w-5" />
-            </div>
+            <Building className="h-5 w-5 text-orange-500" />
             Main Table
           </CardTitle>
         </CardHeader>
@@ -560,9 +502,12 @@ export default function Departments() {
                   {columnVisibility.includes("name") && <TableHead>Department</TableHead>}
                   {columnVisibility.includes("supervisor") && <TableHead>Supervisor</TableHead>}
                   {columnVisibility.includes("userCount") && <TableHead>User Count</TableHead>}
+                  {columnVisibility.includes("createdAt") && <TableHead>Created At</TableHead>}
+                  {columnVisibility.includes("updatedAt") && <TableHead>Updated At</TableHead>}
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
                 {loading ? (
                   [...Array(5)].map((_, i) => (
@@ -604,6 +549,12 @@ export default function Departments() {
                               </Badge>
                             </Button>
                           </TableCell>
+                        )}
+                        {columnVisibility.includes("createdAt") && (
+                          <TableCell className="text-nowrap">{fmtMMDDYYYY_hhmma(dept.createdAt)}</TableCell>
+                        )}
+                        {columnVisibility.includes("updatedAt") && (
+                          <TableCell className="text-nowrap">{fmtMMDDYYYY_hhmma(dept.updatedAt)}</TableCell>
                         )}
                         <TableCell>
                           <div className="flex gap-1 justify-center">
@@ -664,6 +615,7 @@ export default function Departments() {
           </div>
         </CardContent>
       </Card>
+
       <Dialog open={showUsersModal} onOpenChange={setShowUsersModal}>
         <DialogContent className="max-w-lg border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -710,6 +662,7 @@ export default function Departments() {
           )}
         </DialogContent>
       </Dialog>
+
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
         <DialogContent className="border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />

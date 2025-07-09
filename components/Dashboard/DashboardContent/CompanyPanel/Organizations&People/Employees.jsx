@@ -1,4 +1,4 @@
-// components/Dashboard/DashboardContent/Settings/Admin/ManageEmployees.jsx
+// components/Dashboard/DashboardContent/CompanyPanel/Organizations&People/Employees.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
