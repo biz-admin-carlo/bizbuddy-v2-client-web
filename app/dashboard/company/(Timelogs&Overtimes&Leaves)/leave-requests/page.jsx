@@ -1,6 +1,6 @@
 // app/dashboard/company/(Timelogs&Overtimes&Leaves)/leave-requests/page.jsx
 
-import EmployeesLeaveRequests from "@/components/Dashboard/DashboardContent/CompanyPanel/Timelogs&Overtimes&Leaves/EmployeesLeaveRequests";
+import EmployeesLeaveRequests from "@/components/Dashboard/DashboardContent/CompanyPanel/Punchlogs&Overtimes&Leaves/EmployeesLeaveRequests";
 import DashboardSkeleton from "../../../DashboardSkeleton";
 import { Suspense } from "react";
 

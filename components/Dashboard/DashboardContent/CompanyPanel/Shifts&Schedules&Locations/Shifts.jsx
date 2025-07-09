@@ -3,6 +3,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { fmtMMDDYYYY_hhmma } from "@/lib/dateTimeFormatter";
 import { PlusCircle, Edit3, Trash2, ChevronUp, ChevronDown, Clock, RefreshCw, Filter, Check } from "lucide-react";
 import Link from "next/link";
 import { toast, Toaster } from "sonner";
@@ -20,7 +21,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -473,10 +474,10 @@ export default function Shifts() {
                         )}
                         {columnVisibility.includes("totalHours") && <TableCell>{totalHours(s.startTime, s.endTime)}</TableCell>}
                         {columnVisibility.includes("createdAt") && (
-                          <TableCell className="text-nowrap">{fmtDateTime(s.createdAt)}</TableCell>
+                          <TableCell className="text-nowrap">{fmtMMDDYYYY_hhmma(s.createdAt)}</TableCell>
                         )}
                         {columnVisibility.includes("updatedAt") && (
-                          <TableCell className="text-nowrap">{fmtDateTime(s.updatedAt)}</TableCell>
+                          <TableCell className="text-nowrap">{fmtMMDDYYYY_hhmma(s.updatedAt)}</TableCell>
                         )}
                         <TableCell>
                           <div className="flex justify-center gap-1">

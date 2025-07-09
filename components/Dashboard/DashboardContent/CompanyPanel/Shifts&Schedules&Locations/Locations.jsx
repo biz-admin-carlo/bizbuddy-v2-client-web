@@ -1,4 +1,5 @@
 // components/Dashboard/DashboardContent/Settings/Admin/ManageLocations.jsx
+// components/Dashboard/DashboardContent/Settings/Admin/ManageLocations.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
@@ -25,6 +26,7 @@ import Link from "next/link";
 import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import useAuthStore from "@/store/useAuthStore";
+import { fmtMMDDYYYY_hhmma } from "@/lib/dateTimeFormatter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -38,14 +40,13 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 
-/* ------------ leaflet dynamic imports ------------ */
 const MapContainer = dynamic(() => import("react-leaflet").then((m) => m.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import("react-leaflet").then((m) => m.TileLayer), { ssr: false });
 const Marker = dynamic(() => import("react-leaflet").then((m) => m.Marker), { ssr: false });
@@ -65,7 +66,6 @@ if (typeof window !== "undefined") {
   });
 }
 
-/* ------------ helpers ------------ */
 function getPreciseBrowserLocation({ desiredAccuracy = 50, timeoutMs = 20000 } = {}) {
   return new Promise((resolve) => {
     if (typeof window === "undefined" || !("geolocation" in navigator))
@@ -96,7 +96,7 @@ function getPreciseBrowserLocation({ desiredAccuracy = 50, timeoutMs = 20000 } =
 }
 
 function LocationPicker({ lat, lng, radius, onChange }) {
-  const position = useMemo(() => [Number.parseFloat(lat) || 14.5995, Number.parseFloat(lng) || 120.9842], [lat, lng]);
+  const center = useMemo(() => [parseFloat(lat) || 14.5995, parseFloat(lng) || 120.9842], [lat, lng]);
   const mapKey = useMemo(() => (typeof crypto !== "undefined" ? crypto.randomUUID() : Date.now()), []);
 
   function MapEvents() {
@@ -110,25 +110,18 @@ function LocationPicker({ lat, lng, radius, onChange }) {
 
   return (
     <div className="w-full h-96 rounded-md overflow-hidden mb-4 border-2 border-black/10 dark:border-white/10 shadow-sm">
-      <MapContainer
-        key={mapKey}
-        center={position}
-        zoom={15}
-        scrollWheelZoom
-        style={{ height: "100%", width: "100%" }}
-        className="z-0"
-      >
+      <MapContainer key={mapKey} center={center} zoom={15} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://osm.org/copyright">OpenStreetMap</a> contributors'
         />
         <Circle
-          center={position}
-          radius={Number.parseInt(radius || 500, 10)}
+          center={center}
+          radius={parseInt(radius || 500, 10)}
           pathOptions={{ color: "#f97316", fillColor: "#f97316", fillOpacity: 0.2 }}
         />
         <Marker
-          position={position}
+          position={center}
           draggable
           eventHandlers={{
             dragend: (e) => {
@@ -143,43 +136,38 @@ function LocationPicker({ lat, lng, radius, onChange }) {
   );
 }
 
-/* ------------ columns ------------ */
 const columnOptions = [
+  { value: "id", label: "ID" },
   { value: "name", label: "Name" },
   { value: "latitude", label: "Latitude" },
   { value: "longitude", label: "Longitude" },
   { value: "radius", label: "Radius" },
   { value: "users", label: "Users" },
   { value: "map", label: "Map" },
+  { value: "createdAt", label: "Created At" },
+  { value: "updatedAt", label: "Updated At" },
 ];
 
 export default function Locations() {
   const { token } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
-
-  /* -------------- state -------------- */
   const [deviceLoc, setDeviceLoc] = useState({ latitude: null, longitude: null, accuracy: null });
   const [deviceLocLoading, setDeviceLocLoading] = useState(true);
-
   const [locations, setLocations] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({ name: "", latitude: "14.5995", longitude: "120.9842", radius: "500" });
   const [createLoading, setCreateLoading] = useState(false);
   const [useLocLoadingCreate, setUseLocLoadingCreate] = useState(false);
-
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({ id: null, name: "", latitude: "", longitude: "", radius: "500" });
   const [editLoading, setEditLoading] = useState(false);
   const [useLocLoadingEdit, setUseLocLoadingEdit] = useState(false);
-
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [locationToDelete, setLocationToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [assignedUsers, setAssignedUsers] = useState([]);
@@ -187,12 +175,10 @@ export default function Locations() {
   const [selectedUserId, setSelectedUserId] = useState("");
   const [userActionLoading, setUserActionLoading] = useState(false);
   const [loadingUserId, setLoadingUserId] = useState(null);
-
-  const [filters, setFilters] = useState({ name: "" });
+  const [filters, setFilters] = useState({ names: [], userCounts: [] });
   const [sortConfig, setSortConfig] = useState({ key: "name", direction: "ascending" });
   const [columnVisibility, setColumnVisibility] = useState(columnOptions.map((c) => c.value));
 
-  /* -------------- effects -------------- */
   useEffect(() => {
     let mounted = true;
     setDeviceLocLoading(true);
@@ -213,7 +199,6 @@ export default function Locations() {
     fetchUsers();
   }, [token]);
 
-  /* -------------- fetch helpers -------------- */
   async function fetchLocations() {
     setLoading(true);
     try {
@@ -257,44 +242,55 @@ export default function Locations() {
     setRefreshing(false);
   };
 
-  /* -------------- utils -------------- */
-  const getSortValue = (l, k) => {
-    switch (k) {
+  const getAssignedCount = (loc) => loc.LocationRestriction?.filter((r) => r.restrictionStatus).length || 0;
+
+  const getSortValue = (loc, key) => {
+    switch (key) {
+      case "id":
+        return loc.id;
       case "name":
-        return l.name.toLowerCase();
+        return loc.name.toLowerCase();
       case "latitude":
-        return Number(l.latitude);
+        return Number(loc.latitude);
       case "longitude":
-        return Number(l.longitude);
+        return Number(loc.longitude);
       case "radius":
-        return Number(l.radius);
+        return Number(loc.radius);
       case "users":
-        return l.LocationRestriction?.filter((r) => r.restrictionStatus).length;
+        return getAssignedCount(loc);
+      case "createdAt":
+      case "updatedAt":
+        return new Date(loc[key]).getTime();
       default:
         return 0;
     }
   };
 
-  function getFilteredAndSorted() {
-    const data = locations.filter((l) => l.name.toLowerCase().includes(filters.name.toLowerCase()));
-    if (!sortConfig.key) return data;
-    return [...data].sort((a, b) => {
+  const passesFilters = (loc) => {
+    if (filters.names.length && !filters.names.includes(loc.name)) return false;
+    if (filters.userCounts.length && !filters.userCounts.includes(getAssignedCount(loc))) return false;
+    return true;
+  };
+
+  const tableData = useMemo(() => {
+    const filtered = locations.filter(passesFilters);
+    if (!sortConfig.key) return filtered;
+    return [...filtered].sort((a, b) => {
       const A = getSortValue(a, sortConfig.key);
       const B = getSortValue(b, sortConfig.key);
       if (A < B) return sortConfig.direction === "ascending" ? -1 : 1;
       if (A > B) return sortConfig.direction === "ascending" ? 1 : -1;
       return 0;
     });
-  }
+  }, [locations, filters, sortConfig]);
 
-  const toggleColumn = (c) => setColumnVisibility((p) => (p.includes(c) ? p.filter((x) => x !== c) : [...p, c]));
+  const toggleColumn = (c) => setColumnVisibility((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
 
-  /* -------------- column dropdown -------------- */
   const MultiColumnSelect = () => {
     const allChecked = columnVisibility.length === columnOptions.length;
     const toggle = (val) => {
       if (val === "all") return setColumnVisibility(allChecked ? [] : columnOptions.map((o) => o.value));
-      setColumnVisibility((prev) => (prev.includes(val) ? prev.filter((x) => x !== val) : [...prev, val]));
+      toggleColumn(val);
     };
     const label = allChecked
       ? "All columns"
@@ -336,9 +332,105 @@ export default function Locations() {
     );
   };
 
+  const NameFilterSelect = () => {
+    const names = Array.from(new Set(locations.map((l) => l.name))).sort();
+    const allChecked = filters.names.length === names.length;
+    const toggle = (val) => {
+      if (val === "all") return setFilters((p) => ({ ...p, names: allChecked ? [] : names }));
+      setFilters((p) => ({
+        ...p,
+        names: p.names.includes(val) ? p.names.filter((n) => n !== val) : [...p.names, val],
+      }));
+    };
+    const label = allChecked ? "All names" : filters.names.length === 0 ? "No names" : `${filters.names.length} selected`;
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" className="min-w-[180px] justify-between">
+            {label}
+            <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 p-2 space-y-1" align="start">
+          <div className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer" onClick={() => toggle("all")}>
+            <Checkbox checked={allChecked} />
+            <span>All names</span>
+            {allChecked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
+          </div>
+          <div className="max-h-64 overflow-y-auto pr-1">
+            {names.map((n) => {
+              const checked = filters.names.includes(n);
+              return (
+                <div
+                  key={n}
+                  className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer"
+                  onClick={() => toggle(n)}
+                >
+                  <Checkbox checked={checked} />
+                  <span>{n}</span>
+                  {checked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
+                </div>
+              );
+            })}
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  };
+
+  const UsersFilterSelect = () => {
+    const counts = Array.from(new Set(locations.map(getAssignedCount))).sort((a, b) => a - b);
+    const allChecked = filters.userCounts.length === counts.length;
+    const toggle = (val) => {
+      if (val === "all") return setFilters((p) => ({ ...p, userCounts: allChecked ? [] : counts }));
+      const num = Number(val);
+      setFilters((p) => ({
+        ...p,
+        userCounts: p.userCounts.includes(num) ? p.userCounts.filter((c) => c !== num) : [...p.userCounts, num],
+      }));
+    };
+    const label = allChecked
+      ? "All users"
+      : filters.userCounts.length === 0
+      ? "No users"
+      : `${filters.userCounts.length} selected`;
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" className="min-w-[180px] justify-between">
+            {label}
+            <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 p-2 space-y-1" align="start">
+          <div className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer" onClick={() => toggle("all")}>
+            <Checkbox checked={allChecked} />
+            <span>All users</span>
+            {allChecked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
+          </div>
+          <div className="max-h-64 overflow-y-auto pr-1">
+            {counts.map((c) => {
+              const checked = filters.userCounts.includes(c);
+              return (
+                <div
+                  key={c}
+                  className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer"
+                  onClick={() => toggle(c)}
+                >
+                  <Checkbox checked={checked} />
+                  <span>{c}</span>
+                  {checked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
+                </div>
+              );
+            })}
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  };
+
   const labelClass = "my-auto shrink-0 text-sm font-medium text-muted-foreground";
 
-  /* -------------- handlers (create / edit / delete / users) -------------- */
   function openCreate() {
     setCreateForm({ name: "", latitude: "14.5995", longitude: "120.9842", radius: "500" });
     setShowCreateModal(true);
@@ -365,9 +457,9 @@ export default function Locations() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           name: createForm.name.trim(),
-          latitude: Number.parseFloat(createForm.latitude),
-          longitude: Number.parseFloat(createForm.longitude),
-          radius: Number.parseInt(createForm.radius, 10) || 500,
+          latitude: parseFloat(createForm.latitude),
+          longitude: parseFloat(createForm.longitude),
+          radius: parseInt(createForm.radius, 10) || 500,
         }),
       });
       const j = await res.json();
@@ -415,9 +507,9 @@ export default function Locations() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           name: name.trim(),
-          latitude: Number.parseFloat(latitude),
-          longitude: Number.parseFloat(longitude),
-          radius: Number.parseInt(radius, 10) || 500,
+          latitude: parseFloat(latitude),
+          longitude: parseFloat(longitude),
+          radius: parseInt(radius, 10) || 500,
         }),
       });
       const j = await res.json();
@@ -514,6 +606,7 @@ export default function Locations() {
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
       <Toaster />
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
@@ -593,12 +686,113 @@ export default function Locations() {
                 Create Location
               </Button>
             </DialogTrigger>
-            {/* create dialog content stays unchanged */}
+            <DialogContent className="w-[90vw] sm:max-w-lg md:max-w-xl max-h-[90vh] overflow-y-auto border-2 dark:border-white/10">
+              <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <PlusCircle className="h-5 w-5 text-orange-500" />
+                  Create Location
+                </DialogTitle>
+                <DialogDescription>Add a new company location with geofence radius</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <LocationPicker
+                  lat={createForm.latitude}
+                  lng={createForm.longitude}
+                  radius={createForm.radius}
+                  onChange={({ lat, lng }) => setCreateForm((p) => ({ ...p, latitude: lat, longitude: lng }))}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUseCurrentLocationCreate}
+                  disabled={useLocLoadingCreate}
+                  className="mb-2 border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                >
+                  {useLocLoadingCreate ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MapPin className="h-4 w-4 mr-2" />}
+                  Use Current Location
+                </Button>
+                <div className="grid grid-cols-4 items-center gap-4 text-sm">
+                  <label className="text-right font-medium" htmlFor="c-name">
+                    Location Name
+                  </label>
+                  <Input
+                    id="c-name"
+                    className="col-span-3"
+                    value={createForm.name}
+                    onChange={(e) => setCreateForm((p) => ({ ...p, name: e.target.value }))}
+                    placeholder="Enter location name"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-4 items-center gap-4 text-sm">
+                    <label className="text-right font-medium" htmlFor="c-latitude">
+                      Latitude
+                    </label>
+                    <Input
+                      id="c-latitude"
+                      className="col-span-3"
+                      value={createForm.latitude}
+                      onChange={(e) => setCreateForm((p) => ({ ...p, latitude: e.target.value }))}
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4 text-sm">
+                    <label className="text-right font-medium" htmlFor="c-longitude">
+                      Longitude
+                    </label>
+                    <Input
+                      id="c-longitude"
+                      className="col-span-3"
+                      value={createForm.longitude}
+                      onChange={(e) => setCreateForm((p) => ({ ...p, longitude: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4 text-sm">
+                  <label className="text-right font-medium" htmlFor="c-radius">
+                    Radius (m)
+                  </label>
+                  <Input
+                    id="c-radius"
+                    type="number"
+                    className="col-span-3"
+                    value={createForm.radius}
+                    onChange={(e) => setCreateForm((p) => ({ ...p, radius: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowCreateModal(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleCreate} disabled={createLoading} className="bg-orange-500 hover:bg-orange-600 text-white">
+                  {createLoading ? (
+                    <span className="flex items-center">
+                      <svg
+                        className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        />
+                      </svg>
+                      Creating…
+                    </span>
+                  ) : (
+                    <span>Create Location</span>
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
           </Dialog>
         </div>
       </div>
 
-      {/* table controls */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2 relative">
@@ -607,7 +801,7 @@ export default function Locations() {
             Table Controls
           </CardTitle>
           <span className="absolute top-2 right-4 text-sm text-muted-foreground">
-            {getFilteredAndSorted().length} of {locations.length}
+            {tableData.length} of {locations.length}
           </span>
         </CardHeader>
         <CardContent>
@@ -618,17 +812,9 @@ export default function Locations() {
             </div>
             <div className="flex flex-wrap gap-3 items-center">
               <span className={labelClass}>Filter:</span>
-              <Input
-                placeholder="Location name"
-                value={filters.name}
-                onChange={(e) => setFilters({ name: e.target.value })}
-                className="h-8 max-w-xs"
-              />
-              {filters.name && (
-                <Button variant="outline" size="sm" onClick={() => setFilters({ name: "" })}>
-                  Clear Filter
-                </Button>
-              )}
+              <NameFilterSelect />
+              <span className={labelClass}>Users:</span>
+              <UsersFilterSelect />
             </div>
           </div>
         </CardContent>
@@ -686,10 +872,10 @@ export default function Locations() {
                       ))}
                     </TableRow>
                   ))
-                ) : getFilteredAndSorted().length ? (
+                ) : tableData.length ? (
                   <AnimatePresence>
-                    {getFilteredAndSorted().map((loc) => {
-                      const assigned = loc.LocationRestriction?.filter((r) => r.restrictionStatus).length || 0;
+                    {tableData.map((loc) => {
+                      const assigned = getAssignedCount(loc);
                       const mapUrl = `https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`;
                       return (
                         <motion.tr
@@ -700,6 +886,7 @@ export default function Locations() {
                           transition={{ duration: 0.2 }}
                           className="border-b transition-colors hover:bg-muted/50"
                         >
+                          {columnVisibility.includes("id") && <TableCell>{loc.id}</TableCell>}
                           {columnVisibility.includes("name") && <TableCell>{loc.name}</TableCell>}
                           {columnVisibility.includes("latitude") && <TableCell>{loc.latitude}</TableCell>}
                           {columnVisibility.includes("longitude") && <TableCell>{loc.longitude}</TableCell>}
@@ -733,6 +920,12 @@ export default function Locations() {
                                 </Tooltip>
                               </TooltipProvider>
                             </TableCell>
+                          )}
+                          {columnVisibility.includes("createdAt") && (
+                            <TableCell className="text-nowrap">{fmtMMDDYYYY_hhmma(loc.createdAt)}</TableCell>
+                          )}
+                          {columnVisibility.includes("updatedAt") && (
+                            <TableCell className="text-nowrap">{fmtMMDDYYYY_hhmma(loc.updatedAt)}</TableCell>
                           )}
                           <TableCell>
                             <div className="flex justify-center gap-1">
@@ -791,6 +984,10 @@ export default function Locations() {
         </CardContent>
       </Card>
 
+      {/* ---------- EDIT / USERS / DELETE modals (unchanged) ---------- */}
+      {/* (code identical to your original, kept for completeness) */}
+
+      {/* Edit Modal */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
         <DialogContent className="w-[90vw] sm:max-w-lg md:max-w-xl max-h-[90vh] overflow-y-auto border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -904,6 +1101,7 @@ export default function Locations() {
         </DialogContent>
       </Dialog>
 
+      {/* Users modal */}
       <Dialog open={showUsersModal} onOpenChange={setShowUsersModal}>
         <DialogContent className="w-[90vw] sm:max-w-lg md:max-w-xl max-h-[90vh] overflow-y-auto border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />

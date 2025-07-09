@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronDown as IconChevronDown,
 } from "lucide-react";
+import { fmtMMDDYYYY_hhmma, fmtMMDDYYYY } from "@/lib/dateTimeFormatter";
 import Link from "next/link";
 import { toast, Toaster } from "sonner";
 import { RRule } from "rrule";
@@ -77,14 +78,6 @@ const totalHours = (a, b) => {
   if (diff < 0) diff += 86400000;
   return (diff / 3600000).toFixed(2);
 };
-const fmtDateTime = (iso) =>
-  new Date(iso).toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 
 function useClickOutside(cb) {
   const ref = useRef(null);
@@ -720,13 +713,13 @@ export default function Schedules() {
                             </div>
                           </TableCell>
                         )}
-                        {columnVisibility.includes("startDate") && <TableCell>{s.startDate.slice(0, 10)}</TableCell>}
+                        {columnVisibility.includes("startDate") && <TableCell>{fmtMMDDYYYY(s.startDate.slice(0, 10))}</TableCell>}
                         {columnVisibility.includes("endDate") && (
-                          <TableCell>{s.endDate ? s.endDate.slice(0, 10) : "—"}</TableCell>
+                          <TableCell>{fmtMMDDYYYY(s.endDate ? s.endDate.slice(0, 10) : "—")}</TableCell>
                         )}
                         {columnVisibility.includes("user") && <TableCell>{userMap[s.assignedUserId] || "—"}</TableCell>}
-                        {columnVisibility.includes("createdAt") && <TableCell>{fmtDateTime(s.createdAt)}</TableCell>}
-                        {columnVisibility.includes("updatedAt") && <TableCell>{fmtDateTime(s.updatedAt)}</TableCell>}
+                        {columnVisibility.includes("createdAt") && <TableCell>{fmtMMDDYYYY_hhmma(s.createdAt)}</TableCell>}
+                        {columnVisibility.includes("updatedAt") && <TableCell>{fmtMMDDYYYY_hhmma(s.updatedAt)}</TableCell>}
                         <TableCell className="text-right">
                           <div className="flex gap-1 justify-center">
                             <TooltipProvider delayDuration={300}>

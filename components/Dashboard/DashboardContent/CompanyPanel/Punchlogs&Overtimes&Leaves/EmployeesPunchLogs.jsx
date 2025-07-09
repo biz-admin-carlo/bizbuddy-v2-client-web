@@ -123,7 +123,7 @@ export default function EmployeesPunchLogs() {
   const [otViewData, setOtViewData] = useState(null);
 
   const columnOptions = [
-    { value: "id", label: "Punch Logs ID" },
+    { value: "id", label: "Punch logs ID" },
     { value: "schedule", label: "Schedule" },
     { value: "employee", label: "Employee" },
     { value: "dateTimeIn", label: "DateTimeIn" },

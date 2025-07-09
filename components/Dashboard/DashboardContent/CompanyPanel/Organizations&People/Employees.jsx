@@ -40,6 +40,7 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/comp
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
+import { fmtMMDDYYYY, fmtMMDDYYYY_hhmma } from "@/lib/dateTimeFormatter";
 
 const val = (v) => (v?.trim() ? v.trim() : undefined);
 
@@ -851,7 +852,7 @@ export default function Employees() {
                             </TableCell>
                           )}
                           {visibleCols.includes("hireDate") && (
-                            <TableCell className="text-center text-sm text-nowrap">{fmtShort(e.hireDate)}</TableCell>
+                            <TableCell className="text-center text-sm text-nowrap">{fmtMMDDYYYY(e.hireDate)}</TableCell>
                           )}
                           {visibleCols.includes("jobTitle") && (
                             <TableCell className="text-center text-sm text-nowrap">{d.jobTitle || "—"}</TableCell>
@@ -870,7 +871,7 @@ export default function Employees() {
                           )}
                           {visibleCols.includes("probationEndDate") && (
                             <TableCell className="text-center text-sm">
-                              {d.probationEndDate ? d.probationEndDate.split("T")[0] : "—"}
+                              {d.probationEndDate ? fmtMMDDYYYY(d.probationEndDate.split("T")[0]) : "—"}
                             </TableCell>
                           )}
                           {visibleCols.includes("timeZone") && (
@@ -880,10 +881,10 @@ export default function Employees() {
                             <TableCell className="text-center text-sm">{d.supervisor?.email || "—"}</TableCell>
                           )}
                           {visibleCols.includes("createdAt") && (
-                            <TableCell className="text-center text-sm text-nowrap">{fmt(e.createdAt)}</TableCell>
+                            <TableCell className="text-center text-sm text-nowrap">{fmtMMDDYYYY_hhmma(e.createdAt)}</TableCell>
                           )}
                           {visibleCols.includes("updatedAt") && (
-                            <TableCell className="text-center text-sm text-nowrap">{fmt(e.updatedAt)}</TableCell>
+                            <TableCell className="text-center text-sm text-nowrap">{fmtMMDDYYYY_hhmma(e.updatedAt)}</TableCell>
                           )}
                           {visibleCols.includes("actions") && (
                             <TableCell className="text-center">
