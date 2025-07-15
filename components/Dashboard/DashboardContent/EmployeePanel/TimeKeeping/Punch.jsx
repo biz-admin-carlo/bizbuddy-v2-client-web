@@ -1,4 +1,4 @@
-// components/Dashboard/DashboardContent/Features/MyPunch.jsx
+/* components/Dashboard/DashboardContent/TimeKeeping/Punch.jsx */
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
@@ -323,7 +323,7 @@ export default function Punch() {
   return (
     <TooltipProvider delayDuration={300}>
       <div className="max-w-5xl mx-auto p-4 lg:px-8 space-y-8">
-        <Toaster />
+        <Toaster position="top-center" />
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}

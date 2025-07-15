@@ -10,7 +10,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { fmtMMDDYYYY_hhmma } from "@/lib/dateTimeFormatter";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import TableSkeleton from "@/components/common/TableSkeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -254,7 +253,7 @@ export default function LeaveLogs() {
 
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
-      <Toaster position="top-right" />
+      <Toaster position="top-center" />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
         <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
           <Calendar className="h-7 w-7 text-orange-500" />

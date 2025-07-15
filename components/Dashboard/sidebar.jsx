@@ -196,9 +196,9 @@ function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle 
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={() => onToggle(item.id)}
-          className="flex w-full items-center gap-3
+          className="flex w-full items-center gap-2
                      rounded-lg sm:rounded-xl border border-neutral-200 bg-white
-                     px-3 sm:px-4 lg:px-5 py-3 sm:py-3.5 lg:py-4
+                     px-3 sm:px-4 lg:px-5 sm:py-1 lg:py-2
                      text-xs sm:text-sm  shadow-sm transition-all duration-200
                      hover:border-orange-200 hover:bg-gradient-to-r hover:from-orange-50 hover:to-orange-50
                      dark:border-neutral-700 dark:bg-neutral-900 dark:hover:border-orange-700
@@ -245,7 +245,7 @@ function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle 
                     }}
                     className={`flex w-full items-center gap-3 rounded-md sm:rounded-lg
                                 px-3 sm:px-4 lg:px-5 py-2.5 sm:py-3
-                                text-sm sm:text-base transition-all duration-200 border-l-2
+                                text-xs sm:text-sm transition-all duration-200 border-l-2
                                 ml-1 sm:ml-2 min-h-[44px] sm:min-h-[48px] touch-manipulation
                                 ${
                                   active

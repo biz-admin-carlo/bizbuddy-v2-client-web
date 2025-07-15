@@ -3,16 +3,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building, Mail, Phone, Globe, MapPin, Trash2 } from "lucide-react";
+import { Building, Phone, Globe, MapPin, Trash2 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 
@@ -128,8 +126,7 @@ export default function CompanyProfile() {
 
   return (
     <div className="max-w-4xl mx-auto p-4 lg:px-6 px-2 space-y-6">
-      <Toaster />
-
+      <Toaster position="top-center" />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">

@@ -1,4 +1,4 @@
-// components/Dashboard/DashboardContent/Features/MyShiftSchedule.jsx
+/* components/Dashboard/DashboardContent/TimeKeeping/Schedule.jsx */
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
@@ -120,7 +120,7 @@ export default function Schedule() {
 
   return (
     <div className="max-w-full mx-auto p-4 lg:px-8 space-y-8">
-      <Toaster />
+      <Toaster position="top-center" />
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}

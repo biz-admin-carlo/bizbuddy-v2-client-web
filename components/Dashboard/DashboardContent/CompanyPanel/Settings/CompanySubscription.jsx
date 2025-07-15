@@ -293,7 +293,7 @@ export default function CompanySubscription() {
   return (
     <TooltipProvider delayDuration={300}>
       <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
-        <Toaster richColors />
+        <Toaster position="top-center" />
 
         <div className="flex items-center gap-2 mb-2">
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">

@@ -20,6 +20,7 @@ import {
   UploadCloud,
   Info,
   FileText,
+  Plus,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Papa from "papaparse";
@@ -657,7 +658,7 @@ export default function Employees() {
 
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 space-y-8">
-      <Toaster />
+      <Toaster position="top-center" />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
@@ -689,10 +690,9 @@ export default function Employees() {
               <TooltipContent>CSV format guide</TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <Button onClick={openCreate} className="bg-orange-500 hover:bg-orange-600 text-white font-semibold">
-            <UserPlus className="mr-2 h-4 w-4" />
-            Create Employee
-          </Button>
+          <Badge onClick={openCreate} className="bg-orange-500 hover:bg-orange-600 text-white cursor-pointer ml-auto">
+            <Plus />
+          </Badge>
         </div>
       </div>
 

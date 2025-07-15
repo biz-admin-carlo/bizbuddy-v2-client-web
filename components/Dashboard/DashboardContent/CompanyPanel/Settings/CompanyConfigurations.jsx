@@ -64,7 +64,7 @@ export default function CompanyConfigurations() {
 
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
-      <Toaster richColors />
+      <Toaster position="top-center" />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">

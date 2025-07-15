@@ -1,25 +1,36 @@
-// components/Dashboard/DashboardContent/Features/MyTimeLog.jsx
+/* components/Dashboard/DashboardContent/TimeKeeping/PunchLogs.jsx */
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { Clock, Calendar, Download, Filter, RefreshCw, ChevronUp, ChevronDown, Send, FileText } from "lucide-react";
+import {
+  Clock,
+  Calendar,
+  Download,
+  Filter,
+  RefreshCw,
+  ChevronUp,
+  ChevronDown,
+  Send,
+  FileText,
+  ChevronsLeft,
+  ChevronsRight,
+  MapPin,
+} from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import useAuthStore from "@/store/useAuthStore";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-
 import IconBtn from "@/components/common/IconBtn";
 import MultiSelect from "@/components/common/MultiSelect";
 import ColumnSelector from "@/components/common/ColumnSelector";
@@ -30,7 +41,6 @@ import FormDialog from "@/components/common/FormDialog";
 
 const MAX_DEV_CHARS = 9;
 const truncate = (s = "", L = MAX_DEV_CHARS) => (s.length > L ? s.slice(0, L) + "…" : s);
-
 export const safeDate = (d) =>
   d
     ? new Date(d).toLocaleDateString(undefined, {
@@ -41,15 +51,12 @@ export const safeDate = (d) =>
     : "—";
 export const safeTime = (d) => (d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—");
 export const safeDateTime = (d) => (d ? `${safeDate(d)} ${safeTime(d)}` : "—");
-
 const toHour = (m) => (m / 60).toFixed(2);
 const diffMins = (a, b) => (new Date(b) - new Date(a)) / 60000;
 const rawDuration = (tin, tout) => (!tin || !tout ? "—" : toHour(diffMins(tin, tout)));
-
 export const coffeeMinutes = (arr = []) => toHour(arr.reduce((m, b) => (b.start && b.end ? m + diffMins(b.start, b.end) : m), 0));
 export const lunchMinutesStr = (l) => (!l || !l.start || !l.end ? "0.00" : toHour(diffMins(l.start, l.end)));
 export const lunchMinutesNum = (l) => (!l || !l.start || !l.end ? 0 : diffMins(l.start, l.end));
-
 const deepParse = (v) => {
   if (typeof v === "string" && /^\s*[{[]/.test(v)) {
     try {
@@ -66,7 +73,6 @@ const deepParse = (v) => {
   }
   return v;
 };
-
 const findProp = (obj, names, depth = 0) => {
   if (obj == null || depth > 8) return null;
   if (Array.isArray(obj)) {
@@ -85,14 +91,12 @@ const findProp = (obj, names, depth = 0) => {
   }
   return null;
 };
-
 const DEV_IN_KEYS = ["deviceIn", "deviceInfoStart", "deviceStart", "deviceInfoIn"];
 const DEV_OUT_KEYS = ["deviceOut", "deviceInfoEnd", "deviceEnd", "deviceInfoOut"];
 const LOC_IN_KEYS = ["locIn", "locationIn", "locationStart", "locStart"];
 const LOC_OUT_KEYS = ["locOut", "locationOut", "locationEnd", "locEnd"];
 const firstField = (log, keys) => keys.map((k) => log[k]).find(Boolean);
 const chooseStartEnd = (log, dir, base) => (dir === "in" ? log?.[base]?.start : log?.[base]?.end);
-
 const getDevice = (log, dir) => {
   let obj = firstField(log, dir === "in" ? DEV_IN_KEYS : DEV_OUT_KEYS);
   if (!obj) obj = chooseStartEnd(log, dir, "deviceInfo");
@@ -103,7 +107,6 @@ const getDevice = (log, dir) => {
   const name = findProp(obj, ["deviceName", "model"]);
   return [brand, name].filter(Boolean).join(", ") || JSON.stringify(obj);
 };
-
 const getLocation = (log, dir) => {
   let obj = firstField(log, dir === "in" ? LOC_IN_KEYS : LOC_OUT_KEYS);
   if (!obj) obj = chooseStartEnd(log, dir, "location");
@@ -136,9 +139,7 @@ const getLocation = (log, dir) => {
       }
     : { txt: "—", lat: null, lng: null };
 };
-
 const wrap = (v) => `"${String(v).replace(/"/g, '""')}"`;
-
 const NUM2DAY = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 const parseRRuleDays = (str) => {
   const m = str.match(/BYDAY=([^;]+)/i);
@@ -150,9 +151,8 @@ const fmtUTCTime = (d) =>
     minute: "2-digit",
     timeZone: "UTC",
   });
-
 export default function PunchLogs() {
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
   const [logs, setLogs] = useState([]);
   const [defaultHours, setDefaultHours] = useState(8);
@@ -173,10 +173,17 @@ export default function PunchLogs() {
   const [approvers, setApprovers] = useState([]);
   const [schedDialogOpen, setSchedDialogOpen] = useState(false);
   const [schedForDialog, setSchedForDialog] = useState([]);
-
+  const [locDialogOpen, setLocDialogOpen] = useState(false);
+  const [locDialogList, setLocDialogList] = useState([]);
+  const defaultRowsPerPage = 10;
+  const [rowsPerPage, setRowsPerPage] = useState(defaultRowsPerPage);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [locList, setLocList] = useState([]);
   const columnOptions = [
     { value: "id", label: "Punch log ID" },
     { value: "schedule", label: "Schedule" },
+    { value: "locationRestricted", label: "Location" },
     { value: "dateTimeIn", label: "DateTimeIn" },
     { value: "dateTimeOut", label: "DateTimeOut" },
     { value: "duration", label: "Duration" },
@@ -193,7 +200,6 @@ export default function PunchLogs() {
     { value: "status", label: "Status" },
   ];
   const [columnVisibility, setColumnVisibility] = useState(columnOptions.map((c) => c.value));
-
   const [filters, setFilters] = useState({
     ids: ["all"],
     schedule: "all",
@@ -201,7 +207,6 @@ export default function PunchLogs() {
     from: "",
     to: "",
   });
-
   const toggleListFilter = (key, val) =>
     setFilters((prev) => {
       if (val === "all")
@@ -214,9 +219,7 @@ export default function PunchLogs() {
       if (list.length === 0) list = ["all"];
       return { ...prev, [key]: list };
     });
-
   const handleFilterChange = (key, value) => setFilters((prev) => ({ ...prev, [key]: value }));
-
   const [sortConfig, setSortConfig] = useState({
     key: "dateTimeIn",
     direction: "descending",
@@ -226,7 +229,6 @@ export default function PunchLogs() {
       key: k,
       direction: p.key === k && p.direction === "ascending" ? "descending" : "ascending",
     }));
-
   const fetchCompanySettings = useCallback(async () => {
     try {
       const r = await fetch(`${API_URL}/api/company-settings/`, {
@@ -243,7 +245,6 @@ export default function PunchLogs() {
       setMinLunchMins(60);
     }
   }, [API_URL, token]);
-
   const fetchLogs = async () => {
     setLoading(true);
     try {
@@ -268,7 +269,6 @@ export default function PunchLogs() {
     }
     setLoading(false);
   };
-
   const fetchApprovers = useCallback(async () => {
     if (!token) return;
     try {
@@ -284,34 +284,49 @@ export default function PunchLogs() {
       toast.message(err.message);
     }
   }, [token, API_URL]);
-
+  const fetchLocations = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/location`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const j = await res.json();
+      if (res.ok && j.data) {
+        const list = [];
+        j.data.forEach((loc) => {
+          (loc.LocationRestriction || []).forEach((lr) => {
+            if (lr.userId === user?.id && lr.restrictionStatus) list.push(loc);
+          });
+        });
+        setLocList(list);
+      }
+    } catch {}
+  }, [token, API_URL, user?.id]);
   useEffect(() => {
     if (!token) return;
     fetchCompanySettings();
     fetchLogs();
     fetchApprovers();
-  }, [token, fetchApprovers, fetchCompanySettings]);
-
+    fetchLocations();
+  }, [token, fetchApprovers, fetchCompanySettings, fetchLocations]);
   const logsWithSchedule = useMemo(() => {
     const defaultShiftMins = defaultHours * 60;
     const unschedCap = Math.max(0, defaultShiftMins - minLunchMins);
-
     return logs.map((log) => {
       const coffeeMinsTotal = log.coffeeBreaks.reduce((m, b) => (b.start && b.end ? m + diffMins(b.start, b.end) : m), 0);
       const excessCoffeeMins = Math.max(0, coffeeMinsTotal - 30);
       const grossMins = log.timeIn && log.timeOut ? diffMins(log.timeIn, log.timeOut) : 0;
       const lunchMins = minLunchMins ? Math.max(log._lunchNum, minLunchMins) : log._lunchNum;
       const netMins = Math.max(0, grossMins - lunchMins - excessCoffeeMins);
-
       const inside = Math.min(netMins, unschedCap);
       const rawOtMins = Math.max(0, netMins - unschedCap);
-
       const fullDevIn = getDevice(log, "in");
       const fullDevOut = getDevice(log, "out");
-
       return {
         ...log,
         isScheduled: false,
+        isLocRestricted: locList.length > 0,
+        locList,
         scheduleList: [],
         lateHours: "0.00",
         otHours: rawOtMins === 0 ? "0.00" : toHour(rawOtMins),
@@ -322,14 +337,15 @@ export default function PunchLogs() {
         duration: rawDuration(log.timeIn, log.timeOut),
       };
     });
-  }, [logs, defaultHours, minLunchMins]);
-
+  }, [logs, defaultHours, minLunchMins, locList]);
   const getSortableValue = (l, k) => {
     switch (k) {
       case "id":
         return parseInt(l.id, 10);
       case "schedule":
         return l.isScheduled ? 1 : 0;
+      case "locationRestricted":
+        return l.isLocRestricted ? 1 : 0;
       case "dateTimeIn":
         return new Date(l.timeIn).getTime();
       case "dateTimeOut":
@@ -358,29 +374,32 @@ export default function PunchLogs() {
         return 0;
     }
   };
-
-  const displayed = useMemo(() => {
+  const filteredSorted = useMemo(() => {
     let data = [...logsWithSchedule];
-
     if (!filters.ids.includes("all")) data = data.filter((log) => filters.ids.includes(log.id));
-
     if (filters.schedule !== "all")
       data = data.filter((log) => (filters.schedule === "scheduled" ? log.isScheduled : !log.isScheduled));
-
     if (filters.status !== "all") data = data.filter((log) => (filters.status === "active" ? log.status : !log.status));
-
     if (filters.from) data = data.filter((log) => log.timeIn.slice(0, 10) >= filters.from);
     if (filters.to) data = data.filter((log) => log.timeIn.slice(0, 10) <= filters.to);
-
-    return data.sort((a, b) => {
+    data.sort((a, b) => {
       const aVal = getSortableValue(a, sortConfig.key);
       const bVal = getSortableValue(b, sortConfig.key);
       if (aVal < bVal) return sortConfig.direction === "ascending" ? -1 : 1;
       if (aVal > bVal) return sortConfig.direction === "ascending" ? 1 : -1;
       return 0;
     });
+    return data;
   }, [logsWithSchedule, filters, sortConfig]);
-
+  useEffect(() => {
+    const tp = Math.max(1, Math.ceil(filteredSorted.length / rowsPerPage));
+    setTotalPages(tp);
+    if (page > tp) setPage(tp);
+  }, [filteredSorted, rowsPerPage, page]);
+  const displayed = useMemo(() => {
+    const start = (page - 1) * rowsPerPage;
+    return filteredSorted.slice(start, start + rowsPerPage);
+  }, [filteredSorted, page, rowsPerPage]);
   const deleteLog = async () => {
     if (!selected) return;
     setDeleteLoading(true);
@@ -399,7 +418,6 @@ export default function PunchLogs() {
     }
     setDeleteLoading(false);
   };
-
   const submitOT = async () => {
     if (!otForLog || !otApprover) return;
     setOtSubmitting(true);
@@ -428,22 +446,21 @@ export default function PunchLogs() {
     }
     setOtSubmitting(false);
   };
-
   const refresh = () => {
     setRefreshing(true);
-    Promise.all([fetchLogs(), fetchCompanySettings()]).finally(() => setRefreshing(false));
+    Promise.all([fetchLogs(), fetchCompanySettings(), fetchLocations()]).finally(() => setRefreshing(false));
   };
-
   const buildCSV = (rows) => {
     const visibleCols = columnOptions.filter((c) => columnVisibility.includes(c.value));
     const header = visibleCols.map((c) => wrap(c.label.replace(" ", "")));
-
     const cell = (r, key) => {
       switch (key) {
         case "id":
           return r.id;
         case "schedule":
           return r.isScheduled ? "Yes" : "No";
+        case "locationRestricted":
+          return r.isLocRestricted ? "Yes" : "No";
         case "dateTimeIn":
           return safeDateTime(r.timeIn);
         case "dateTimeOut":
@@ -476,18 +493,16 @@ export default function PunchLogs() {
           return "";
       }
     };
-
     const body = rows.map((r) => visibleCols.map((c) => wrap(cell(r, c.value))));
     return [header, ...body].map((row) => row.join(",")).join("\r\n");
   };
-
   const exportCSV = () => {
-    if (!displayed.length) {
+    if (!filteredSorted.length) {
       toast.message("No rows to export");
       return;
     }
     setExporting(true);
-    const blob = new Blob([buildCSV(displayed)], {
+    const blob = new Blob([buildCSV(filteredSorted)], {
       type: "text/csv;charset=utf-8;",
     });
     const url = URL.createObjectURL(blob);
@@ -500,12 +515,10 @@ export default function PunchLogs() {
     setExporting(false);
   };
   const exportPDF = () => {
-    if (!displayed.length) {
+    if (!filteredSorted.length) {
       toast.message("No rows to export");
       return;
     }
-
-    const { user } = useAuthStore.getState();
     const company = user?.company?.name || "—";
     const fullName = `${user?.profile?.firstName || ""} ${user?.profile?.lastName || ""}`.trim() || "—";
     const email = user?.email || "—";
@@ -517,6 +530,8 @@ export default function PunchLogs() {
           return row.id;
         case "schedule":
           return row.isScheduled ? "Yes" : "No";
+        case "locationRestricted":
+          return row.isLocRestricted ? "Yes" : "No";
         case "dateTimeIn":
           return safeDateTime(row.timeIn);
         case "dateTimeOut":
@@ -549,15 +564,12 @@ export default function PunchLogs() {
           return "";
       }
     };
-
-    const tableBody = displayed.map((row) => visibleCols.map((c) => cellValue(row, c.value)));
+    const tableBody = filteredSorted.map((row) => visibleCols.map((c) => cellValue(row, c.value)));
     const doc = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
-
     doc.setFontSize(12);
     doc.text(`Company : ${company}`, 14, 20);
     doc.text(`Full Name: ${fullName}`, 14, 28);
     doc.text(`Email    : ${email}`, 14, 36);
-
     autoTable(doc, {
       head: tableHead,
       body: tableBody,
@@ -565,15 +577,13 @@ export default function PunchLogs() {
       styles: { fontSize: 8 },
       headStyles: { fillColor: [255, 165, 0] },
     });
-
     const stamp = new Date().toISOString().slice(0, 10);
     doc.save(`MyTimelogs_${stamp}.pdf`);
     toast.message("PDF exported");
   };
-
   return (
     <div className="max-w-full mx-auto p-4 lg:px-4 px-1 space-y-8">
-      <Toaster richColors />
+      <Toaster position="top-center" />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
         <div>
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight flex items-center gap-3">
@@ -585,7 +595,6 @@ export default function PunchLogs() {
           <Button variant="outline" asChild>
             <Link href="/dashboard/employee/punch">Punch</Link>
           </Button>
-
           <IconBtn icon={RefreshCw} tooltip="Refresh table" spinning={refreshing} onClick={refresh} />
           <IconBtn icon={Download} tooltip="Export CSV" spinning={exporting} onClick={exportCSV} />
           <IconBtn icon={FileText} tooltip="Export PDF" onClick={exportPDF} />
@@ -599,7 +608,7 @@ export default function PunchLogs() {
             Table Controls
           </CardTitle>
           <span className="absolute top-2 right-4 text-sm text-muted-foreground">
-            {displayed.length} of {logsWithSchedule.length}
+            {displayed.length} of {filteredSorted.length}
           </span>
         </CardHeader>
         <CardContent>
@@ -671,9 +680,7 @@ export default function PunchLogs() {
               <Clock className="h-5 w-5 text-orange-500" />
               Punch logs
             </CardTitle>
-            <CardDescription>All recorded time entries</CardDescription>
           </div>
-          <div className="text-sm text-muted-foreground mt-2 md:mt-1">{displayed.length} entries</div>
         </CardHeader>
         <CardContent className="p-0">
           <div className="rounded-md border">
@@ -726,6 +733,10 @@ export default function PunchLogs() {
                           setSelected(l);
                           setDelOpen(true);
                         }}
+                        onLocation={(list) => {
+                          setLocDialogList(list);
+                          setLocDialogOpen(true);
+                        }}
                       />
                     ))}
                   </AnimatePresence>
@@ -740,6 +751,79 @@ export default function PunchLogs() {
             </Table>
           </div>
         </CardContent>
+        {filteredSorted.length > defaultRowsPerPage && (
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-4">
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" className="flex gap-1" disabled={page === 1} onClick={() => setPage(1)}>
+                <ChevronsLeft className="h-4 w-4" />
+                First
+              </Button>
+              {[...Array(totalPages)].map((_, i) => {
+                const p = i + 1;
+                if (p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+                  return (
+                    <Button key={p} size="sm" variant={p === page ? "default" : "outline"} onClick={() => setPage(p)}>
+                      {p}
+                    </Button>
+                  );
+                if ((p === page - 2 && p > 1) || (p === page + 2 && p < totalPages))
+                  return (
+                    <span key={p} className="px-1 text-muted-foreground">
+                      …
+                    </span>
+                  );
+                return null;
+              })}
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex gap-1"
+                disabled={page === totalPages}
+                onClick={() => setPage(totalPages)}
+              >
+                Last
+                <ChevronsRight className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              {rowsPerPage < filteredSorted.length && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const next = Math.min(rowsPerPage + defaultRowsPerPage, filteredSorted.length);
+                    setRowsPerPage(next);
+                  }}
+                >
+                  Load more ({Math.min(rowsPerPage + defaultRowsPerPage, filteredSorted.length)}/{filteredSorted.length})
+                </Button>
+              )}
+              {rowsPerPage < filteredSorted.length && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setRowsPerPage(filteredSorted.length);
+                    setPage(1);
+                  }}
+                >
+                  Show all
+                </Button>
+              )}
+              {rowsPerPage > defaultRowsPerPage && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setRowsPerPage(defaultRowsPerPage);
+                    setPage(1);
+                  }}
+                >
+                  Show less
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
       </Card>
       <ConfirmDeleteDialog
         open={delOpen}
@@ -811,14 +895,13 @@ export default function PunchLogs() {
         )}
       </FormDialog>
       <ScheduleDialog open={schedDialogOpen} onOpenChange={setSchedDialogOpen} scheduleList={schedForDialog} />
+      <LocationDialog open={locDialogOpen} onOpenChange={setLocDialogOpen} list={locDialogList} />
     </div>
   );
 }
-
-function TimelogRow({ log, columnVisibility, onSchedule, onRequestOT, onDelete }) {
+function TimelogRow({ log, columnVisibility, onSchedule, onRequestOT, onDelete, onLocation }) {
   const locIn = getLocation(log, "in");
   const locOut = getLocation(log, "out");
-
   return (
     <motion.tr
       key={log.id}
@@ -837,6 +920,18 @@ function TimelogRow({ log, columnVisibility, onSchedule, onRequestOT, onDelete }
             onClick={() => onSchedule(log.scheduleList)}
           >
             {log.isScheduled ? "Yes" : "No"}
+          </Button>
+        </TableCell>
+      )}
+      {columnVisibility.includes("locationRestricted") && (
+        <TableCell className="text-center">
+          <Button
+            size="sm"
+            className="bg-orange-500 hover:bg-orange-600 text-white text-xs"
+            disabled={!log.isLocRestricted}
+            onClick={() => onLocation(log.locList)}
+          >
+            {log.isLocRestricted ? "Yes" : "No"}
           </Button>
         </TableCell>
       )}
@@ -928,7 +1023,6 @@ function TimelogRow({ log, columnVisibility, onSchedule, onRequestOT, onDelete }
     </motion.tr>
   );
 }
-
 function ScheduleDialog({ open, onOpenChange, scheduleList }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -940,7 +1034,6 @@ function ScheduleDialog({ open, onOpenChange, scheduleList }) {
             Schedule Details
           </DialogTitle>
         </DialogHeader>
-
         {scheduleList.length ? (
           <ScrollArea className="max-h-[60vh]">
             <div className="space-y-4">
@@ -954,14 +1047,12 @@ function ScheduleDialog({ open, onOpenChange, scheduleList }) {
                     return isNaN(n) ? d.toUpperCase() : NUM2DAY[n] ?? "";
                   })
                   .join(", ");
-
                 let durationStr = "—";
                 if (s.shift?.startTime && s.shift?.endTime) {
                   let mins = diffMins(s.shift.startTime, s.shift.endTime);
                   if (mins < 0) mins += 1440;
                   durationStr = toHour(mins);
                 }
-
                 return (
                   <div key={s.id} className="p-3 border rounded-md bg-muted/50 space-y-2 text-sm">
                     <div>
@@ -1007,7 +1098,50 @@ function ScheduleDialog({ open, onOpenChange, scheduleList }) {
         ) : (
           <p className="text-center text-muted-foreground py-8">You don't have any schedule yet</p>
         )}
-
+        <DialogFooter>
+          <Button onClick={() => onOpenChange(false)} className="bg-orange-500 hover:bg-orange-600 text-white">
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+function LocationDialog({ open, onOpenChange, list }) {
+  const fmtLatLng = (lat, lng) => `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md border-2 dark:border-white/30">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-orange-600" />
+            Location Restriction Details
+          </DialogTitle>
+        </DialogHeader>
+        {list.length ? (
+          <ScrollArea className="max-h-[60vh]">
+            <div className="space-y-4">
+              {list.map((loc) => (
+                <div key={loc.id} className="p-3 border rounded-md bg-muted/50 space-y-2 text-sm">
+                  <div>
+                    <strong>Name:</strong> <span className="capitalize">{loc.name}</span>
+                  </div>
+                  <div>
+                    <strong>Coords:</strong> {fmtLatLng(loc.latitude, loc.longitude)}
+                  </div>
+                  <div>
+                    <strong>Radius:</strong> {loc.radius} m
+                  </div>
+                  <div>
+                    <strong>Location ID:</strong> {loc.id}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        ) : (
+          <p className="text-center text-muted-foreground py-4">No location restriction.</p>
+        )}
         <DialogFooter>
           <Button onClick={() => onOpenChange(false)} className="bg-orange-500 hover:bg-orange-600 text-white">
             Close

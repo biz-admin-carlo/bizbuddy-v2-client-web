@@ -4,7 +4,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  PlusCircle,
   Edit3,
   Trash2,
   Calendar,
@@ -16,6 +15,7 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronDown as IconChevronDown,
+  Plus,
 } from "lucide-react";
 import { fmtMMDDYYYY_hhmma, fmtMMDDYYYY } from "@/lib/dateTimeFormatter";
 import Link from "next/link";
@@ -448,7 +448,7 @@ export default function Schedules() {
 
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
-      <Toaster />
+      <Toaster position="top-center" />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
@@ -473,16 +473,15 @@ export default function Schedules() {
           </TooltipProvider>
           <Dialog open={showCreate} onOpenChange={setShowCreate}>
             <DialogTrigger asChild>
-              <Button className="bg-orange-500 hover:bg-orange-600 text-white font-semibold">
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Create Schedule
-              </Button>
+              <Badge className="bg-orange-500 hover:bg-orange-600 text-white ml-auto cursor-pointer">
+                <Plus />
+              </Badge>
             </DialogTrigger>
             <DialogContent className="border-2 dark:border-white/10 max-w-xl">
               <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  <PlusCircle className="h-5 w-5 text-orange-500" />
+                  <Plus className="h-5 w-5 text-orange-500" />
                   Create New Schedule
                 </DialogTitle>
                 <DialogDescription>Add a recurring schedule for one or more users</DialogDescription>

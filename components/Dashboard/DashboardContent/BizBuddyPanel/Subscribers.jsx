@@ -318,7 +318,7 @@ export default function Subscribers() {
 
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
-      <Toaster />
+      <Toaster position="top-center" />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold flex items-center gap-2">

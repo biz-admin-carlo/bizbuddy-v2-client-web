@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { fmtMMDDYYYY_hhmma } from "@/lib/dateTimeFormatter";
-import { PlusCircle, Edit3, Trash2, ChevronUp, ChevronDown, Clock, RefreshCw, Filter, Check } from "lucide-react";
+import { PlusCircle, Edit3, Trash2, ChevronUp, ChevronDown, Clock, RefreshCw, Filter, Check, Plus } from "lucide-react";
 import Link from "next/link";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
@@ -26,6 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 
 const toUtcIso = (hhmm) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -283,7 +284,7 @@ export default function Shifts() {
 
   return (
     <div className="max-w-full mx-auto p-4 lg:px-4 px-1 space-y-8">
-      <Toaster />
+      <Toaster position="top-center" />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
@@ -310,10 +311,9 @@ export default function Shifts() {
 
           <Dialog open={showCreate} onOpenChange={setShowCreate}>
             <DialogTrigger asChild>
-              <Button className="bg-orange-500 hover:bg-orange-600 text-white font-semibold">
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Create Shift
-              </Button>
+              <Badge className="bg-orange-500 hover:bg-orange-600 text-white ml-auto cursor-pointer">
+                <Plus />
+              </Badge>
             </DialogTrigger>
             <DialogContent className="border-2 dark:border-white/10">
               <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />

@@ -5,7 +5,6 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import {
-  PlusCircle,
   Edit3,
   Trash2,
   Users2,
@@ -20,6 +19,7 @@ import {
   ExternalLink,
   Info,
   Check,
+  Plus,
 } from "lucide-react";
 import Link from "next/link";
 import { toast, Toaster } from "sonner";
@@ -604,9 +604,8 @@ export default function Locations() {
 
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
-      <Toaster />
-
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <Toaster position="top-center" />
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
             <MapPin className="h-7 w-7 text-orange-500" />
@@ -680,16 +679,15 @@ export default function Locations() {
 
           <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
             <DialogTrigger asChild>
-              <Button onClick={openCreate} className="bg-orange-500 hover:bg-orange-600 text-white font-semibold">
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Create Location
-              </Button>
+              <Badge onClick={openCreate} className="bg-orange-500 hover:bg-orange-600 text-white cursor-pointer ml-auto">
+                <Plus />
+              </Badge>
             </DialogTrigger>
             <DialogContent className="w-[90vw] sm:max-w-lg md:max-w-xl max-h-[90vh] overflow-y-auto border-2 dark:border-white/10">
               <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  <PlusCircle className="h-5 w-5 text-orange-500" />
+                  <Plus className="h-5 w-5 text-orange-500" />
                   Create Location
                 </DialogTitle>
                 <DialogDescription>Add a new company location with geofence radius</DialogDescription>
@@ -747,17 +745,30 @@ export default function Locations() {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-4 items-center gap-4 text-sm">
+                <div className="grid grid-cols-4 items-start gap-4 text-sm">
                   <label className="text-right font-medium" htmlFor="c-radius">
-                    Radius (m)
+                    Radius&nbsp;(m)
                   </label>
-                  <Input
-                    id="c-radius"
-                    type="number"
-                    className="col-span-3"
-                    value={createForm.radius}
-                    onChange={(e) => setCreateForm((p) => ({ ...p, radius: e.target.value }))}
-                  />
+
+                  <div className="col-span-3">
+                    <Input
+                      id="c-radius"
+                      type="number"
+                      min="1"
+                      max="9999"
+                      step="1"
+                      value={createForm.radius}
+                      onChange={(e) => {
+                        const v = Math.min(Number(e.target.value), 9999);
+                        setCreateForm((p) => ({ ...p, radius: v ? String(v) : "" }));
+                      }}
+                      placeholder="500"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Example:Max:&nbsp;
+                      <span className="font-medium">9999 m</span>
+                    </p>
+                  </div>
                 </div>
               </div>
               <DialogFooter>
@@ -1057,17 +1068,29 @@ export default function Locations() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4 text-sm">
+            <div className="grid grid-cols-4 items-start gap-4 text-sm">
               <label className="text-right font-medium" htmlFor="e-radius">
-                Radius (m)
+                Radius&nbsp;(m)
               </label>
-              <Input
-                id="e-radius"
-                type="number"
-                className="col-span-3"
-                value={editForm.radius}
-                onChange={(e) => setEditForm((p) => ({ ...p, radius: e.target.value }))}
-              />
+              <div className="col-span-3">
+                <Input
+                  id="e-radius"
+                  type="number"
+                  min="1"
+                  max="9999"
+                  step="1"
+                  value={editForm.radius}
+                  onChange={(e) => {
+                    const v = Math.min(Number(e.target.value), 9999);
+                    setEditForm((p) => ({ ...p, radius: v ? String(v) : "" }));
+                  }}
+                  placeholder="500"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Max:&nbsp;
+                  <span className="font-medium">9999 m</span>
+                </p>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -1174,7 +1197,7 @@ export default function Locations() {
           </div>
           <div className="space-y-2">
             <h4 className="font-medium text-sm flex items-center gap-2">
-              <PlusCircle className="h-4 w-4 text-orange-500" />
+              <Plus className="h-4 w-4 text-orange-500" />
               Add User
             </h4>
             <div className="flex gap-3 mb-2">

@@ -3,7 +3,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Trash2, Edit3, PlusCircle, Building, Users, AlertCircle, Download, RefreshCw, Filter, FileText } from "lucide-react";
+import { Trash2, Edit3, Building, Users, AlertCircle, Download, RefreshCw, Filter, FileText, Plus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
 import { jsPDF } from "jspdf";
@@ -366,17 +366,16 @@ export default function Departments() {
 
           <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
             <DialogTrigger asChild>
-              <Button className="bg-orange-500 hover:bg-orange-600 text-white font-semibold">
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Create Department
-              </Button>
+              <Badge className="bg-orange-500 hover:bg-orange-600 text-white cursor-pointer ml-auto">
+                <Plus />
+              </Badge>
             </DialogTrigger>
             <DialogContent className="border-2 dark:border-white/10">
               <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
-                    <PlusCircle className="h-5 w-5" />
+                    <Plus className="h-5 w-5" />
                   </div>
                   Create New Department
                 </DialogTitle>
