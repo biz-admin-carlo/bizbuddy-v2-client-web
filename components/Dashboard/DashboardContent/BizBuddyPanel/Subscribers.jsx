@@ -386,7 +386,7 @@ export default function Subscribers() {
                   onClick={() => setFilterName("")}
                   className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
                 >
-                  Clear
+                  Clear filters
                 </Button>
               )}
             </div>
@@ -458,21 +458,25 @@ export default function Subscribers() {
                           transition={{ duration: 0.2 }}
                           className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
                         >
-                          {columnVisibility.includes("id") && <TableCell className="text-center">{c.id}</TableCell>}
-                          {columnVisibility.includes("name") && <TableCell className="text-center">{c.name}</TableCell>}
+                          {columnVisibility.includes("id") && <TableCell className="text-center text-xs">{c.id}</TableCell>}
+                          {columnVisibility.includes("name") && <TableCell className="text-center text-xs">{c.name}</TableCell>}
                           {columnVisibility.includes("country") && (
-                            <TableCell className="text-center">{c.country || "—"}</TableCell>
+                            <TableCell className="text-center text-xs">{c.country || "—"}</TableCell>
                           )}
                           {columnVisibility.includes("currency") && (
-                            <TableCell className="text-center">{c.currency || "—"}</TableCell>
+                            <TableCell className="text-center text-xs">{c.currency || "—"}</TableCell>
                           )}
                           {columnVisibility.includes("language") && (
-                            <TableCell className="text-center">{c.language || "—"}</TableCell>
+                            <TableCell className="text-center text-xs">{c.language || "—"}</TableCell>
                           )}
-                          {columnVisibility.includes("startDate") && <TableCell className="text-center">{startDate}</TableCell>}
-                          {columnVisibility.includes("endDate") && <TableCell className="text-center">{endDate}</TableCell>}
+                          {columnVisibility.includes("startDate") && (
+                            <TableCell className="text-center text-xs">{startDate}</TableCell>
+                          )}
+                          {columnVisibility.includes("endDate") && (
+                            <TableCell className="text-center text-xs">{endDate}</TableCell>
+                          )}
 
-                          <TableCell className="text-center">
+                          <TableCell className="text-center ">
                             <div className="flex justify-center gap-1">
                               <TooltipProvider delayDuration={300}>
                                 <Tooltip>
@@ -545,16 +549,7 @@ export default function Subscribers() {
                         <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                           <Building2 className="h-8 w-8 text-orange-500/50" />
                         </div>
-                        <p>No companies found.</p>
-                        {filterName && (
-                          <Button
-                            variant="link"
-                            onClick={() => setFilterName("")}
-                            className="text-orange-500 hover:text-orange-600 mt-2"
-                          >
-                            Clear filter
-                          </Button>
-                        )}
+                        <p className="text-xs italic">No companies found.</p>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -611,11 +606,11 @@ export default function Subscribers() {
             </div>
           ) : details ? (
             <>
-              <section className="space-y-1 mb-6">
+              <section className="space-y-1 mb-3">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                   <Building2 className="h-5 w-5" /> {details.name}
-                  <span className="text-sm font-mono text-orange-600">({details.id})</span>
                 </h3>
+                {details.id && <p className="text-sm text-muted-foreground">Company ID: {details.id}</p>}
                 {details.country && <p className="text-sm text-muted-foreground">Country: {details.country}</p>}
                 {details.currency && <p className="text-sm text-muted-foreground">Currency: {details.currency}</p>}
                 {details.language && <p className="text-sm text-muted-foreground">Language: {details.language}</p>}

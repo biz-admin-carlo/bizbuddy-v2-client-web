@@ -854,44 +854,44 @@ export default function Employees() {
                               {e.department ? (
                                 e.department.name
                               ) : (
-                                <span className="text-muted-foreground  italic">No Department Assigned</span>
+                                <span className="text-muted-foreground text-xs italic">No Department Assigned</span>
                               )}
                             </TableCell>
                           )}
                           {visibleCols.includes("hireDate") && (
-                            <TableCell className="text-center text-sm text-nowrap">{fmtMMDDYYYY(e.hireDate)}</TableCell>
+                            <TableCell className="text-center text-xs text-nowrap">{fmtMMDDYYYY(e.hireDate)}</TableCell>
                           )}
                           {visibleCols.includes("jobTitle") && (
-                            <TableCell className="text-center text-sm text-nowrap">{d.jobTitle || "—"}</TableCell>
+                            <TableCell className="text-center text-xs text-nowrap">{d.jobTitle || "—"}</TableCell>
                           )}
                           {visibleCols.includes("employmentStatus") && (
-                            <TableCell className="text-center text-sm capitalize">{d.employmentStatus || "—"}</TableCell>
+                            <TableCell className="text-center text-xs capitalize">{d.employmentStatus || "—"}</TableCell>
                           )}
                           {visibleCols.includes("exemptStatus") && (
-                            <TableCell className="text-center text-sm capitalize">{d.exemptStatus || "—"}</TableCell>
+                            <TableCell className="text-center text-xs capitalize">{d.exemptStatus || "—"}</TableCell>
                           )}
                           {visibleCols.includes("employmentType") && (
-                            <TableCell className="text-center text-sm capitalize">{d.employmentType || "—"}</TableCell>
+                            <TableCell className="text-center text-xs capitalize">{d.employmentType || "—"}</TableCell>
                           )}
                           {visibleCols.includes("workLocation") && (
-                            <TableCell className="text-center text-sm capitalize">{d.workLocation || "—"}</TableCell>
+                            <TableCell className="text-center text-xs capitalize">{d.workLocation || "—"}</TableCell>
                           )}
                           {visibleCols.includes("probationEndDate") && (
-                            <TableCell className="text-center text-sm">
+                            <TableCell className="text-center text-xs">
                               {d.probationEndDate ? fmtMMDDYYYY(d.probationEndDate.split("T")[0]) : "—"}
                             </TableCell>
                           )}
                           {visibleCols.includes("timeZone") && (
-                            <TableCell className="text-center text-sm">{d.timeZone || "—"}</TableCell>
+                            <TableCell className="text-center text-xs">{d.timeZone || "—"}</TableCell>
                           )}
                           {visibleCols.includes("supervisor") && (
-                            <TableCell className="text-center text-sm">{d.supervisor?.email || "—"}</TableCell>
+                            <TableCell className="text-center text-xs">{d.supervisor?.email || "—"}</TableCell>
                           )}
                           {visibleCols.includes("createdAt") && (
-                            <TableCell className="text-center text-sm text-nowrap">{fmtMMDDYYYY_hhmma(e.createdAt)}</TableCell>
+                            <TableCell className="text-center text-xs text-nowrap">{fmtMMDDYYYY_hhmma(e.createdAt)}</TableCell>
                           )}
                           {visibleCols.includes("updatedAt") && (
-                            <TableCell className="text-center text-sm text-nowrap">{fmtMMDDYYYY_hhmma(e.updatedAt)}</TableCell>
+                            <TableCell className="text-center text-xs text-nowrap">{fmtMMDDYYYY_hhmma(e.updatedAt)}</TableCell>
                           )}
                           {visibleCols.includes("actions") && (
                             <TableCell className="text-center">
