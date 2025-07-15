@@ -156,7 +156,7 @@ export default function UserMenu() {
                 </motion.div>
               </Link>
 
-              <Link href="/dashboard/settings" onClick={() => setIsOpen(false)}>
+              <Link href="/dashboard/user/settings" onClick={() => setIsOpen(false)}>
                 <motion.div
                   whileHover={{ backgroundColor: "rgba(249, 115, 22, 0.1)" }}
                   className="flex items-center gap-3 px-6 py-3 text-sm text-neutral-700 dark:text-neutral-200 

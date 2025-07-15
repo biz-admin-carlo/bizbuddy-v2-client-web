@@ -37,7 +37,10 @@ function DesktopNavLinks({ pathname }) {
           >
             {link.label}
             {isActive && (
-              <motion.div layoutId="activeTab" className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-orange-500 rounded-full" />
+              <motion.div
+                layoutId="activeTab"
+                className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-orange-500 rounded-full"
+              />
             )}
           </Link>
         );
@@ -63,7 +66,7 @@ function SignInButton() {
 }
 
 function NotificationButton() {
-  const [hasNotifications] = useState(true); // This would come from your notification state
+  const [hasNotifications] = useState(true);
 
   return (
     <motion.button
@@ -98,7 +101,6 @@ export default function NavBar() {
                  backdrop-blur-lg border-b border-neutral-200 dark:border-neutral-700"
     >
       <div className="mx-auto max-w-7xl px-4 md:px-6">
-        {/* Desktop Navigation */}
         <div className="hidden md:flex items-center justify-between h-16">
           <motion.div whileHover={{ scale: 1.05 }}>
             <Link href="/" className="flex items-center pl-16">

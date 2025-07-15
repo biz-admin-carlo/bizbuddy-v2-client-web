@@ -1,4 +1,5 @@
-// components/Dashboard/DashboardContent/Settings/Account/account-subscription.jsx
+// components/Dashboard/DashboardContent/CompanyPanel/Settings/CompanySubscription.jsx
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useEffect, useState, useRef } from "react";

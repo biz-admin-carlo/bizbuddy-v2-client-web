@@ -1,6 +1,6 @@
-// app/dashboard/company/(Shifts&Schedules&Locations)/locations/page.jsx
+// app/dashboard/company/(Locations)/locations/page.jsx
 
-import Locations from "@/components/Dashboard/DashboardContent/CompanyPanel/Shifts&Schedules&Locations/Locations";
+import Locations from "@/components/Dashboard/DashboardContent/CompanyPanel/Locations/Locations";
 import DashboardSkeleton from "../../../DashboardSkeleton";
 import { Suspense } from "react";
 

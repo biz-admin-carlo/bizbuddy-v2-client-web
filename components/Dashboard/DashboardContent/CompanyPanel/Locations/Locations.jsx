@@ -1,5 +1,4 @@
-// components/Dashboard/DashboardContent/Settings/Admin/ManageLocations.jsx
-// components/Dashboard/DashboardContent/Settings/Admin/ManageLocations.jsx
+// components/Dashboard/DashboardContent/CompanyPanel/Locations/Locations.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 

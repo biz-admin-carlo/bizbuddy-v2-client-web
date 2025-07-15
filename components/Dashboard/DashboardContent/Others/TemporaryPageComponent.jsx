@@ -1,4 +1,4 @@
-// File: biz-web-app/components/Dashboard/DashboardContent/temporary-page.jsx
+// components/Dashboard/DashboardContent/Others/TemporaryPageComponent.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 

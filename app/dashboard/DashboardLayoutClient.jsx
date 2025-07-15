@@ -18,7 +18,26 @@ export default function DashboardLayoutClient({ children }) {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarPinned, setIsSidebarPinned] = useState(false);
   const [isRouteChanging, setIsRouteChanging] = useState(false);
+
+  useEffect(() => {
+    const pinned = localStorage.getItem("sidebarPinned") === "true";
+    setIsSidebarPinned(pinned);
+    setIsSidebarOpen(pinned);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("sidebarPinned", isSidebarPinned);
+  }, [isSidebarPinned]);
+
+  const togglePin = () => {
+    setIsSidebarPinned((p) => {
+      const next = !p;
+      if (next) setIsSidebarOpen(true);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!token) {
@@ -53,13 +72,19 @@ export default function DashboardLayoutClient({ children }) {
   }, [pathname, isRouteChanging]);
 
   useEffect(() => {
-    const onResize = () => window.innerWidth >= 768 && setIsSidebarOpen(false);
+    const onResize = () => {
+      if (window.innerWidth >= 768 && !isSidebarPinned) setIsSidebarOpen(false);
+    };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, []);
+  }, [isSidebarPinned]);
 
   if (isLoadingAuth || !isReady) return <DashboardSkeleton />;
   if (!token) return null;
+
+  const closeSidebar = () => {
+    if (!isSidebarPinned) setIsSidebarOpen(false);
+  };
 
   return (
     <Suspense fallback={<DashboardSkeleton />}>
@@ -107,8 +132,10 @@ export default function DashboardLayoutClient({ children }) {
 
         <Sidebar
           isSidebarOpen={isSidebarOpen}
-          closeSidebar={() => setIsSidebarOpen(false)}
+          closeSidebar={closeSidebar}
           onNavigateStart={() => setIsRouteChanging(true)}
+          isSidebarPinned={isSidebarPinned}
+          togglePin={togglePin}
         />
 
         <motion.main

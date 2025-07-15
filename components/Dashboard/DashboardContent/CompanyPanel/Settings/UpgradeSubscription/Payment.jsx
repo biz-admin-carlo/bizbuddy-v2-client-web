@@ -1,4 +1,5 @@
-// components/Dashboard/DashboardContent/Settings/Account/UpgradeSubscription/upgrade-subscription-payment.jsx
+// components/Dashboard/DashboardContent/CompanyPanel/Settings/UpgradeSubscription/Payment.jsx
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useState } from "react";
@@ -113,7 +114,12 @@ function PaymentForm({ plan, onPaymentSuccess }) {
         <h3 className="text-xl font-bold mb-2 text-green-700 dark:text-green-400">Payment Successful!</h3>
         <p className="text-muted-foreground mb-4">Your subscription has been upgraded successfully.</p>
         <div className="w-full max-w-xs mx-auto h-1.5 bg-green-100 dark:bg-green-900/50 rounded-full overflow-hidden">
-          <motion.div className="h-full bg-green-500" initial={{ width: 0 }} animate={{ width: "100%" }} transition={{ duration: 1.5 }} />
+          <motion.div
+            className="h-full bg-green-500"
+            initial={{ width: 0 }}
+            animate={{ width: "100%" }}
+            transition={{ duration: 1.5 }}
+          />
         </div>
       </motion.div>
     );
@@ -196,7 +202,12 @@ function PaymentForm({ plan, onPaymentSuccess }) {
               >
                 {processing ? (
                   <span className="flex items-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg
+                      className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path
                         className="opacity-75"

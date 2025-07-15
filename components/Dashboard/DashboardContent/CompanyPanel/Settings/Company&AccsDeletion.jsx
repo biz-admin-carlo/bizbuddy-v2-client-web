@@ -1,4 +1,5 @@
-// components/Dashboard/DashboardContent/Settings/Account/account-settings.jsx
+// components/Dashboard/DashboardContent/CompanyPanel/Settings/Company&AccsDeletion.jsx
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useState } from "react";

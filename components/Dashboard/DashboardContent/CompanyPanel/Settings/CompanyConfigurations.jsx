@@ -1,4 +1,4 @@
-// components/Dashboard/DashboardContent/Settings/Admin/ManageCompanySettings.jsx
+// components/Dashboard/DashboardContent/CompanyPanel/Settings/CompanyConfigurations.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 

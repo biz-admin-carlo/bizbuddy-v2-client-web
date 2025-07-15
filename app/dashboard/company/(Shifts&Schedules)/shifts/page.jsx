@@ -1,15 +1,15 @@
-// app/dashboard/company/(Payroll)/payroll/page.jsx
+// app/dashboard/company/(Shifts&Schedules)/shifts/page.jsx
 
-import TemporaryPage from "@/components/Dashboard/DashboardContent/Others/TemporaryPageComponent";
+import Shifts from "@/components/Dashboard/DashboardContent/CompanyPanel/Shifts&Schedules/Shifts";
 import DashboardSkeleton from "@/app/dashboard/DashboardSkeleton";
 import { Suspense } from "react";
 
 export const dynamic = "force-dynamic";
 
-export default function PayrollPage() {
+export default function ShiftsPage() {
   return (
     <Suspense fallback={<DashboardSkeleton />}>
-      <TemporaryPage />
+      <Shifts />
     </Suspense>
   );
 }

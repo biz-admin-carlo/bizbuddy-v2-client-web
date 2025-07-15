@@ -1,4 +1,4 @@
-/* components/Dashboard/DashboardContent/Account/CmpnyPrfl.jsx */
+// components/Dashboard/DashboardContent/CompanyPanel/Settings/CompanyProfile.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 

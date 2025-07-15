@@ -1,4 +1,4 @@
-// components/Dashboard/DashboardContent/Settings/Admin/ManageShifts.jsx
+// components/Dashboard/DashboardContent/CompanyPanel/Shifts&Schedules/Shifts.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 

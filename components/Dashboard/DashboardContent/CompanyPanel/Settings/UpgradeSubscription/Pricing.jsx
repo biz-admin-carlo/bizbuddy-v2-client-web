@@ -1,4 +1,5 @@
-// components/Dashboard/DashboardContent/Settings/Account/UpgradeSubscription/upgrade-subscription-pricing.jsx
+// components/Dashboard/DashboardContent/CompanyPanel/Settings/UpgradeSubscription/Pricing.jsx
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useState } from "react";
@@ -69,7 +70,9 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
 
   const isCurrentOption = (option, planName) => {
     if (!currentPlan) return false;
-    return currentPlan.name === planName && currentPlan.rangeOfUsers === option.rangeOfUsers && currentPlan.price === option.price;
+    return (
+      currentPlan.name === planName && currentPlan.rangeOfUsers === option.rangeOfUsers && currentPlan.price === option.price
+    );
   };
 
   return (
@@ -117,7 +120,11 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
                               : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
                           }`}
                         >
-                          {currentPlan.features && currentPlan.features[featureKey] ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                          {currentPlan.features && currentPlan.features[featureKey] ? (
+                            <Check className="h-3 w-3" />
+                          ) : (
+                            <X className="h-3 w-3" />
+                          )}
                         </div>
                         <span className="text-sm">{label}</span>
                       </div>
@@ -135,7 +142,9 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
 
             const optionIndex = selectedOptionIndices[plan.name] || 0;
             const selectedOption =
-              hasOptions && plan.options && plan.options.length > 0 ? plan.options[optionIndex] : { ...plan, features: plan.features || {} };
+              hasOptions && plan.options && plan.options.length > 0
+                ? plan.options[optionIndex]
+                : { ...plan, features: plan.features || {} };
 
             const isCurrentlySelected = isCurrentOption(selectedOption, plan.name);
             const isPro = plan.name === "Pro";
@@ -232,7 +241,11 @@ export default function UpgradePricing({ currentPlan, plans, onPlanSelect }) {
                                   : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
                               }`}
                             >
-                              {selectedOption.features && selectedOption.features[featureKey] ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                              {selectedOption.features && selectedOption.features[featureKey] ? (
+                                <Check className="h-3 w-3" />
+                              ) : (
+                                <X className="h-3 w-3" />
+                              )}
                             </div>
                             <span className="text-sm">{label}</span>
                           </div>

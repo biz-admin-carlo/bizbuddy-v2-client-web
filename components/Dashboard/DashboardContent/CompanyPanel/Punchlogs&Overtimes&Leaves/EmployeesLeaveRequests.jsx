@@ -1,5 +1,4 @@
-// components/Dashboard/DashboardContent/Settings/Admin/ManageLeaveRequests.jsx
-// components/Dashboard/DashboardContent/Settings/Admin/ManageLeaveRequests.jsx
+// components/Dashboard/DashboardContent/CompanyPanel/PunchLogs&Overtime&Leaves/EmployeesLeaveRequests.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
