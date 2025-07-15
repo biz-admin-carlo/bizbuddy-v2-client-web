@@ -457,46 +457,40 @@ export default function EmployeesLeaveRequests() {
                         className="border-b transition-colors hover:bg-muted/50"
                       >
                         {columnVisibility.includes("requester") && (
-                          <TableCell className="text-center text-nowrap">
+                          <TableCell className="text-center text-nowrap text-xs">
                             {l.User?.email || l.requester?.username || "—"}
                           </TableCell>
                         )}
                         {columnVisibility.includes("leaveType") && (
-                          <TableCell className="text-center text-nowrap">{l.leaveType}</TableCell>
+                          <TableCell className="text-center text-nowrap text-xs">{l.leaveType}</TableCell>
                         )}
                         {columnVisibility.includes("dateRange") && (
-                          <TableCell className="text-center ">
+                          <TableCell className="text-center text-xs">
                             <div className="flex flex-col gap-1">
-                              <span className="text-nowrap">
-                                <Calendar className="inline h-3 w-3 mr-1 text-orange-500" />
-                                From: {fmtMMDDYYYY_hhmma(l.startDate)}
-                              </span>
-                              <span className="text-nowrap">
-                                <Calendar className="inline h-3 w-3 mr-1 text-orange-500" />
-                                To: {fmtMMDDYYYY_hhmma(l.endDate)}
-                              </span>
+                              <span className="text-nowrap text-xs">{fmtMMDDYYYY_hhmma(l.startDate)}</span>
+                              <span className="text-nowrap text-xs">{fmtMMDDYYYY_hhmma(l.endDate)}</span>
                             </div>
                           </TableCell>
                         )}
                         {columnVisibility.includes("reason") && (
-                          <TableCell className="text-center text-nowrap">
+                          <TableCell className="text-center text-nowrap text-xs">
                             {l.reason ? (
-                              <span className="truncate block max-w-xs">{l.reason}</span>
+                              <span className="truncate block max-w-xs text-xs">{l.reason}</span>
                             ) : (
                               <span className="italic text-muted-foreground text-xs">No reason provided</span>
                             )}
                           </TableCell>
                         )}
                         {columnVisibility.includes("status") && (
-                          <TableCell className="text-center text-nowrap">
+                          <TableCell className="text-center text-nowrap text-xs">
                             <StatusBadge status={l.status} />
                           </TableCell>
                         )}
                         {columnVisibility.includes("createdAt") && (
-                          <TableCell className="text-center text-nowrap">{fmtMMDDYYYY_hhmma(l.createdAt)}</TableCell>
+                          <TableCell className="text-center text-nowrap text-xs">{fmtMMDDYYYY_hhmma(l.createdAt)}</TableCell>
                         )}
                         {columnVisibility.includes("updatedAt") && (
-                          <TableCell className="text-center text-nowrap">{fmtMMDDYYYY_hhmma(l.updatedAt)}</TableCell>
+                          <TableCell className="text-center text-nowrap text-xs">{fmtMMDDYYYY_hhmma(l.updatedAt)}</TableCell>
                         )}
                         <TableCell>
                           <div className="flex justify-center gap-1">
@@ -581,7 +575,7 @@ export default function EmployeesLeaveRequests() {
                         <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                           <Calendar className="h-8 w-8 text-orange-500/50" />
                         </div>
-                        <p>No leave requests found.</p>
+                        <p className="text-xs italic">No leave requests found.</p>
                         {(!filters.statuses.includes("all") || !filters.types.includes("all")) && (
                           <Button variant="link" onClick={clearAllFilters} className="text-orange-500 hover:text-orange-600 mt-2">
                             Clear all filters
@@ -710,32 +704,31 @@ export default function EmployeesLeaveRequests() {
               </div>
               Leave Request Details
             </DialogTitle>
-            <DialogDescription>Complete information about this leave request</DialogDescription>
           </DialogHeader>
 
           {selectedLeave && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <h3 className="font-medium text-lg capitalize">{selectedLeave.leaveType} Leave</h3>
+                <h3 className="font-medium text-md capitalize">{selectedLeave.leaveType}</h3>
                 <StatusBadge status={selectedLeave.status} />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Requester Email</p>
-                  <p className="font-medium">{selectedLeave.User?.email || selectedLeave.requester?.username || "—"}</p>
+              <div className="flex flex-col">
+                <div className="flex justify-start items-center gap-1">
+                  <p className="text-sm ">Requester Email:</p>
+                  <p className="text-xs">{selectedLeave.User?.email || selectedLeave.requester?.username || "—"}</p>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Department</p>
-                  <p className="font-medium">{selectedLeave.requester?.department?.name || "Not specified"}</p>
+                <div className="flex justify-start items-center gap-1">
+                  <p className="text-sm ">Department:</p>
+                  <p className="text-xs">{selectedLeave.requester?.department?.name || "Not specified"}</p>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Start Date</p>
-                  <p className="font-medium">{fmtMMDDYYYY_hhmma(selectedLeave.startDate)}</p>
+                <div className="flex justify-start items-center gap-1">
+                  <p className="text-sm">Start Date:</p>
+                  <p className="text-xs">{fmtMMDDYYYY_hhmma(selectedLeave.startDate)}</p>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">End Date</p>
-                  <p className="font-medium">{fmtMMDDYYYY_hhmma(selectedLeave.endDate)}</p>
+                <div className="flex justify-start items-center gap-1">
+                  <p className="text-sm">End Date:</p>
+                  <p className="text-xs">{fmtMMDDYYYY_hhmma(selectedLeave.endDate)}</p>
                 </div>
               </div>
 

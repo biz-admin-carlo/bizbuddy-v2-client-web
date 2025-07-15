@@ -3,7 +3,20 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { Clock, Filter, RefreshCw, Download, FileText, Calendar, Info, MapPin, ChevronsLeft, ChevronsRight } from "lucide-react";
+import {
+  Clock,
+  Filter,
+  RefreshCw,
+  Download,
+  FileText,
+  Calendar,
+  Info,
+  MapPin,
+  ChevronsLeft,
+  ChevronsRight,
+  Pencil,
+  Edit3,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
 import { jsPDF } from "jspdf";
@@ -15,7 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import IconBtn from "@/components/common/IconBtn";
 import MultiSelect from "@/components/common/MultiSelect";
@@ -62,11 +75,16 @@ const templateMatchesDate = (tmpl, userId, isoDate) => {
   const byDay = tmpl.recurrencePattern.match(/BYDAY=([^;]+)/i)?.[1] || "";
   return byDay.split(",").filter(Boolean).includes(JS_DAY_TO_RRULE[d.getUTCDay()]);
 };
+const z = (n) => String(n).padStart(2, "0");
+const toLocalInputValue = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}` + `T${z(d.getHours())}:${z(d.getMinutes())}`;
+};
 
 export default function EmployeesPunchLogs() {
   const { token } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
-
   const [timelogs, setTimelogs] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -74,31 +92,28 @@ export default function EmployeesPunchLogs() {
   const [locMap, setLocMap] = useState({});
   const [defaultHours, setDefaultHours] = useState(8);
   const [minLunchMins, setMinLunchMins] = useState(60);
-
   const [companyName, setCompanyName] = useState("");
   const [currentUserName, setCurrentUserName] = useState("");
   const [currentUserEmail, setCurrentUserEmail] = useState("");
-
+  const [currentUserRole, setCurrentUserRole] = useState("");
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
-
   const perPage = 10;
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRows, setTotalRows] = useState(0);
   const [rowsLoaded, setRowsLoaded] = useState(0);
-
-  const [filters, setFilters] = useState({
+  const resetFilters = {
     search: "",
     employeeIds: ["all"],
     departmentId: "all",
     from: "",
     to: "",
     status: "all",
-  });
-
+  };
+  const [filters, setFilters] = useState(resetFilters);
   const toggleListFilter = (key, val) =>
     setFilters((prev) => {
       if (val === "all") return { ...prev, [key]: ["all"] };
@@ -107,16 +122,26 @@ export default function EmployeesPunchLogs() {
       if (!list.length) list = ["all"];
       return { ...prev, [key]: list };
     });
-
+  const anyFilterActive =
+    filters.search ||
+    !filters.employeeIds.includes("all") ||
+    filters.departmentId !== "all" ||
+    filters.from ||
+    filters.to ||
+    filters.status !== "all";
+  const clearAllFilters = () => setFilters(resetFilters);
   const [sortConfig] = useState({ key: "dateTimeIn", direction: "descending" });
-
   const [schedDialogOpen, setSchedDialogOpen] = useState(false);
   const [scheduleList, setScheduleList] = useState([]);
   const [otDialogOpen, setOtDialogOpen] = useState(false);
   const [otViewData, setOtViewData] = useState(null);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
   const [locationDialogList, setLocationDialogList] = useState([]);
-
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editLog, setEditLog] = useState(null);
+  const [editTimeIn, setEditTimeIn] = useState("");
+  const [editTimeOut, setEditTimeOut] = useState("");
+  const canEdit = ["superadmin", "admin", "supervisor"].includes((currentUserRole || "").toLowerCase());
   const columnOptions = [
     { value: "id", label: "Punch logs ID" },
     { value: "schedule", label: "Schedule" },
@@ -136,32 +161,19 @@ export default function EmployeesPunchLogs() {
     { value: "locationOut", label: "Location Out" },
     { value: "period", label: "Period" },
     { value: "status", label: "Status" },
+    { value: "actions", label: "Actions" },
   ];
   const [columnVisibility, setColumnVisibility] = useState(columnOptions.map((c) => c.value));
-
   const bootstrap = useCallback(async () => {
     try {
       const [cSet, prof, emps, depts, tmpl, locs] = await Promise.all([
-        fetch(`${API_URL}/api/company-settings/`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${API_URL}/api/account/profile`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${API_URL}/api/employee?all=1`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${API_URL}/api/departments`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${API_URL}/api/shiftschedules?all=1`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${API_URL}/api/location`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
+        fetch(`${API_URL}/api/company-settings/`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/api/account/profile`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/api/employee?all=1`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/api/departments`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/api/shiftschedules?all=1`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/api/location`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
-
       const [cJ, pJ, eJ, dJ, tJ, lJ] = await Promise.all([
         cSet.json(),
         prof.json(),
@@ -170,27 +182,23 @@ export default function EmployeesPunchLogs() {
         tmpl.json(),
         locs.json(),
       ]);
-
       if (cSet.ok) {
         setDefaultHours(cJ.data?.defaultShiftHours ?? 8);
         const raw = cJ.data?.minimumLunchMinutes;
         setMinLunchMins(raw === null ? 0 : raw ?? 60);
       }
-
       if (pJ?.data?.company?.name) setCompanyName(pJ.data.company.name.replace(/\s+/g, "_"));
-
       if (pJ?.data) {
         const profObj = pJ.data.profile ?? {};
         const user = pJ.data.user ?? {};
         setCurrentUserEmail(user.email || "");
+        setCurrentUserRole(user.role || "");
         const name = user.fullName || `${profObj.firstName ?? ""} ${profObj.lastName ?? ""}`.trim() || user.email || "";
         setCurrentUserName(name);
       }
-
       if (eJ?.data) setEmployees(eJ.data);
       if (dJ?.data) setDepartments(dJ.data);
       if (tJ?.data) setShiftTemplates(tJ.data);
-
       if (lJ?.data) {
         const map = {};
         lJ.data.forEach((loc) => {
@@ -207,7 +215,6 @@ export default function EmployeesPunchLogs() {
       toast.error("Initialization failed");
     }
   }, [API_URL, token]);
-
   const fetchTimelogs = useCallback(
     async ({ pageParam = 1, append = false } = {}) => {
       setLoading(true);
@@ -215,72 +222,55 @@ export default function EmployeesPunchLogs() {
         const qs = new URLSearchParams();
         qs.append("page", pageParam);
         qs.append("limit", perPage);
-
         if (filters.departmentId !== "all") qs.append("departmentId", filters.departmentId);
         if (filters.from) qs.append("from", filters.from);
         if (filters.to) qs.append("to", filters.to);
         if (filters.status !== "all") qs.append("status", filters.status);
         if (filters.employeeIds.length === 1 && filters.employeeIds[0] !== "all") qs.append("employeeId", filters.employeeIds[0]);
-
         const [tlRes, otRes] = await Promise.all([
-          fetch(`${API_URL}/api/timelogs?${qs.toString()}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch(`${API_URL}/api/overtime`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+          fetch(`${API_URL}/api/timelogs?${qs.toString()}`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API_URL}/api/overtime`, { headers: { Authorization: `Bearer ${token}` } }),
         ]);
-
         const [tlJ, otJ] = await Promise.all([tlRes.json(), otRes.json()]);
         if (!tlRes.ok) throw new Error(tlJ.error || "Punch Logs fetch failed");
         if (!otRes.ok) throw new Error(otJ.error || "Overtime fetch failed");
-
         const otMap = {};
         (otJ.data || []).forEach((o) => {
           const existing = otMap[o.timeLogId];
           const ts = new Date(o.updatedAt || o.createdAt);
           if (!existing || ts > new Date(existing.updatedAt || existing.createdAt)) otMap[o.timeLogId] = o;
         });
-
         const enriched = (tlJ.data || []).map((t) => {
           const coffeeMinsStr = coffeeMinutes(t.coffeeBreaks);
           const lunchMinsStr = lunchMinutesStr(t.lunchBreak);
           const coffeeMinsNum = parseFloat(coffeeMinsStr) * 60;
           const lunchMinsNum = lunchMinutesNum(t.lunchBreak);
           const excessCoffeeMins = Math.max(0, coffeeMinsNum - 30);
-
           const dateKey = t.timeIn ? t.timeIn.slice(0, 10) : "";
           const matchedTemplates = shiftTemplates.filter((s) => templateMatchesDate(s, t.userId, dateKey));
           const isScheduled = matchedTemplates.length > 0;
           const firstSched = matchedTemplates[0];
-
           let shiftEndLocalStr = "—";
           let shiftName = "—";
           const grossMins = t.timeIn && t.timeOut ? diffMins(t.timeIn, t.timeOut) : 0;
           const lunchDeduct = minLunchMins ? Math.max(lunchMinsNum, minLunchMins) : lunchMinsNum;
           const netMins = grossMins - lunchDeduct - excessCoffeeMins;
-
           let workInside,
             rawOtMins,
             lateMins = 0;
           const defaultShiftMins = defaultHours * 60;
           const effectiveCapUnscheduled = Math.max(0, defaultShiftMins - minLunchMins);
-
           if (isScheduled && firstSched?.shift?.startTime && firstSched?.shift?.endTime) {
             const base = t.timeIn ? new Date(t.timeIn) : new Date(`${dateKey}T00:00:00`);
             const ssUTC = new Date(firstSched.shift.startTime);
             const seUTC = new Date(firstSched.shift.endTime);
-
             const shiftStart = new Date(base);
             shiftStart.setHours(ssUTC.getUTCHours(), ssUTC.getUTCMinutes(), 0, 0);
-
             const shiftEnd = new Date(base);
             shiftEnd.setHours(seUTC.getUTCHours(), seUTC.getUTCMinutes(), 0, 0);
             if (shiftEnd <= shiftStart) shiftEnd.setDate(shiftEnd.getDate() + 1);
-
             shiftEndLocalStr = safeDateTime(shiftEnd);
             shiftName = firstSched.shift.shiftName || "—";
-
             const schedDur = diffMins(shiftStart.toISOString(), shiftEnd.toISOString());
             lateMins = t.timeIn && new Date(t.timeIn) > shiftStart ? diffMins(shiftStart.toISOString(), t.timeIn) : 0;
             const insideRaw = Math.max(0, schedDur - lateMins - lunchDeduct - excessCoffeeMins);
@@ -290,21 +280,16 @@ export default function EmployeesPunchLogs() {
             workInside = Math.min(netMins, effectiveCapUnscheduled);
             rawOtMins = Math.max(0, netMins - effectiveCapUnscheduled);
           }
-
           const latestOt = otMap[t.id] ?? null;
           const approvedMins =
             latestOt && latestOt.status === "approved" && latestOt.requestedHours ? Number(latestOt.requestedHours) * 60 : 0;
           const usedOtMins = approvedMins > 0 ? Math.min(approvedMins, rawOtMins) : rawOtMins;
-
           let otStatus = "—";
           if (latestOt) otStatus = latestOt.status;
           else if (!isScheduled || rawOtMins > 0) otStatus = "No Approval";
-
           const periodMins = Math.max(0, workInside + approvedMins);
-
           const locList = locMap[t.userId] ?? [];
           const isLocRestricted = locList.length > 0;
-
           return {
             ...t,
             employeeName: t.email,
@@ -328,7 +313,6 @@ export default function EmployeesPunchLogs() {
             locList,
           };
         });
-
         setTotalPages(tlJ.meta?.totalPages || 1);
         setTotalRows(tlJ.meta?.total || enriched.length);
         setRowsLoaded((prev) => (append ? prev + enriched.length : enriched.length));
@@ -340,11 +324,9 @@ export default function EmployeesPunchLogs() {
     },
     [API_URL, token, filters, shiftTemplates, defaultHours, minLunchMins, locMap, perPage]
   );
-
   useEffect(() => {
     if (token) bootstrap();
   }, [token]);
-
   useEffect(() => {
     if (!token) return;
     setPage(1);
@@ -352,7 +334,6 @@ export default function EmployeesPunchLogs() {
     setRowsLoaded(0);
     fetchTimelogs({ pageParam: 1, append: false });
   }, [token, filters.departmentId, filters.from, filters.to, filters.status, shiftTemplates, defaultHours, minLunchMins, locMap]);
-
   const displayed = useMemo(() => {
     const getVal = (item, key) => {
       switch (key) {
@@ -370,7 +351,6 @@ export default function EmployeesPunchLogs() {
           return "";
       }
     };
-
     let data = [...timelogs];
     if (!filters.employeeIds.includes("all")) data = data.filter((t) => filters.employeeIds.includes(t.userId));
     if (filters.search) {
@@ -386,14 +366,12 @@ export default function EmployeesPunchLogs() {
     });
     return data;
   }, [timelogs, filters, sortConfig]);
-
   const totalPeriodHours = useMemo(
     () => displayed.reduce((sum, r) => sum + (parseFloat(r.periodHours || "0") || 0), 0).toFixed(2),
     [displayed]
   );
-
   const buildCSV = (rows) => {
-    const visibleCols = columnOptions.filter((c) => columnVisibility.includes(c.value));
+    const visibleCols = columnOptions.filter((c) => columnVisibility.includes(c.value) && c.value !== "actions");
     const header = visibleCols.map((c) => wrap(c.label));
     const cell = (r, key) => {
       switch (key) {
@@ -440,7 +418,6 @@ export default function EmployeesPunchLogs() {
     const body = rows.map((r) => visibleCols.map((c) => wrap(cell(r, c.value))));
     return [header, ...body].map((row) => row.join(",")).join("\r\n");
   };
-
   const exportCSV = () => {
     if (!displayed.length) {
       toast.message("No rows to export");
@@ -448,9 +425,7 @@ export default function EmployeesPunchLogs() {
     }
     setExporting(true);
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const blob = new Blob([buildCSV(displayed)], {
-      type: "text/csv;charset=utf-8;",
-    });
+    const blob = new Blob([buildCSV(displayed)], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -466,7 +441,6 @@ export default function EmployeesPunchLogs() {
       return;
     }
     setPdfExporting(true);
-
     const pdfCols = [
       { key: "id", label: "ID" },
       { key: "employee", label: "Employee" },
@@ -482,7 +456,6 @@ export default function EmployeesPunchLogs() {
       { key: "period", label: "Period" },
     ];
     const header = pdfCols.map((c) => c.label);
-
     const cellValue = (r, k) => {
       switch (k) {
         case "id":
@@ -513,7 +486,6 @@ export default function EmployeesPunchLogs() {
           return "";
       }
     };
-
     const rows = displayed.filter((r) => r.status === "completed");
     if (!rows.length) {
       toast.message("No completed rows to export");
@@ -521,14 +493,11 @@ export default function EmployeesPunchLogs() {
       return;
     }
     const body = rows.map((r) => pdfCols.map((c) => cellValue(r, c.key)));
-
     const doc = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
     doc.setFontSize(12);
-
     let y = 20;
     doc.text(`Company : ${companyName || "—"}`, 14, y);
     y += 6;
-
     const hasFrom = Boolean(filters.from);
     const hasTo = Boolean(filters.to);
     if (hasFrom || hasTo) {
@@ -547,35 +516,23 @@ export default function EmployeesPunchLogs() {
       doc.text(`Period   : ${periodLabel}`, 14, y);
       y += 6;
     }
-
     doc.text(`Total Hours : ${totalPeriodHours}`, 14, y);
     y += 8;
-
-    autoTable(doc, {
-      head: [header],
-      body,
-      startY: y,
-      styles: { fontSize: 7 },
-      headStyles: { fillColor: [255, 165, 0] },
-    });
-
+    autoTable(doc, { head: [header], body, startY: y, styles: { fontSize: 7 }, headStyles: { fillColor: [255, 165, 0] } });
     const approverLine = `Approver : ${currentUserName || "—"} (${currentUserEmail || "—"})`;
     const finalY = doc.lastAutoTable?.finalY || y;
     doc.text(approverLine, 14, finalY + 10);
-
     const stamp = new Date().toISOString().slice(0, 10);
     doc.save(`${companyName || "Punch Logs"}_${stamp}.pdf`);
     toast.message("PDF exported");
     setPdfExporting(false);
   };
-
   const refreshAll = async () => {
     setRefreshing(true);
     await Promise.all([bootstrap(), fetchTimelogs({ pageParam: 1, append: false })]);
     toast.message("Data refreshed");
     setRefreshing(false);
   };
-
   const labelClass = "my-auto shrink-0 text-sm font-medium text-muted-foreground";
   const NUM2DAY = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
   const parseRRuleDays = (str) => {
@@ -589,7 +546,6 @@ export default function EmployeesPunchLogs() {
       timeZone: "UTC",
     });
   const fmtLatLng = (lat, lng) => `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
-
   function ScheduleDialog({ open, onOpenChange, scheduleList }) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -600,7 +556,6 @@ export default function EmployeesPunchLogs() {
               Schedule Details
             </DialogTitle>
           </DialogHeader>
-
           {scheduleList.length ? (
             <ScrollArea className="max-h-[60vh]">
               <div className="space-y-4">
@@ -669,7 +624,6 @@ export default function EmployeesPunchLogs() {
       </Dialog>
     );
   }
-
   function LocationDialog({ open, onOpenChange, list }) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -680,7 +634,6 @@ export default function EmployeesPunchLogs() {
               Location Restriction Details
             </DialogTitle>
           </DialogHeader>
-
           {list.length ? (
             <ScrollArea className="max-h-[60vh]">
               <div className="space-y-4">
@@ -709,7 +662,34 @@ export default function EmployeesPunchLogs() {
       </Dialog>
     );
   }
-
+  const openEditDialog = (log) => {
+    setEditLog(log);
+    setEditTimeIn(toLocalInputValue(log.timeIn));
+    setEditTimeOut(toLocalInputValue(log.timeOut));
+    setEditDialogOpen(true);
+  };
+  const submitEdit = async () => {
+    try {
+      if (!editLog) return;
+      const payload = {
+        timeIn: editTimeIn ? new Date(editTimeIn).toISOString() : null,
+        timeOut: editTimeOut ? new Date(editTimeOut).toISOString() : null,
+      };
+      const res = await fetch(`${API_URL}/api/timelogs/${editLog.id}/datetime`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message || "Update failed");
+      toast.success("Date/Time updated.");
+      setEditDialogOpen(false);
+      setEditLog(null);
+      await fetchTimelogs({ pageParam: page, append: false });
+    } catch (e) {
+      toast.error(e.message);
+    }
+  };
   return (
     <div className="max-w-full mx-auto p-4 lg:px-6 px-2 space-y-8">
       <Toaster position="top-center" />
@@ -738,7 +718,6 @@ export default function EmployeesPunchLogs() {
           />
         </div>
       </div>
-
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2 relative">
@@ -752,22 +731,16 @@ export default function EmployeesPunchLogs() {
             {rowsLoaded} of {totalRows}
           </span>
         </CardHeader>
-
         <CardContent>
           <div className="space-y-4">
             <div className="flex flex-wrap gap-3 items-center">
               <span className={labelClass}>Column:</span>
               <ColumnSelector options={columnOptions} visible={columnVisibility} setVisible={setColumnVisibility} />
             </div>
-
             <div className="flex flex-wrap gap-3 items-center">
               <span className={labelClass}>Filter:</span>
-
               <MultiSelect
-                options={employees.map((e) => ({
-                  value: e.id,
-                  label: e.email,
-                }))}
+                options={employees.map((e) => ({ value: e.id, label: e.email }))}
                 selected={filters.employeeIds}
                 onChange={(v) => toggleListFilter("employeeIds", v)}
                 allLabel="All employees"
@@ -819,11 +792,20 @@ export default function EmployeesPunchLogs() {
                   className="h-8"
                 />
               </div>
+              {anyFilterActive && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearAllFilters}
+                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                >
+                  Clear Filters
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
-
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10 text-neutral-600 dark:text-neutral-300">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2 flex justify-between items-start">
@@ -839,7 +821,6 @@ export default function EmployeesPunchLogs() {
             <div className="text-sm text-muted-foreground mt-2 md:mt-1 whitespace-nowrap">Total hours: {totalPeriodHours}</div>
           </div>
         </CardHeader>
-
         <CardContent className="p-0">
           <div className="rounded-md border">
             <Table>
@@ -854,7 +835,6 @@ export default function EmployeesPunchLogs() {
                     ))}
                 </TableRow>
               </TableHeader>
-
               <TableBody>
                 {loading ? (
                   <TableSkeleton rows={6} cols={columnVisibility.length} />
@@ -872,7 +852,6 @@ export default function EmployeesPunchLogs() {
                         {columnVisibility.includes("id") && (
                           <TableCell className="font-mono text-xs text-center">{t.id}</TableCell>
                         )}
-
                         {columnVisibility.includes("schedule") && (
                           <TableCell className="text-center">
                             <Button
@@ -887,7 +866,6 @@ export default function EmployeesPunchLogs() {
                             </Button>
                           </TableCell>
                         )}
-
                         {columnVisibility.includes("locationRestricted") && (
                           <TableCell className="text-center">
                             <Button
@@ -903,33 +881,29 @@ export default function EmployeesPunchLogs() {
                             </Button>
                           </TableCell>
                         )}
-
                         {columnVisibility.includes("employee") && (
-                          <TableCell className="text-left text-nowrap capitalize">{t.employeeName}</TableCell>
+                          <TableCell className="text-left text-nowrap text-xs">{t.employeeName}</TableCell>
                         )}
-
                         {columnVisibility.includes("dateTimeIn") && (
-                          <TableCell className="text-center text-nowrap">{safeDateTime(t.timeIn)}</TableCell>
+                          <TableCell className="text-center text-nowrap text-xs">{safeDateTime(t.timeIn)}</TableCell>
                         )}
                         {columnVisibility.includes("dateTimeOut") && (
-                          <TableCell className="text-center text-nowrap">{safeDateTime(t.timeOut)}</TableCell>
+                          <TableCell className="text-center text-nowrap text-xs">{safeDateTime(t.timeOut)}</TableCell>
                         )}
-
                         {columnVisibility.includes("duration") && (
-                          <TableCell className="text-center text-nowrap">{t.duration}</TableCell>
+                          <TableCell className="text-center text-nowrap text-xs">{t.duration}</TableCell>
                         )}
                         {columnVisibility.includes("coffee") && (
-                          <TableCell className="text-center text-nowrap">{t.coffeeMins}</TableCell>
+                          <TableCell className="text-center text-nowrap text-xs">{t.coffeeMins}</TableCell>
                         )}
                         {columnVisibility.includes("lunch") && (
-                          <TableCell className="text-center text-nowrap">{t.lunchMins}</TableCell>
+                          <TableCell className="text-center text-nowrap text-xs">{t.lunchMins}</TableCell>
                         )}
-
                         {columnVisibility.includes("ot") && (
-                          <TableCell className="text-center text-nowrap">{t.otHours}</TableCell>
+                          <TableCell className="text-center text-nowrap text-xs">{t.otHours}</TableCell>
                         )}
                         {columnVisibility.includes("otStatus") && (
-                          <TableCell className="text-center text-nowrap">
+                          <TableCell className="text-center text-nowrap text-xs">
                             <Button
                               size="sm"
                               className="bg-orange-500 hover:bg-orange-600 text-white text-xs px-2"
@@ -944,21 +918,21 @@ export default function EmployeesPunchLogs() {
                             </Button>
                           </TableCell>
                         )}
-
-                        {columnVisibility.includes("late") && <TableCell className="text-center">{t.lateHours}</TableCell>}
-
+                        {columnVisibility.includes("late") && (
+                          <TableCell className="text-center text-xs text-nowrap">{t.lateHours}</TableCell>
+                        )}
                         {columnVisibility.includes("deviceIn") && (
                           <TableCell className="text-center text-xs">
                             <TooltipProvider delayDuration={300}>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <span className="flex flex-col items-center leading-tight cursor-default">
+                                  <span className="flex flex-col items-center leading-tight cursor-default text-xs">
                                     {(t.fullDevIn ?? "—").split(",").map((p, i) => (
                                       <span key={i}>{truncate(p.trim())}</span>
                                     ))}
                                   </span>
                                 </TooltipTrigger>
-                                <TooltipContent className="break-all max-w-xs whitespace-pre-wrap">
+                                <TooltipContent className="break-all max-w-xs whitespace-pre-wrap text-xs">
                                   {t.fullDevIn || "—"}
                                 </TooltipContent>
                               </Tooltip>
@@ -970,32 +944,31 @@ export default function EmployeesPunchLogs() {
                             <TooltipProvider delayDuration={300}>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <span className="flex flex-col items-center leading-tight cursor-default">
+                                  <span className="flex flex-col items-center leading-tight cursor-default text-xs">
                                     {(t.fullDevOut ?? "—").split(",").map((p, i) => (
                                       <span key={i}>{truncate(p.trim())}</span>
                                     ))}
                                   </span>
                                 </TooltipTrigger>
-                                <TooltipContent className="break-all max-w-xs whitespace-pre-wrap">
+                                <TooltipContent className="break-all max-w-xs whitespace-pre-wrap text-xs">
                                   {t.fullDevOut || "—"}
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                           </TableCell>
                         )}
-
                         {columnVisibility.includes("locationIn") && (
-                          <TableCell className="text-center">
+                          <TableCell className="text-center text-xs">
                             {t.locIn.lat != null ? (
-                              <Button className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 leading-tight">
+                              <Button className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 leading-tight text-xs">
                                 <a
                                   href={`https://www.google.com/maps?q=${t.locIn.lat},${t.locIn.lng}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-xs flex flex-col items-center"
                                 >
-                                  <span>{t.locIn.lat.toFixed(5)}</span>
-                                  <span>{t.locIn.lng.toFixed(5)}</span>
+                                  <span className="text-xs">{t.locIn.lat.toFixed(5)}</span>
+                                  <span className="text-xs">{t.locIn.lng.toFixed(5)}</span>
                                 </a>
                               </Button>
                             ) : (
@@ -1004,7 +977,7 @@ export default function EmployeesPunchLogs() {
                           </TableCell>
                         )}
                         {columnVisibility.includes("locationOut") && (
-                          <TableCell className="text-center">
+                          <TableCell className="text-center text-xs">
                             {t.locOut.lat != null ? (
                               <Button className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 leading-tight">
                                 <a
@@ -1022,10 +995,20 @@ export default function EmployeesPunchLogs() {
                             )}
                           </TableCell>
                         )}
-
-                        {columnVisibility.includes("period") && <TableCell className="text-center">{t.periodHours}</TableCell>}
+                        {columnVisibility.includes("period") && (
+                          <TableCell className="text-center text-xs">{t.periodHours}</TableCell>
+                        )}
                         {columnVisibility.includes("status") && (
-                          <TableCell className="text-center">{t.status === "active" ? "Active" : "Completed"}</TableCell>
+                          <TableCell className="text-center text-xs">{t.status === "active" ? "Active" : "Completed"}</TableCell>
+                        )}
+                        {columnVisibility.includes("actions") && (
+                          <TableCell className="text-center text-xs">
+                            {canEdit ? (
+                              <IconBtn icon={Edit3} tooltip="Edit Time In/Out" onClick={() => openEditDialog(t)} />
+                            ) : (
+                              "—"
+                            )}
+                          </TableCell>
                         )}
                       </motion.tr>
                     ))}
@@ -1038,6 +1021,11 @@ export default function EmployeesPunchLogs() {
                           <Clock className="h-8 w-8 text-orange-500/50" />
                         </div>
                         <p>No timelogs match the selected filters.</p>
+                        {anyFilterActive && (
+                          <Button variant="link" onClick={clearAllFilters} className="text-orange-600 hover:text-orange-700 mt-2">
+                            Clear all filters
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1046,7 +1034,6 @@ export default function EmployeesPunchLogs() {
             </Table>
           </div>
         </CardContent>
-
         {totalPages > 1 && (
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-4">
             <div className="flex items-center gap-2">
@@ -1063,7 +1050,6 @@ export default function EmployeesPunchLogs() {
                 <ChevronsLeft className="h-4 w-4" />
                 First
               </Button>
-
               {[...Array(totalPages)].map((_, i) => {
                 const p = i + 1;
                 if (p === 1 || p === totalPages || Math.abs(p - page) <= 1)
@@ -1095,27 +1081,20 @@ export default function EmployeesPunchLogs() {
                 disabled={page === totalPages}
                 onClick={() => {
                   setPage(totalPages);
-                  fetchTimelogs({
-                    pageParam: totalPages,
-                    append: false,
-                  });
+                  fetchTimelogs({ pageParam: totalPages, append: false });
                 }}
               >
                 Last
                 <ChevronsRight className="h-4 w-4" />
               </Button>
             </div>
-
             <div className="flex items-center gap-2">
               {page < totalPages && (
                 <Button
                   size="sm"
                   onClick={async () => {
                     const next = page + 1;
-                    await fetchTimelogs({
-                      pageParam: next,
-                      append: true,
-                    });
+                    await fetchTimelogs({ pageParam: next, append: true });
                     setPage(next);
                   }}
                 >
@@ -1127,11 +1106,7 @@ export default function EmployeesPunchLogs() {
                   size="sm"
                   variant="outline"
                   onClick={async () => {
-                    for (let p = page + 1; p <= totalPages; p += 1)
-                      await fetchTimelogs({
-                        pageParam: p,
-                        append: true,
-                      });
+                    for (let p = page + 1; p <= totalPages; p += 1) await fetchTimelogs({ pageParam: p, append: true });
                     setPage(totalPages);
                   }}
                 >
@@ -1154,7 +1129,6 @@ export default function EmployeesPunchLogs() {
           </div>
         )}
       </Card>
-
       <ScheduleDialog open={schedDialogOpen} onOpenChange={setSchedDialogOpen} scheduleList={scheduleList} />
       <Dialog open={otDialogOpen} onOpenChange={setOtDialogOpen}>
         <DialogContent className="sm:max-w-md border-2 dark:border-white/10">
@@ -1170,31 +1144,23 @@ export default function EmployeesPunchLogs() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>Request ID</div>
                 <div>{otViewData.ot.id}</div>
-
                 <div>Status</div>
                 <div className="capitalize">{otViewData.ot.status}</div>
-
                 <div>Requested At</div>
                 <div>
                   {safeDate(otViewData.ot.createdAt)} {safeTime(otViewData.ot.createdAt)}
                 </div>
-
                 <div>OT Hours</div>
                 <div>{otViewData.log.otHours}</div>
-
                 <div>Time In</div>
                 <div>{safeTime(otViewData.log.timeIn)}</div>
-
                 <div>Time Out</div>
                 <div>{safeTime(otViewData.log.timeOut)}</div>
-
                 <div>Requester Reason</div>
                 <div>{otViewData.ot.requesterReason || "—"}</div>
-
                 <div>Approver Comments</div>
                 <div>{otViewData.ot.approverComments || "—"}</div>
               </div>
-
               <div className="pt-4">
                 <div className="text-sm font-medium mb-1">Raw OT Record</div>
                 <pre className="bg-muted p-2 rounded-md text-xs overflow-auto">{JSON.stringify(otViewData.ot, null, 2)}</pre>
@@ -1205,8 +1171,40 @@ export default function EmployeesPunchLogs() {
           )}
         </DialogContent>
       </Dialog>
-
       <LocationDialog open={locationDialogOpen} onOpenChange={setLocationDialogOpen} list={locationDialogList} />
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-md border-2 dark:border-white/10">
+          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-orange-500" />
+              Edit Time In / Time Out
+            </DialogTitle>
+          </DialogHeader>
+          {editLog ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Time In</label>
+                <Input type="datetime-local" value={editTimeIn} lang="en-US" onChange={(e) => setEditTimeIn(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Time Out</label>
+                <Input type="datetime-local" value={editTimeOut} lang="en-US" onChange={(e) => setEditTimeOut(e.target.value)} />
+              </div>
+            </div>
+          ) : (
+            <p className="text-center text-muted-foreground py-4">No data</p>
+          )}
+          <DialogFooter className="pt-4">
+            <Button onClick={submitEdit} disabled={!editLog}>
+              Save
+            </Button>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

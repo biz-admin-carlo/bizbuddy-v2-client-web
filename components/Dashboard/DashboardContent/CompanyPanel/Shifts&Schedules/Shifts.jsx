@@ -391,7 +391,12 @@ export default function Shifts() {
                 className="h-8 max-w-xs"
               />
               {filters.name && (
-                <Button variant="outline" size="sm" onClick={() => setFilters({ name: "" })}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFilters({ name: "" })}
+                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                >
                   Clear Filter
                 </Button>
               )}
@@ -466,18 +471,20 @@ export default function Shifts() {
                         transition={{ duration: 0.2 }}
                         className="border-b transition-colors hover:bg-muted/50"
                       >
-                        {columnVisibility.includes("shiftName") && <TableCell>{s.shiftName}</TableCell>}
-                        {columnVisibility.includes("startTime") && <TableCell>{fmtClock(s.startTime)}</TableCell>}
-                        {columnVisibility.includes("endTime") && <TableCell>{fmtClock(s.endTime)}</TableCell>}
+                        {columnVisibility.includes("shiftName") && <TableCell className="text-xs">{s.shiftName}</TableCell>}
+                        {columnVisibility.includes("startTime") && (
+                          <TableCell className="text-xs">{fmtClock(s.startTime)}</TableCell>
+                        )}
+                        {columnVisibility.includes("endTime") && <TableCell className="text-xs">{fmtClock(s.endTime)}</TableCell>}
                         {columnVisibility.includes("differentialMultiplier") && (
-                          <TableCell>{s.differentialMultiplier}x</TableCell>
+                          <TableCell className="text-xs">{s.differentialMultiplier}x</TableCell>
                         )}
                         {columnVisibility.includes("totalHours") && <TableCell>{totalHours(s.startTime, s.endTime)}</TableCell>}
                         {columnVisibility.includes("createdAt") && (
-                          <TableCell className="text-nowrap">{fmtMMDDYYYY_hhmma(s.createdAt)}</TableCell>
+                          <TableCell className="text-nowrap text-xs">{fmtMMDDYYYY_hhmma(s.createdAt)}</TableCell>
                         )}
                         {columnVisibility.includes("updatedAt") && (
-                          <TableCell className="text-nowrap">{fmtMMDDYYYY_hhmma(s.updatedAt)}</TableCell>
+                          <TableCell className="text-nowrap text-xs">{fmtMMDDYYYY_hhmma(s.updatedAt)}</TableCell>
                         )}
                         <TableCell>
                           <div className="flex justify-center gap-1">

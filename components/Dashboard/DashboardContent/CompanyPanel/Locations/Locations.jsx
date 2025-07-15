@@ -709,22 +709,22 @@ export default function Locations() {
                   {useLocLoadingCreate ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MapPin className="h-4 w-4 mr-2" />}
                   Use Current Location
                 </Button>
-                <div className="grid grid-cols-4 items-center gap-4 text-sm">
-                  <label className="text-right font-medium" htmlFor="c-name">
-                    Location Name
+                <div className="flex flex-row justify-between items-center gap-2">
+                  <label className="text-right text-sm text-nowrap" htmlFor="c-name">
+                    Location Name:
                   </label>
                   <Input
                     id="c-name"
-                    className="col-span-3"
+                    className=""
                     value={createForm.name}
                     onChange={(e) => setCreateForm((p) => ({ ...p, name: e.target.value }))}
                     placeholder="Enter location name"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid grid-cols-4 items-center gap-4 text-sm">
-                    <label className="text-right font-medium" htmlFor="c-latitude">
-                      Latitude
+                <div className="flex flex-row justify-between items-center gap-2">
+                  <div className="flex flex-row justify-between items-center gap-2">
+                    <label className="text-right text-sm" htmlFor="c-latitude">
+                      Latitude:
                     </label>
                     <Input
                       id="c-latitude"
@@ -733,9 +733,9 @@ export default function Locations() {
                       onChange={(e) => setCreateForm((p) => ({ ...p, latitude: e.target.value }))}
                     />
                   </div>
-                  <div className="grid grid-cols-4 items-center gap-4 text-sm">
-                    <label className="text-right font-medium" htmlFor="c-longitude">
-                      Longitude
+                  <div className="flex flex-row justify-between items-center gap-2">
+                    <label className="text-right text-sm" htmlFor="c-longitude">
+                      Longitude:
                     </label>
                     <Input
                       id="c-longitude"
@@ -745,37 +745,34 @@ export default function Locations() {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-4 items-start gap-4 text-sm">
-                  <label className="text-right font-medium" htmlFor="c-radius">
+                <div className="flex flex-row justify-between items-center gap-2">
+                  <label className="text-right text-sm" htmlFor="c-radius">
                     Radius&nbsp;(m)
                   </label>
-
-                  <div className="col-span-3">
-                    <Input
-                      id="c-radius"
-                      type="number"
-                      min="1"
-                      max="9999"
-                      step="1"
-                      value={createForm.radius}
-                      onChange={(e) => {
-                        const v = Math.min(Number(e.target.value), 9999);
-                        setCreateForm((p) => ({ ...p, radius: v ? String(v) : "" }));
-                      }}
-                      placeholder="500"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Example:Max:&nbsp;
-                      <span className="font-medium">9999 m</span>
-                    </p>
-                  </div>
+                  <Input
+                    id="c-radius"
+                    type="number"
+                    min="1"
+                    max="9999"
+                    step="1"
+                    value={createForm.radius}
+                    onChange={(e) => {
+                      const v = Math.min(Number(e.target.value), 9999);
+                      setCreateForm((p) => ({ ...p, radius: v ? String(v) : "" }));
+                    }}
+                    placeholder="500"
+                  />
+                  <p className="text-xs text-muted-foreground text-nowrap">
+                    Max:&nbsp;
+                    <span className="font-medium">9999</span>
+                  </p>
                 </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowCreateModal(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleCreate} disabled={createLoading} className="bg-orange-500 hover:bg-orange-600 text-white">
+                <Button onClick={handleCreate} disabled={createLoading} variant="outline">
                   {createLoading ? (
                     <span className="flex items-center">
                       <svg
@@ -896,11 +893,11 @@ export default function Locations() {
                           transition={{ duration: 0.2 }}
                           className="border-b transition-colors hover:bg-muted/50"
                         >
-                          {columnVisibility.includes("id") && <TableCell>{loc.id}</TableCell>}
-                          {columnVisibility.includes("name") && <TableCell>{loc.name}</TableCell>}
-                          {columnVisibility.includes("latitude") && <TableCell>{loc.latitude}</TableCell>}
-                          {columnVisibility.includes("longitude") && <TableCell>{loc.longitude}</TableCell>}
-                          {columnVisibility.includes("radius") && <TableCell>{loc.radius}</TableCell>}
+                          {columnVisibility.includes("id") && <TableCell className="text-xs">{loc.id}</TableCell>}
+                          {columnVisibility.includes("name") && <TableCell className="text-xs">{loc.name}</TableCell>}
+                          {columnVisibility.includes("latitude") && <TableCell className="text-xs">{loc.latitude}</TableCell>}
+                          {columnVisibility.includes("longitude") && <TableCell className="text-xs">{loc.longitude}</TableCell>}
+                          {columnVisibility.includes("radius") && <TableCell className="text-xs">{loc.radius}</TableCell>}
                           {columnVisibility.includes("users") && (
                             <TableCell>
                               <Badge
@@ -932,10 +929,10 @@ export default function Locations() {
                             </TableCell>
                           )}
                           {columnVisibility.includes("createdAt") && (
-                            <TableCell className="text-nowrap">{fmtMMDDYYYY_hhmma(loc.createdAt)}</TableCell>
+                            <TableCell className="text-xs text-nowrap">{fmtMMDDYYYY_hhmma(loc.createdAt)}</TableCell>
                           )}
                           {columnVisibility.includes("updatedAt") && (
-                            <TableCell className="text-nowrap">{fmtMMDDYYYY_hhmma(loc.updatedAt)}</TableCell>
+                            <TableCell className="text-xs text-nowrap">{fmtMMDDYYYY_hhmma(loc.updatedAt)}</TableCell>
                           )}
                           <TableCell>
                             <div className="flex justify-center gap-1">
@@ -994,10 +991,6 @@ export default function Locations() {
         </CardContent>
       </Card>
 
-      {/* ---------- EDIT / USERS / DELETE modals (unchanged) ---------- */}
-      {/* (code identical to your original, kept for completeness) */}
-
-      {/* Edit Modal */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
         <DialogContent className="w-[90vw] sm:max-w-lg md:max-w-xl max-h-[90vh] overflow-y-auto border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -1032,9 +1025,9 @@ export default function Locations() {
               {useLocLoadingEdit ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MapPin className="h-4 w-4 mr-2" />}
               Use Current Location
             </Button>
-            <div className="grid grid-cols-4 items-center gap-4 text-sm">
-              <label className="text-right font-medium" htmlFor="e-name">
-                Location Name
+            <div className="flex flex-row justify-between items-center gap-2">
+              <label className="text-right text-sm text-nowrap" htmlFor="e-name">
+                Location Name:
               </label>
               <Input
                 id="e-name"
@@ -1044,10 +1037,10 @@ export default function Locations() {
                 placeholder="Enter location name"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid grid-cols-4 items-center gap-4 text-sm">
-                <label className="text-right font-medium" htmlFor="e-latitude">
-                  Latitude
+            <div className="flex flex-row justify-between items-center gap-2">
+              <div className="flex flex-row justify-between items-center gap-2">
+                <label className="text-right text-sm" htmlFor="e-latitude">
+                  Latitude:
                 </label>
                 <Input
                   id="e-latitude"
@@ -1056,9 +1049,9 @@ export default function Locations() {
                   onChange={(e) => setEditForm((p) => ({ ...p, latitude: e.target.value }))}
                 />
               </div>
-              <div className="grid grid-cols-4 items-center gap-4 text-sm">
-                <label className="text-right font-medium" htmlFor="e-longitude">
-                  Longitude
+              <div className="flex flex-row justify-between items-center gap-2">
+                <label className="text-right text-sm" htmlFor="e-longitude">
+                  Longitude:
                 </label>
                 <Input
                   id="e-longitude"
@@ -1068,57 +1061,57 @@ export default function Locations() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-4 items-start gap-4 text-sm">
-              <label className="text-right font-medium" htmlFor="e-radius">
+            <div className="flex flex-row justify-between items-center gap-2">
+              <label className="text-right text-sm" htmlFor="e-radius">
                 Radius&nbsp;(m)
               </label>
-              <div className="col-span-3">
-                <Input
-                  id="e-radius"
-                  type="number"
-                  min="1"
-                  max="9999"
-                  step="1"
-                  value={editForm.radius}
-                  onChange={(e) => {
-                    const v = Math.min(Number(e.target.value), 9999);
-                    setEditForm((p) => ({ ...p, radius: v ? String(v) : "" }));
-                  }}
-                  placeholder="500"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Max:&nbsp;
-                  <span className="font-medium">9999 m</span>
-                </p>
-              </div>
+              <Input
+                id="e-radius"
+                type="number"
+                min="1"
+                max="9999"
+                step="1"
+                value={editForm.radius}
+                onChange={(e) => {
+                  const v = Math.min(Number(e.target.value), 9999);
+                  setEditForm((p) => ({ ...p, radius: v ? String(v) : "" }));
+                }}
+                placeholder="500"
+              />
+              <p className="text-xs text-muted-foreground mt-1 text-nowrap">
+                Max:&nbsp;
+                <span className="font-medium">9999</span>
+              </p>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditModal(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveEdit} disabled={editLoading} className="bg-orange-500 hover:bg-orange-600 text-white">
-              {editLoading ? (
-                <span className="flex items-center">
-                  <svg
-                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                  Saving…
-                </span>
-              ) : (
-                <span>Save Changes</span>
-              )}
-            </Button>
+            <div className="flex flex-row gap-2 justify-center items-center">
+              <Button variant="outline" onClick={() => setShowEditModal(false)} className>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveEdit} disabled={editLoading} variant="outline">
+                {editLoading ? (
+                  <span className="flex items-center">
+                    <svg
+                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    Saving…
+                  </span>
+                ) : (
+                  <span>Save Changes</span>
+                )}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

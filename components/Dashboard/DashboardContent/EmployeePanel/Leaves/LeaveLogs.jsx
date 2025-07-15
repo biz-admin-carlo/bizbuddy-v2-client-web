@@ -289,9 +289,8 @@ export default function LeaveLogs() {
           </div>
 
           <div className="flex flex-wrap gap-3 items-center">
-            <span className={labelClass}>Filter – ID:</span>
+            <span className={labelClass}>Filters:</span>
             <IdFilterSelect />
-            <span className={labelClass}>Type:</span>
             <TypeFilterSelect />
           </div>
         </CardContent>
@@ -358,29 +357,29 @@ export default function LeaveLogs() {
                         transition={{ duration: 0.2 }}
                         className="border-b transition-colors hover:bg-muted/50"
                       >
-                        {columnVisibility.includes("id") && <TableCell>{l.id}</TableCell>}
+                        {columnVisibility.includes("id") && <TableCell className="text-nowrap text-xs">{l.id}</TableCell>}
 
-                        {columnVisibility.includes("leaveType") && <TableCell>{l.leaveType}</TableCell>}
+                        {columnVisibility.includes("leaveType") && (
+                          <TableCell className="text-nowrap text-xs">{l.leaveType}</TableCell>
+                        )}
 
                         {columnVisibility.includes("dateRange") && (
-                          <TableCell className="text-nowrap">
+                          <TableCell className="text-nowrap text-xs">
                             <div className="flex flex-col gap-1">
                               <div className="flex items-center">
-                                <Calendar className="h-3 w-3 mr-1 text-orange-500" />
-                                <span className="text-xs text-muted-foreground mr-1">From:</span> {fmtMMDDYYYY_hhmma(l.startDate)}
+                                <span className="text-xs text-muted-foreground mr-1"></span> {fmtMMDDYYYY_hhmma(l.startDate)}
                               </div>
                               <div className="flex items-center">
-                                <Calendar className="h-3 w-3 mr-1 text-orange-500" />
-                                <span className="text-xs text-muted-foreground mr-1">To:</span> {fmtMMDDYYYY_hhmma(l.endDate)}
+                                <span className="text-xs text-muted-foreground mr-1"></span> {fmtMMDDYYYY_hhmma(l.endDate)}
                               </div>
                             </div>
                           </TableCell>
                         )}
 
                         {columnVisibility.includes("leaveReason") && (
-                          <TableCell className="max-w-xs truncate">
+                          <TableCell className="text-nowrap text-xs">
                             {l.leaveReason ? (
-                              <span className="text-sm">{l.leaveReason}</span>
+                              <span className="text-xs text-nowrap">{l.leaveReason}</span>
                             ) : (
                               <span className="text-xs text-muted-foreground italic">No reason provided</span>
                             )}
@@ -388,13 +387,13 @@ export default function LeaveLogs() {
                         )}
 
                         {columnVisibility.includes("approver") && (
-                          <TableCell>{l.approver?.email || l.approverId || "—"}</TableCell>
+                          <TableCell className="text-nowrap text-xs">{l.approver?.email || l.approverId || "—"}</TableCell>
                         )}
 
                         {columnVisibility.includes("approverComments") && (
-                          <TableCell className="max-w-xs truncate">
+                          <TableCell className="text-nowrap text-xs">
                             {l.approverComments ? (
-                              <span className="text-sm">{l.approverComments}</span>
+                              <span className="text-xs">{l.approverComments}</span>
                             ) : (
                               <span className="text-xs text-muted-foreground italic">No comments</span>
                             )}
@@ -402,10 +401,10 @@ export default function LeaveLogs() {
                         )}
 
                         {columnVisibility.includes("createdAt") && (
-                          <TableCell className="text-nowrap">{fmtMMDDYYYY_hhmma(l.createdAt)}</TableCell>
+                          <TableCell className="text-nowrap text-xs">{fmtMMDDYYYY_hhmma(l.createdAt)}</TableCell>
                         )}
                         {columnVisibility.includes("updatedAt") && (
-                          <TableCell className="text-nowrap">{fmtMMDDYYYY_hhmma(l.updatedAt)}</TableCell>
+                          <TableCell className="text-nowrap text-xs">{fmtMMDDYYYY_hhmma(l.updatedAt)}</TableCell>
                         )}
 
                         {columnVisibility.includes("status") && (

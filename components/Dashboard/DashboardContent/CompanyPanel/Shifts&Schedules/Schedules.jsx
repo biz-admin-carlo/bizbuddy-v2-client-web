@@ -618,8 +618,13 @@ export default function Schedules() {
                 />
               </div>
               {(filters.name || filters.email) && (
-                <Button variant="outline" size="sm" onClick={() => setFilters({ name: "", email: "" })}>
-                  Clear Filter
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFilters({ name: "", email: "" })}
+                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                >
+                  Clear Filters
                 </Button>
               )}
             </div>
@@ -691,7 +696,7 @@ export default function Schedules() {
                         className="border-b transition-colors hover:bg-muted/50"
                       >
                         {columnVisibility.includes("shiftName") && (
-                          <TableCell>
+                          <TableCell className="text-xs">
                             <Badge
                               variant="link"
                               className="cursor-pointer hover:bg-orange-600 bg-orange-500 text-neutral-50"
@@ -712,13 +717,21 @@ export default function Schedules() {
                             </div>
                           </TableCell>
                         )}
-                        {columnVisibility.includes("startDate") && <TableCell>{fmtMMDDYYYY(s.startDate.slice(0, 10))}</TableCell>}
-                        {columnVisibility.includes("endDate") && (
-                          <TableCell>{fmtMMDDYYYY(s.endDate ? s.endDate.slice(0, 10) : "—")}</TableCell>
+                        {columnVisibility.includes("startDate") && (
+                          <TableCell className="text-xs">{fmtMMDDYYYY(s.startDate.slice(0, 10))}</TableCell>
                         )}
-                        {columnVisibility.includes("user") && <TableCell>{userMap[s.assignedUserId] || "—"}</TableCell>}
-                        {columnVisibility.includes("createdAt") && <TableCell>{fmtMMDDYYYY_hhmma(s.createdAt)}</TableCell>}
-                        {columnVisibility.includes("updatedAt") && <TableCell>{fmtMMDDYYYY_hhmma(s.updatedAt)}</TableCell>}
+                        {columnVisibility.includes("endDate") && (
+                          <TableCell className="text-xs">{fmtMMDDYYYY(s.endDate ? s.endDate.slice(0, 10) : "—")}</TableCell>
+                        )}
+                        {columnVisibility.includes("user") && (
+                          <TableCell className="text-xs">{userMap[s.assignedUserId] || "—"}</TableCell>
+                        )}
+                        {columnVisibility.includes("createdAt") && (
+                          <TableCell className="text-xs">{fmtMMDDYYYY_hhmma(s.createdAt)}</TableCell>
+                        )}
+                        {columnVisibility.includes("updatedAt") && (
+                          <TableCell className="text-xs">{fmtMMDDYYYY_hhmma(s.updatedAt)}</TableCell>
+                        )}
                         <TableCell className="text-right">
                           <div className="flex gap-1 justify-center">
                             <TooltipProvider delayDuration={300}>

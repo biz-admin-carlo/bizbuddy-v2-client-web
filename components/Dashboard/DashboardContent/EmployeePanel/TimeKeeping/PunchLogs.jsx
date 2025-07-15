@@ -913,7 +913,7 @@ function TimelogRow({ log, columnVisibility, onSchedule, onRequestOT, onDelete, 
     >
       {columnVisibility.includes("id") && <TableCell className="font-mono text-xs text-center">{log.id}</TableCell>}
       {columnVisibility.includes("schedule") && (
-        <TableCell className="text-center">
+        <TableCell className="text-center text-xs">
           <Button
             size="sm"
             className="bg-orange-500 hover:bg-orange-600 text-slate-100 text-xs"
@@ -924,7 +924,7 @@ function TimelogRow({ log, columnVisibility, onSchedule, onRequestOT, onDelete, 
         </TableCell>
       )}
       {columnVisibility.includes("locationRestricted") && (
-        <TableCell className="text-center">
+        <TableCell className="text-center text-xs">
           <Button
             size="sm"
             className="bg-orange-500 hover:bg-orange-600 text-white text-xs"
@@ -936,15 +936,15 @@ function TimelogRow({ log, columnVisibility, onSchedule, onRequestOT, onDelete, 
         </TableCell>
       )}
       {columnVisibility.includes("dateTimeIn") && (
-        <TableCell className="text-nowrap text-center">{safeDateTime(log.timeIn)}</TableCell>
+        <TableCell className="text-nowrap text-center text-xs">{safeDateTime(log.timeIn)}</TableCell>
       )}
       {columnVisibility.includes("dateTimeOut") && (
-        <TableCell className="text-nowrap text-center">{safeDateTime(log.timeOut)}</TableCell>
+        <TableCell className="text-nowrap text-center text-xs">{safeDateTime(log.timeOut)}</TableCell>
       )}
-      {columnVisibility.includes("duration") && <TableCell className="text-nowrap text-center">{log.duration}</TableCell>}
-      {columnVisibility.includes("coffee") && <TableCell className="text-nowrap text-center">{log.coffeeMins}</TableCell>}
-      {columnVisibility.includes("lunch") && <TableCell className="text-nowrap text-center">{log.lunchMins}</TableCell>}
-      {columnVisibility.includes("ot") && <TableCell className="text-nowrap text-center">{log.otHours}</TableCell>}
+      {columnVisibility.includes("duration") && <TableCell className="text-nowrap text-center text-xs">{log.duration}</TableCell>}
+      {columnVisibility.includes("coffee") && <TableCell className="text-nowrap text-center text-xs">{log.coffeeMins}</TableCell>}
+      {columnVisibility.includes("lunch") && <TableCell className="text-nowrap text-center text-xs">{log.lunchMins}</TableCell>}
+      {columnVisibility.includes("ot") && <TableCell className="text-nowrap text-center text-xs">{log.otHours}</TableCell>}
       {columnVisibility.includes("otStatus") && (
         <TableCell className="text-nowrap text-center text-xs">
           {log.otStatus === "No Approval" ? (
@@ -960,7 +960,7 @@ function TimelogRow({ log, columnVisibility, onSchedule, onRequestOT, onDelete, 
           )}
         </TableCell>
       )}
-      {columnVisibility.includes("late") && <TableCell className="text-nowrap text-center">{log.lateHours}</TableCell>}
+      {columnVisibility.includes("late") && <TableCell className="text-nowrap text-center text-xs">{log.lateHours}</TableCell>}
       {columnVisibility.includes("deviceIn") && (
         <TableCell className="text-center text-xs">
           {log.fullDevIn
@@ -978,17 +978,17 @@ function TimelogRow({ log, columnVisibility, onSchedule, onRequestOT, onDelete, 
         </TableCell>
       )}
       {columnVisibility.includes("locationIn") && (
-        <TableCell className="text-center">
+        <TableCell className="text-center text-xs">
           {locIn.lat != null ? (
-            <Button className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 leading-tight">
+            <Button className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 leading-tight text-xs">
               <a
                 href={`https://www.google.com/maps?q=${locIn.lat},${locIn.lng}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs flex flex-col items-center"
               >
-                <span>{locIn.lat.toFixed(5)}</span>
-                <span>{locIn.lng.toFixed(5)}</span>
+                <span className="text-xs">{locIn.lat.toFixed(5)}</span>
+                <span className="text-xs">{locIn.lng.toFixed(5)}</span>
               </a>
             </Button>
           ) : (
@@ -997,7 +997,7 @@ function TimelogRow({ log, columnVisibility, onSchedule, onRequestOT, onDelete, 
         </TableCell>
       )}
       {columnVisibility.includes("locationOut") && (
-        <TableCell className="text-center">
+        <TableCell className="text-center text-xs">
           {locOut.lat != null ? (
             <Button className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 leading-tight">
               <a
@@ -1006,8 +1006,8 @@ function TimelogRow({ log, columnVisibility, onSchedule, onRequestOT, onDelete, 
                 rel="noopener noreferrer"
                 className="text-xs flex flex-col items-center"
               >
-                <span>{locOut.lat.toFixed(5)}</span>
-                <span>{locOut.lng.toFixed(5)}</span>
+                <span className="text-xs">{locOut.lat.toFixed(5)}</span>
+                <span className="text-xs">{locOut.lng.toFixed(5)}</span>
               </a>
             </Button>
           ) : (
@@ -1015,11 +1015,13 @@ function TimelogRow({ log, columnVisibility, onSchedule, onRequestOT, onDelete, 
           )}
         </TableCell>
       )}
-      {columnVisibility.includes("period") && <TableCell className="text-nowrap text-center">{log.periodHours}</TableCell>}
-      {columnVisibility.includes("status") && (
-        <TableCell className="text-nowrap text-center">{log.status ? "Active" : "Completed"}</TableCell>
+      {columnVisibility.includes("period") && (
+        <TableCell className="text-nowrap text-center text-xs">{log.periodHours}</TableCell>
       )}
-      <TableCell className="text-center">{!log.status && <DeleteBtn onClick={() => onDelete(log)} />}</TableCell>
+      {columnVisibility.includes("status") && (
+        <TableCell className="text-nowrap text-center text-xs">{log.status ? "Active" : "Completed"}</TableCell>
+      )}
+      <TableCell className="text-center text-xs">{!log.status && <DeleteBtn onClick={() => onDelete(log)} />}</TableCell>
     </motion.tr>
   );
 }

@@ -562,37 +562,37 @@ export default function EmployeesOvertimeRequests() {
                           <TableCell className="text-center text-nowrap text-xs">{r.id}</TableCell>
                         )}
                         {columnVisibility.includes("requester") && (
-                          <TableCell className="text-center text-nowrap">
+                          <TableCell className="text-center text-nowrap text-xs">
                             {r.requester?.email || r.requester?.username || "—"}
                           </TableCell>
                         )}
                         {columnVisibility.includes("timeLogId") && (
-                          <TableCell className="text-center text-nowrap">{r.timeLogId || "—"}</TableCell>
+                          <TableCell className="text-center text-nowrap text-xs">{r.timeLogId || "—"}</TableCell>
                         )}
                         {columnVisibility.includes("otHours") && (
-                          <TableCell className="text-center text-nowrap">{otVal(r)}</TableCell>
+                          <TableCell className="text-center text-nowrap text-xs">{otVal(r)}</TableCell>
                         )}
                         {columnVisibility.includes("lateHours") && (
-                          <TableCell className="text-center text-nowrap">{lateVal(r)}</TableCell>
+                          <TableCell className="text-center text-nowrap text-xs">{lateVal(r)}</TableCell>
                         )}
                         {columnVisibility.includes("reason") && (
-                          <TableCell className="max-w-xs truncate">
-                            {r.requesterReason || <span className="italic text-muted-foreground">—</span>}
+                          <TableCell className="max-w-xs truncate text-xs">
+                            {r.requesterReason || <span className="italic text-muted-foreground text-xs">—</span>}
                           </TableCell>
                         )}
                         {columnVisibility.includes("status") && (
-                          <TableCell className="text-center text-nowrap">
+                          <TableCell className="text-center text-nowrap text-xs">
                             <StatusBadge status={r.status} />
                           </TableCell>
                         )}
                         {columnVisibility.includes("createdAt") && (
-                          <TableCell className="text-center text-nowrap">{fmtMMDDYYYY_hhmma(r.createdAt)}</TableCell>
+                          <TableCell className="text-center text-nowrap text-xs">{fmtMMDDYYYY_hhmma(r.createdAt)}</TableCell>
                         )}
                         {columnVisibility.includes("updatedAt") && (
-                          <TableCell className="text-center text-nowrap">{fmtMMDDYYYY_hhmma(r.updatedAt)}</TableCell>
+                          <TableCell className="text-center text-nowrap text-xs">{fmtMMDDYYYY_hhmma(r.updatedAt)}</TableCell>
                         )}
 
-                        <TableCell className="text-center whitespace-nowrap">
+                        <TableCell className="text-center whitespace-nowrap text-xs">
                           <div className="flex justify-center gap-1">
                             <TooltipProvider delayDuration={300}>
                               <Tooltip>
@@ -600,7 +600,7 @@ export default function EmployeesOvertimeRequests() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8 text-sky-700 hover:bg-sky-500/10 dark:text-sky-400 dark:hover:bg-sky-500/20"
+                                    className="h-8 w-8 text-sky-700 hover:bg-sky-500/10 dark:text-sky-400 dark:hover:bg-sky-500/20 text-xs"
                                     onClick={() => {
                                       setLogData(r.timeLog);
                                       setLogOpen(true);
@@ -619,7 +619,7 @@ export default function EmployeesOvertimeRequests() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8 text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                                    className="h-8 w-8 text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20 text-xs"
                                     onClick={() => {
                                       setSelected(r);
                                       setDetailsOpen(true);
@@ -640,7 +640,7 @@ export default function EmployeesOvertimeRequests() {
                                       <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="h-8 w-8 text-green-700 hover:bg-green-500/10 dark:text-green-400 dark:hover:bg-green-500/20"
+                                        className="h-8 w-8 text-green-700 hover:bg-green-500/10 dark:text-green-400 dark:hover:bg-green-500/20 text-xs"
                                         onClick={() => openDialog("approve", r)}
                                       >
                                         <CheckCircle2 className="h-4 w-4" />
@@ -656,7 +656,7 @@ export default function EmployeesOvertimeRequests() {
                                       <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="h-8 w-8 text-red-700 hover:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
+                                        className="h-8 w-8 text-red-700 hover:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 text-xs"
                                         onClick={() => openDialog("reject", r)}
                                       >
                                         <XCircle className="h-4 w-4" />
@@ -690,12 +690,12 @@ export default function EmployeesOvertimeRequests() {
                   </AnimatePresence>
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={columnVisibility.length + 1} className="h-28 text-center">
+                    <TableCell colSpan={columnVisibility.length + 1} className="h-28 text-center text-xs">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
-                        <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 text-xs italic">
                           <Calendar className="h-8 w-8 text-orange-500/50" />
                         </div>
-                        <p>No overtime requests found.</p>
+                        <p className="italic text-xs">No overtime requests found.</p>
                       </div>
                     </TableCell>
                   </TableRow>

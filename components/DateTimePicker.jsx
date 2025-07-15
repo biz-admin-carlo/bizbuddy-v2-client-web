@@ -27,7 +27,7 @@ export function DateTimePicker({ value, onChange, placeholder }) {
       newDate.setHours(0, 0);
     }
     setDate(newDate);
-    onChange(newDate.toISOString().slice(0, 16));
+    onChange(newDate.toISOString());
   };
 
   const setHour = (hour) => {
@@ -42,7 +42,7 @@ export function DateTimePicker({ value, onChange, placeholder }) {
     const isPM = newDate.getHours() >= 12;
     newDate.setHours((isPM ? 12 : 0) + (hour % 12));
     setDate(newDate);
-    onChange(newDate.toISOString().slice(0, 16));
+    onChange(newDate.toISOString());
   };
 
   const setMinute = (minute) => {
@@ -56,7 +56,7 @@ export function DateTimePicker({ value, onChange, placeholder }) {
     const newDate = new Date(date);
     newDate.setMinutes(minute);
     setDate(newDate);
-    onChange(newDate.toISOString().slice(0, 16));
+    onChange(newDate.toISOString());
   };
 
   const setAmPm = (ampm) => {
@@ -67,7 +67,7 @@ export function DateTimePicker({ value, onChange, placeholder }) {
     if (ampm === "PM" && hours < 12) hours += 12;
     newDate.setHours(hours);
     setDate(newDate);
-    onChange(newDate.toISOString().slice(0, 16));
+    onChange(newDate.toISOString());
   };
 
   return (

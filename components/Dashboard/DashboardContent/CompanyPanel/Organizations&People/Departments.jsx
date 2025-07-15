@@ -68,6 +68,8 @@ export default function Departments() {
       return { ...prev, [key]: list };
     });
 
+  const clearAllFilters = () => setFilters({ deptIds: ["all"], supervisorIds: ["all"] });
+
   const columnOptions = [
     { value: "id", label: "Department ID" },
     { value: "name", label: "Department Name" },
@@ -147,12 +149,10 @@ export default function Departments() {
       totalUsers: userCounts[d.id] ?? 0,
       supervisorName: d.supervisor ? `${d.supervisor.profile.firstName || ""} ${d.supervisor.profile.lastName || ""}`.trim() : "",
     }));
-
     let filtered = [...withCounts];
     if (!filters.deptIds.includes("all")) filtered = filtered.filter((d) => filters.deptIds.includes(d.id));
     if (!filters.supervisorIds.includes("all"))
       filtered = filtered.filter((d) => d.supervisor && filters.supervisorIds.includes(d.supervisor.id));
-
     filtered.sort((a, b) => (a.id < b.id ? (sortConfig.direction === "ascending" ? -1 : 1) : 1));
     return filtered;
   }, [departments, userCounts, filters, sortConfig]);
@@ -243,6 +243,7 @@ export default function Departments() {
     toast.message("PDF exported");
     setPdfExporting(false);
   };
+
   const openUsersModal = (dept) => {
     setUsersDeptName(dept.name);
     setSupervisorUser(dept.supervisor || null);
@@ -252,6 +253,7 @@ export default function Departments() {
     setDeptMembers(members);
     setShowUsersModal(true);
   };
+
   const handleCreateDepartment = async () => {
     setLoading(true);
     try {
@@ -363,7 +365,6 @@ export default function Departments() {
             onClick={exportPDF}
             disabled={pdfExporting || !processedDepartments.length}
           />
-
           <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
             <DialogTrigger asChild>
               <Badge className="bg-orange-500 hover:bg-orange-600 text-white cursor-pointer ml-auto">
@@ -432,7 +433,6 @@ export default function Departments() {
           </Dialog>
         </div>
       </div>
-
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2 relative">
@@ -450,7 +450,6 @@ export default function Departments() {
               <span className={labelClass}>Column:</span>
               <ColumnSelector options={columnOptions} visible={columnVisibility} setVisible={setColumnVisibility} />
             </div>
-
             <div className="flex flex-wrap gap-3 items-center">
               <span className={labelClass}>Filter:</span>
               <MultiSelect
@@ -506,7 +505,6 @@ export default function Departments() {
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
-
               <TableBody>
                 {loading ? (
                   [...Array(5)].map((_, i) => (
@@ -534,14 +532,16 @@ export default function Departments() {
                       >
                         {columnVisibility.includes("id") && <TableCell className="text-xs">{dept.id}</TableCell>}
                         {columnVisibility.includes("name") && (
-                          <TableCell className="text-nowrap capitalize">{dept.name}</TableCell>
+                          <TableCell className="text-nowrap capitalize text-xs">{dept.name}</TableCell>
                         )}
                         {columnVisibility.includes("supervisor") && (
-                          <TableCell className="text-nowrap">{dept.supervisorName || "No supervisor assigned"}</TableCell>
+                          <TableCell className="text-nowrap text-xs">
+                            {dept.supervisorName || <span className="text-xs italic text-nowrap">No Supervisor Assigned</span>}
+                          </TableCell>
                         )}
                         {columnVisibility.includes("userCount") && (
                           <TableCell>
-                            <Button variant="ghost" size="sm" onClick={() => openUsersModal(dept)}>
+                            <Button variant="ghost" size="xs" onClick={() => openUsersModal(dept)}>
                               <Badge className="bg-orange-500 hover:bg-orange-600 text-white">
                                 <Users className="h-3 w-3 mr-1" />
                                 {dept.totalUsers}
@@ -550,10 +550,10 @@ export default function Departments() {
                           </TableCell>
                         )}
                         {columnVisibility.includes("createdAt") && (
-                          <TableCell className="text-nowrap">{fmtMMDDYYYY_hhmma(dept.createdAt)}</TableCell>
+                          <TableCell className="text-nowrap text-xs">{fmtMMDDYYYY_hhmma(dept.createdAt)}</TableCell>
                         )}
                         {columnVisibility.includes("updatedAt") && (
-                          <TableCell className="text-nowrap">{fmtMMDDYYYY_hhmma(dept.updatedAt)}</TableCell>
+                          <TableCell className="text-nowrap text-xs">{fmtMMDDYYYY_hhmma(dept.updatedAt)}</TableCell>
                         )}
                         <TableCell>
                           <div className="flex gap-1 justify-center">
@@ -614,7 +614,6 @@ export default function Departments() {
           </div>
         </CardContent>
       </Card>
-
       <Dialog open={showUsersModal} onOpenChange={setShowUsersModal}>
         <DialogContent className="max-w-lg border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -661,7 +660,6 @@ export default function Departments() {
           )}
         </DialogContent>
       </Dialog>
-
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
         <DialogContent className="border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />

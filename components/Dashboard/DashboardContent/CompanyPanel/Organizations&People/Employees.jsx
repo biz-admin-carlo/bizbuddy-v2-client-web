@@ -75,14 +75,6 @@ const fmt = (d) =>
         minute: "2-digit",
       })
     : "—";
-const fmtShort = (d) =>
-  d
-    ? new Date(d).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })
-    : "—";
 
 const CSV_TEMPLATE = `firstName,lastName,email,password,role,departmentId,employeeId,hireDate,jobTitle,employmentStatus,exemptStatus,employmentType,workLocation,probationEndDate,timeZone
 John,Doe,john.doe@example.com,Pa55word!,employee,,EMP001,2025-06-19,Engineer,full_time,exempt,employee_W2,onsite,2025-12-19,America/Los_Angeles
@@ -219,18 +211,12 @@ export default function Employees() {
     setRefreshing(false);
   };
 
-  const RoleBadge = ({ role }) => {
-    switch ((role || "").toLowerCase()) {
-      case "superadmin":
-        return <Badge className="bg-red-500 hover:bg-red-600 text-neutral-800">Superadmin</Badge>;
-      case "admin":
-        return <Badge className="bg-orange-500 hover:bg-orange-600 text-neutral-800">Admin</Badge>;
-      case "supervisor":
-        return <Badge className="bg-yellow-500 hover:bg-yellow-600 text-neutral-800">Supervisor</Badge>;
-      default:
-        return <Badge className="bg-teal-500 hover:bg-teal-600 text-neutral-800">Employee</Badge>;
-    }
-  };
+  const RoleBadge = ({ role }) =>
+    ({
+      superadmin: <Badge className="bg-red-500 hover:bg-red-600 text-neutral-800">Superadmin</Badge>,
+      admin: <Badge className="bg-orange-500 hover:bg-orange-600 text-neutral-800">Admin</Badge>,
+      supervisor: <Badge className="bg-yellow-500 hover:bg-yellow-600 text-neutral-800">Supervisor</Badge>,
+    }[role?.toLowerCase()] || <Badge className="bg-teal-500 hover:bg-teal-600 text-neutral-800">Employee</Badge>);
 
   const saveEmploymentDetail = async (userId, form) => {
     const p = buildEmploymentPayload(form);
@@ -253,7 +239,10 @@ export default function Employees() {
   }));
   const emailOpts = employees.map((e) => ({ value: e.email.toLowerCase(), label: e.email }));
   const deptOpts = [{ value: "none", label: "No Department" }, ...departments.map((d) => ({ value: d.id, label: d.name }))];
-  const roleOpts = ["employee", "supervisor", "admin"].map((r) => ({ value: r, label: r.charAt(0).toUpperCase() + r.slice(1) }));
+  const roleOpts = ["employee", "supervisor", "admin"].map((r) => ({
+    value: r,
+    label: r.charAt(0).toUpperCase() + r.slice(1),
+  }));
 
   const changeFilter = (k, v) =>
     setFilters((p) => {
@@ -269,6 +258,14 @@ export default function Employees() {
     });
   const clearFilters = () =>
     setFilters({ ids: ["all"], employeeIds: ["all"], names: ["all"], emails: ["all"], departments: ["all"], roles: ["all"] });
+
+  const anyFilterActive =
+    !filters.ids.includes("all") ||
+    !filters.employeeIds.includes("all") ||
+    !filters.names.includes("all") ||
+    !filters.emails.includes("all") ||
+    !filters.departments.includes("all") ||
+    !filters.roles.includes("all");
 
   const list = useMemo(() => {
     const filtered = employees.filter((e) => {
@@ -762,6 +759,16 @@ export default function Employees() {
                 icon={UserCog}
                 width={150}
               />
+              {anyFilterActive && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearFilters}
+                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                >
+                  Clear Filters
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
@@ -806,7 +813,7 @@ export default function Employees() {
                     <TableRow key={i}>
                       {visibleCols.map((c) => (
                         <TableCell key={c}>
-                          <Skeleton className="h-6 w-full bg-neutral-200" />
+                          <Skeleton className="h-6 w-full " />
                         </TableCell>
                       ))}
                     </TableRow>
@@ -826,28 +833,28 @@ export default function Employees() {
                           className="border-b hover:bg-muted/50"
                         >
                           {visibleCols.includes("id") && (
-                            <TableCell className="text-center text-sm text-nowrap">{e.id}</TableCell>
+                            <TableCell className="text-center text-xs text-nowrap">{e.id}</TableCell>
                           )}
                           {visibleCols.includes("employeeId") && (
-                            <TableCell className="text-center text-sm text-nowrap">{e.employeeId || "—"}</TableCell>
+                            <TableCell className="text-center text-xs text-nowrap">{e.employeeId || "—"}</TableCell>
                           )}
                           {visibleCols.includes("name") && (
-                            <TableCell className="text-center capitalize text-sm text-nowrap">{name}</TableCell>
+                            <TableCell className="text-center capitalize text-xs text-nowrap">{name}</TableCell>
                           )}
                           {visibleCols.includes("email") && (
-                            <TableCell className="text-center text-sm text-nowrap ">{e.email}</TableCell>
+                            <TableCell className="text-center text-xs text-nowrap ">{e.email}</TableCell>
                           )}
                           {visibleCols.includes("role") && (
-                            <TableCell className="text-center">
+                            <TableCell className="text-center text-nowrap text-xs">
                               <RoleBadge role={e.role} />
                             </TableCell>
                           )}
                           {visibleCols.includes("department") && (
-                            <TableCell className="text-center capitalize">
+                            <TableCell className="text-center capitalize text-xs text-nowrap ">
                               {e.department ? (
-                                <Badge variant="outline">{e.department.name}</Badge>
+                                e.department.name
                               ) : (
-                                <span className="text-muted-foreground">—</span>
+                                <span className="text-muted-foreground  italic">No Department Assigned</span>
                               )}
                             </TableCell>
                           )}
@@ -932,12 +939,7 @@ export default function Employees() {
                           <Users className="h-8 w-8 text-orange-500/50" />
                         </div>
                         <p className="text-sm">No employees match your filters.</p>
-                        {(filters.ids.length > 1 ||
-                          filters.employeeIds.length > 1 ||
-                          filters.names.length > 1 ||
-                          filters.emails.length > 1 ||
-                          filters.departments.length > 1 ||
-                          filters.roles.length > 1) && (
+                        {anyFilterActive && (
                           <Button variant="link" onClick={clearFilters} className="text-orange-600 hover:text-orange-700 mt-2">
                             Clear all filters
                           </Button>
@@ -965,6 +967,7 @@ export default function Employees() {
             <DialogDescription>Add a new employee</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
+            {/* First name and last name */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">First Name</label>
@@ -978,6 +981,7 @@ export default function Employees() {
                 <Input value={createForm.lastName} onChange={(e) => setCreateForm({ ...createForm, lastName: e.target.value })} />
               </div>
             </div>
+            {/* Email */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Email</label>
               <Input
@@ -986,6 +990,7 @@ export default function Employees() {
                 onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
               />
             </div>
+            {/* Password */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Password</label>
               <Input
@@ -994,6 +999,7 @@ export default function Employees() {
                 onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
               />
             </div>
+            {/* Employee ID */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Company Employee ID</label>
               <Input
@@ -1001,6 +1007,7 @@ export default function Employees() {
                 onChange={(e) => setCreateForm({ ...createForm, employeeId: e.target.value })}
               />
             </div>
+            {/* Hire date */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Hire Date</label>
               <Input
@@ -1009,6 +1016,7 @@ export default function Employees() {
                 onChange={(e) => setCreateForm({ ...createForm, hireDate: e.target.value })}
               />
             </div>
+            {/* Role & Department */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-sm font-medium">Role</label>
@@ -1040,10 +1048,12 @@ export default function Employees() {
                 </Select>
               </div>
             </div>
+            {/* Job Title */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Job Title</label>
               <Input value={createForm.jobTitle} onChange={(e) => setCreateForm({ ...createForm, jobTitle: e.target.value })} />
             </div>
+            {/* Employment Status & Exempt */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-sm font-medium">Employment Status</label>
@@ -1075,6 +1085,7 @@ export default function Employees() {
                 </Select>
               </div>
             </div>
+            {/* Employment Type & Work Location */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-sm font-medium">Employment Type</label>
@@ -1107,6 +1118,7 @@ export default function Employees() {
                 </Select>
               </div>
             </div>
+            {/* Probation End Date */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Probation End Date</label>
               <Input
@@ -1115,6 +1127,7 @@ export default function Employees() {
                 onChange={(e) => setCreateForm({ ...createForm, probationEndDate: e.target.value })}
               />
             </div>
+            {/* Time Zone */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Time Zone</label>
               <Input
@@ -1148,6 +1161,7 @@ export default function Employees() {
             <DialogDescription>Update employee information</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
+            {/* First & Last name */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">First Name</label>
@@ -1158,10 +1172,12 @@ export default function Employees() {
                 <Input value={editForm.lastName} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} />
               </div>
             </div>
+            {/* Email */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Email</label>
               <Input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
             </div>
+            {/* Password */}
             <div className="space-y-2">
               <label className="text-sm font-medium">New Password</label>
               <Input
@@ -1171,10 +1187,12 @@ export default function Employees() {
                 placeholder="Leave blank to keep existing"
               />
             </div>
+            {/* Employee ID */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Company Employee ID</label>
               <Input value={editForm.employeeId} onChange={(e) => setEditForm({ ...editForm, employeeId: e.target.value })} />
             </div>
+            {/* Hire date */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Hire Date</label>
               <Input
@@ -1183,6 +1201,7 @@ export default function Employees() {
                 onChange={(e) => setEditForm({ ...editForm, hireDate: e.target.value })}
               />
             </div>
+            {/* Role & Department */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-sm font-medium">Role</label>
@@ -1214,10 +1233,12 @@ export default function Employees() {
                 </Select>
               </div>
             </div>
+            {/* Job Title */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Job Title</label>
               <Input value={editForm.jobTitle} onChange={(e) => setEditForm({ ...editForm, jobTitle: e.target.value })} />
             </div>
+            {/* Employment Status & Exempt */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-sm font-medium">Employment Status</label>
@@ -1249,6 +1270,7 @@ export default function Employees() {
                 </Select>
               </div>
             </div>
+            {/* Employment Type & Work Location */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-sm font-medium">Employment Type</label>
@@ -1278,6 +1300,7 @@ export default function Employees() {
                 </Select>
               </div>
             </div>
+            {/* Probation End Date */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Probation End Date</label>
               <Input
@@ -1286,6 +1309,7 @@ export default function Employees() {
                 onChange={(e) => setEditForm({ ...editForm, probationEndDate: e.target.value })}
               />
             </div>
+            {/* Time Zone */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Time Zone</label>
               <Input
