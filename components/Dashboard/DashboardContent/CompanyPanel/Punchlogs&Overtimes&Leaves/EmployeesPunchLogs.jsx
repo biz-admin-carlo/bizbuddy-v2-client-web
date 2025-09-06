@@ -252,7 +252,29 @@ export default function EmployeesPunchLogs() {
           const firstSched = matchedTemplates[0];
           let shiftEndLocalStr = "—";
           let shiftName = "—";
-          const grossMins = t.timeIn && t.timeOut ? diffMins(t.timeIn, t.timeOut) : 0;
+          let shiftStart, shiftEnd;
+          if (isScheduled && firstSched?.shift?.startTime && firstSched?.shift?.endTime) {
+            const base = t.timeIn ? new Date(t.timeIn) : new Date(`${dateKey}T00:00:00`);
+            const ssUTC = new Date(firstSched.shift.startTime);
+            const seUTC = new Date(firstSched.shift.endTime);
+            shiftStart = new Date(base);
+            shiftStart.setHours(ssUTC.getUTCHours(), ssUTC.getUTCMinutes(), 0, 0);
+            shiftEnd = new Date(base);
+            shiftEnd.setHours(seUTC.getUTCHours(), seUTC.getUTCMinutes(), 0, 0);
+            if (shiftEnd <= shiftStart) shiftEnd.setDate(shiftEnd.getDate() + 1);
+            shiftEndLocalStr = safeDateTime(shiftEnd);
+            shiftName = firstSched.shift.shiftName || "—";
+          }
+          const latestOt = otMap[t.id] ?? null;
+          let adjTimeOut = t.timeOut;
+          if (isScheduled && t.timeOut && shiftEnd) {
+            const actualOut = new Date(t.timeOut);
+            if (actualOut > shiftEnd) {
+              const approved = latestOt && latestOt.status === "approved";
+              if (!approved) adjTimeOut = shiftEnd.toISOString();
+            }
+          }
+          const grossMins = t.timeIn && adjTimeOut ? diffMins(t.timeIn, adjTimeOut) : 0;
           const lunchDeduct = minLunchMins ? Math.max(lunchMinsNum, minLunchMins) : lunchMinsNum;
           const netMins = grossMins - lunchDeduct - excessCoffeeMins;
           let workInside,
@@ -260,27 +282,16 @@ export default function EmployeesPunchLogs() {
             lateMins = 0;
           const defaultShiftMins = defaultHours * 60;
           const effectiveCapUnscheduled = Math.max(0, defaultShiftMins - minLunchMins);
-          if (isScheduled && firstSched?.shift?.startTime && firstSched?.shift?.endTime) {
-            const base = t.timeIn ? new Date(t.timeIn) : new Date(`${dateKey}T00:00:00`);
-            const ssUTC = new Date(firstSched.shift.startTime);
-            const seUTC = new Date(firstSched.shift.endTime);
-            const shiftStart = new Date(base);
-            shiftStart.setHours(ssUTC.getUTCHours(), ssUTC.getUTCMinutes(), 0, 0);
-            const shiftEnd = new Date(base);
-            shiftEnd.setHours(seUTC.getUTCHours(), seUTC.getUTCMinutes(), 0, 0);
-            if (shiftEnd <= shiftStart) shiftEnd.setDate(shiftEnd.getDate() + 1);
-            shiftEndLocalStr = safeDateTime(shiftEnd);
-            shiftName = firstSched.shift.shiftName || "—";
-            const schedDur = diffMins(shiftStart.toISOString(), shiftEnd.toISOString());
+          if (isScheduled && shiftStart && shiftEnd) {
             lateMins = t.timeIn && new Date(t.timeIn) > shiftStart ? diffMins(shiftStart.toISOString(), t.timeIn) : 0;
+            const schedDur = diffMins(shiftStart.toISOString(), shiftEnd.toISOString());
             const insideRaw = Math.max(0, schedDur - lateMins - lunchDeduct - excessCoffeeMins);
             workInside = Math.min(insideRaw, netMins);
-            rawOtMins = t.timeOut && new Date(t.timeOut) > shiftEnd ? diffMins(shiftEnd.toISOString(), t.timeOut) : 0;
+            rawOtMins = adjTimeOut && new Date(adjTimeOut) > shiftEnd ? diffMins(shiftEnd.toISOString(), adjTimeOut) : 0;
           } else {
             workInside = Math.min(netMins, effectiveCapUnscheduled);
             rawOtMins = Math.max(0, netMins - effectiveCapUnscheduled);
           }
-          const latestOt = otMap[t.id] ?? null;
           const approvedMins =
             latestOt && latestOt.status === "approved" && latestOt.requestedHours ? Number(latestOt.requestedHours) * 60 : 0;
           const usedOtMins = approvedMins > 0 ? Math.min(approvedMins, rawOtMins) : rawOtMins;
@@ -292,6 +303,7 @@ export default function EmployeesPunchLogs() {
           const isLocRestricted = locList.length > 0;
           return {
             ...t,
+            timeOut: adjTimeOut,
             employeeName: t.email,
             isScheduled,
             scheduleList: matchedTemplates,
@@ -518,9 +530,34 @@ export default function EmployeesPunchLogs() {
     }
     doc.text(`Total Hours : ${totalPeriodHours}`, 14, y);
     y += 8;
-    autoTable(doc, { head: [header], body, startY: y, styles: { fontSize: 7 }, headStyles: { fillColor: [255, 165, 0] } });
+    const summaryHeader = ["Employee ID", "Employee Email", "Total Period Hours"];
+    const summaryMap = {};
+    rows.forEach((r) => {
+      const uid = r.userId;
+      const email = r.employeeName;
+      const hrs = parseFloat(r.periodHours || "0") || 0;
+      if (!summaryMap[uid]) summaryMap[uid] = { id: uid, email, total: 0 };
+      summaryMap[uid].total += hrs;
+    });
+    const summaryBody = Object.values(summaryMap).map((s) => [s.id, s.email, s.total.toFixed(2)]);
+    autoTable(doc, {
+      head: [summaryHeader],
+      body: summaryBody,
+      startY: y,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [255, 165, 0] },
+    });
+    const afterSummaryY = doc.lastAutoTable?.finalY || y;
+    const mainStartY = afterSummaryY + 8;
+    autoTable(doc, {
+      head: [header],
+      body,
+      startY: mainStartY,
+      styles: { fontSize: 7 },
+      headStyles: { fillColor: [255, 165, 0] },
+    });
     const approverLine = `Approver : ${currentUserName || "—"} (${currentUserEmail || "—"})`;
-    const finalY = doc.lastAutoTable?.finalY || y;
+    const finalY = doc.lastAutoTable?.finalY || mainStartY;
     doc.text(approverLine, 14, finalY + 10);
     const stamp = new Date().toISOString().slice(0, 10);
     doc.save(`${companyName || "Punch Logs"}_${stamp}.pdf`);
@@ -1017,7 +1054,7 @@ export default function EmployeesPunchLogs() {
                   <TableRow>
                     <TableCell colSpan={columnVisibility.length} className="h-28 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
-                        <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <div className="w-16 h-16 bg-black/5 dark:bg.white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                           <Clock className="h-8 w-8 text-orange-500/50" />
                         </div>
                         <p>No timelogs match the selected filters.</p>
@@ -1181,28 +1218,6 @@ export default function EmployeesPunchLogs() {
               Edit Time In / Time Out
             </DialogTitle>
           </DialogHeader>
-          {editLog ? (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Time In</label>
-                <Input type="datetime-local" value={editTimeIn} lang="en-US" onChange={(e) => setEditTimeIn(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Time Out</label>
-                <Input type="datetime-local" value={editTimeOut} lang="en-US" onChange={(e) => setEditTimeOut(e.target.value)} />
-              </div>
-            </div>
-          ) : (
-            <p className="text-center text-muted-foreground py-4">No data</p>
-          )}
-          <DialogFooter className="pt-4">
-            <Button onClick={submitEdit} disabled={!editLog}>
-              Save
-            </Button>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
-              Cancel
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
