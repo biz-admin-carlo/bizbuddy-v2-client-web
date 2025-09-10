@@ -14,8 +14,19 @@ import {
   MapPin,
   ChevronsLeft,
   ChevronsRight,
+  ChevronLeft,
+  ChevronRight,
   Pencil,
   Edit3,
+  Eye,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Timer,
+  Coffee,
+  Users,
+  Building,
+  MapPinIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
@@ -30,12 +41,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import IconBtn from "@/components/common/IconBtn";
 import MultiSelect from "@/components/common/MultiSelect";
 import ColumnSelector from "@/components/common/ColumnSelector";
 import TableSkeleton from "@/components/common/TableSkeleton";
 
-const MAX_DEV_CHARS = 9;
+const MAX_DEV_CHARS = 12;
 const truncate = (s = "", L = MAX_DEV_CHARS) => (s.length > L ? s.slice(0, L) + "…" : s);
 const safeDate = (d) =>
   d
@@ -82,6 +95,211 @@ const toLocalInputValue = (iso) => {
   return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}` + `T${z(d.getHours())}:${z(d.getMinutes())}`;
 };
 
+// Enhanced Status Badge with Hover Definitions
+const StatusBadge = ({ status, otStatus }) => {
+  const getStatusDefinition = (status) => {
+    switch (status) {
+      case 'active':
+        return "Active: Employee is currently clocked in and working. Time is being tracked in real-time.";
+      case 'completed':
+        return "Completed: Employee has clocked out. This shift is finished and ready for processing.";
+      default:
+        return "Unknown status";
+    }
+  };
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {status === "active" ? (
+            <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-700 cursor-help">
+              <Timer className="w-3 h-3 mr-1" />Active
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="bg-green-50 border-green-200 text-green-700 cursor-help">
+              <CheckCircle className="w-3 h-3 mr-1" />Complete
+            </Badge>
+          )}
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          <div className="text-sm">{getStatusDefinition(status)}</div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
+
+// Enhanced Overtime Badge with Detailed Definitions
+const OvertimeBadge = ({ otStatus, overtimeRec, onClick }) => {
+  const getOvertimeDefinition = (status) => {
+    switch (status) {
+      case "approved":
+        return "Approved: Overtime request has been approved by supervisor. Extra hours will be paid at overtime rate.";
+      case "pending":
+        return "Pending: Overtime request is awaiting supervisor approval. Employee worked extra hours but payment is not yet confirmed.";
+      case "rejected":
+        return "Rejected: Overtime request was denied. Extra hours worked beyond scheduled time will not be paid at overtime rate.";
+      case "No Approval":
+        return "No Approval: Employee worked beyond scheduled hours but did not submit an overtime request. These hours may not be compensated.";
+      default:
+        return "No overtime recorded for this shift.";
+    }
+  };
+
+  const getVariant = () => {
+    switch (otStatus) {
+      case "approved": return "default";
+      case "pending": return "secondary";
+      case "rejected": return "destructive";
+      default: return "outline";
+    }
+  };
+  
+  const getIcon = () => {
+    switch (otStatus) {
+      case "approved": return <CheckCircle className="w-3 h-3 mr-1" />;
+      case "pending": return <AlertCircle className="w-3 h-3 mr-1" />;
+      case "rejected": return <XCircle className="w-3 h-3 mr-1" />;
+      default: return <Timer className="w-3 h-3 mr-1" />;
+    }
+  };
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge 
+            variant={getVariant()} 
+            className="cursor-pointer hover:opacity-80 capitalize text-xs"
+            onClick={onClick}
+          >
+            {getIcon()}
+            {otStatus}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          <div className="text-sm">{getOvertimeDefinition(otStatus)}</div>
+          {overtimeRec && (
+            <div className="text-xs text-muted-foreground mt-1 pt-1 border-t">
+              Click to view detailed overtime request information
+            </div>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
+
+// Enhanced Schedule Badge with Definitions
+const ScheduleBadge = ({ isScheduled, onClick }) => {
+  const getScheduleDefinition = (scheduled) => {
+    if (scheduled) {
+      return "Scheduled: Employee has a predefined shift schedule for this date. Work hours are tracked against expected schedule times.";
+    }
+    return "Unscheduled: No predefined shift schedule for this date. Work hours are tracked using default company settings.";
+  };
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge 
+            variant={isScheduled ? "default" : "secondary"} 
+            className="cursor-pointer hover:opacity-80 text-xs"
+            onClick={onClick}
+          >
+            {isScheduled ? <CheckCircle className="w-3 h-3 mr-1" /> : <XCircle className="w-3 h-3 mr-1" />}
+            {isScheduled ? "Scheduled" : "Unscheduled"}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          <div className="text-sm">{getScheduleDefinition(isScheduled)}</div>
+          <div className="text-xs text-muted-foreground mt-1 pt-1 border-t">
+            Click to view detailed schedule information
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
+
+// Enhanced Location Badge with Definitions
+const LocationBadge = ({ isRestricted, onClick }) => {
+  const getLocationDefinition = (restricted) => {
+    if (restricted) {
+      return "Location Required: Employee must clock in/out from designated locations. GPS coordinates are verified against approved work sites.";
+    }
+    return "No Location Restriction: Employee can clock in/out from any location. GPS tracking is optional.";
+  };
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge 
+            variant={isRestricted ? "default" : "secondary"} 
+            className={`cursor-pointer text-xs ${!isRestricted ? 'opacity-50' : 'hover:opacity-80'}`}
+            onClick={isRestricted ? onClick : undefined}
+          >
+            <MapPinIcon className="w-3 h-3 mr-1" />
+            {isRestricted ? "Required" : "None"}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          <div className="text-sm">{getLocationDefinition(isRestricted)}</div>
+          {isRestricted && (
+            <div className="text-xs text-muted-foreground mt-1 pt-1 border-t">
+              Click to view allowed locations and GPS coordinates
+            </div>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
+
+// Enhanced Time Display with Explanations
+const TimeDisplayWithTooltip = ({ time, type, className = "" }) => {
+  const getTimeDefinition = (type) => {
+    switch (type) {
+      case 'duration':
+        return "Duration: Total time between clock in and clock out, including all breaks.";
+      case 'period':
+        return "Period Hours: Productive work time excluding lunch breaks and unauthorized overtime.";
+      case 'late':
+        return "Late Hours: Amount of time the employee was late compared to their scheduled start time.";
+      case 'coffee':
+        return "Coffee Breaks: Total time spent on coffee/short breaks during the shift.";
+      case 'lunch':
+        return "Lunch Break: Time taken for lunch break. Minimum lunch time may be automatically deducted.";
+      case 'overtime':
+        return "Overtime Hours: Additional hours worked beyond the regular shift schedule.";
+      default:
+        return "";
+    }
+  };
+
+  if (!time || time === "—" || time === "0.00") {
+    return <span className={`text-muted-foreground text-xs ${className}`}>—</span>;
+  }
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={`cursor-help border-b border-dotted border-muted-foreground ${className}`}>
+            {time} {type !== 'coffee' ? 'hrs' : ''}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          <div className="text-sm">{getTimeDefinition(type)}</div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
+
 export default function EmployeesPunchLogs() {
   const { token } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -100,7 +318,7 @@ export default function EmployeesPunchLogs() {
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
-  const perPage = 10;
+  const perPage = 15;
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRows, setTotalRows] = useState(0);
@@ -141,29 +359,36 @@ export default function EmployeesPunchLogs() {
   const [editLog, setEditLog] = useState(null);
   const [editTimeIn, setEditTimeIn] = useState("");
   const [editTimeOut, setEditTimeOut] = useState("");
+  const [expandedRow, setExpandedRow] = useState(null);
   const canEdit = ["superadmin", "admin", "supervisor"].includes((currentUserRole || "").toLowerCase());
+
+  // Improved column configuration with better defaults and grouping
   const columnOptions = [
-    { value: "id", label: "Punch logs ID" },
-    { value: "schedule", label: "Schedule" },
-    { value: "locationRestricted", label: "Location" },
-    { value: "employee", label: "Employee" },
-    { value: "dateTimeIn", label: "DateTimeIn" },
-    { value: "dateTimeOut", label: "DateTimeOut" },
-    { value: "duration", label: "Duration" },
-    { value: "coffee", label: "Coffee" },
-    { value: "lunch", label: "Lunch" },
-    { value: "ot", label: "OT" },
-    { value: "otStatus", label: "OT Status" },
-    { value: "late", label: "Late" },
-    { value: "deviceIn", label: "Device In" },
-    { value: "deviceOut", label: "Device Out" },
-    { value: "locationIn", label: "Location In" },
-    { value: "locationOut", label: "Location Out" },
-    { value: "period", label: "Period" },
-    { value: "status", label: "Status" },
-    { value: "actions", label: "Actions" },
+    { value: "employee", label: "Employee", essential: true, group: "basic" },
+    { value: "dateTimeIn", label: "Time In", essential: true, group: "basic" },
+    { value: "dateTimeOut", label: "Time Out", essential: true, group: "basic" },
+    { value: "duration", label: "Duration", essential: true, group: "basic" },
+    { value: "status", label: "Status", essential: true, group: "basic" },
+    { value: "schedule", label: "Scheduled", essential: false, group: "schedule" },
+    { value: "period", label: "Period Hours", essential: false, group: "schedule" },
+    { value: "ot", label: "Overtime", essential: false, group: "time" },
+    { value: "otStatus", label: "OT Status", essential: false, group: "time" },
+    { value: "late", label: "Late", essential: false, group: "time" },
+    { value: "coffee", label: "Coffee", essential: false, group: "breaks" },
+    { value: "lunch", label: "Lunch", essential: false, group: "breaks" },
+    { value: "locationRestricted", label: "Location Required", essential: false, group: "location" },
+    { value: "locationIn", label: "Check-in Location", essential: false, group: "location" },
+    { value: "locationOut", label: "Check-out Location", essential: false, group: "location" },
+    { value: "deviceIn", label: "Device In", essential: false, group: "device" },
+    { value: "deviceOut", label: "Device Out", essential: false, group: "device" },
+    { value: "id", label: "ID", essential: false, group: "meta" },
+    { value: "actions", label: "Actions", essential: true, group: "basic" },
   ];
-  const [columnVisibility, setColumnVisibility] = useState(columnOptions.map((c) => c.value));
+
+  // Better default column visibility - show only essential columns by default
+  const essentialColumns = columnOptions.filter(c => c.essential).map(c => c.value);
+  const [columnVisibility, setColumnVisibility] = useState(essentialColumns);
+
   const bootstrap = useCallback(async () => {
     try {
       const [cSet, prof, emps, depts, tmpl, locs] = await Promise.all([
@@ -215,6 +440,7 @@ export default function EmployeesPunchLogs() {
       toast.error("Initialization failed");
     }
   }, [API_URL, token]);
+
   const fetchTimelogs = useCallback(
     async ({ pageParam = 1, append = false } = {}) => {
       setLoading(true);
@@ -336,9 +562,11 @@ export default function EmployeesPunchLogs() {
     },
     [API_URL, token, filters, shiftTemplates, defaultHours, minLunchMins, locMap, perPage]
   );
+
   useEffect(() => {
     if (token) bootstrap();
   }, [token]);
+
   useEffect(() => {
     if (!token) return;
     setPage(1);
@@ -346,6 +574,7 @@ export default function EmployeesPunchLogs() {
     setRowsLoaded(0);
     fetchTimelogs({ pageParam: 1, append: false });
   }, [token, filters.departmentId, filters.from, filters.to, filters.status, shiftTemplates, defaultHours, minLunchMins, locMap]);
+
   const displayed = useMemo(() => {
     const getVal = (item, key) => {
       switch (key) {
@@ -378,10 +607,12 @@ export default function EmployeesPunchLogs() {
     });
     return data;
   }, [timelogs, filters, sortConfig]);
+
   const totalPeriodHours = useMemo(
     () => displayed.reduce((sum, r) => sum + (parseFloat(r.periodHours || "0") || 0), 0).toFixed(2),
     [displayed]
   );
+
   const buildCSV = (rows) => {
     const visibleCols = columnOptions.filter((c) => columnVisibility.includes(c.value) && c.value !== "actions");
     const header = visibleCols.map((c) => wrap(c.label));
@@ -430,146 +661,350 @@ export default function EmployeesPunchLogs() {
     const body = rows.map((r) => visibleCols.map((c) => wrap(cell(r, c.value))));
     return [header, ...body].map((row) => row.join(",")).join("\r\n");
   };
+
   const exportCSV = () => {
     if (!displayed.length) {
       toast.message("No rows to export");
       return;
     }
     setExporting(true);
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const blob = new Blob([buildCSV(displayed)], { type: "text/csv;charset=utf-8;" });
+    
+    // Enhanced CSV with better column selection
+    const csvCols = columnOptions.filter((c) => 
+      columnVisibility.includes(c.value) && 
+      c.value !== "actions" && 
+      c.value !== "locationIn" && 
+      c.value !== "locationOut"
+    );
+    
+    const header = csvCols.map((c) => wrap(c.label));
+    
+    const cell = (r, key) => {
+      switch (key) {
+        case "id":
+          return r.userId.toString().slice(-6); // Last 6 digits only
+        case "schedule":
+          return r.isScheduled ? "Scheduled" : "Unscheduled";
+        case "locationRestricted":
+          return r.isLocRestricted ? "Required" : "None";
+        case "employee":
+          return r.employeeName;
+        case "dateTimeIn":
+          return safeDateTime(r.timeIn);
+        case "dateTimeOut":
+          return safeDateTime(r.timeOut);
+        case "duration":
+          return `${r.duration} hours`;
+        case "coffee":
+          return `${r.coffeeMins} hours`;
+        case "lunch":
+          return `${r.lunchMins} hours`;
+        case "ot":
+          return `${r.otHours} hours`;
+        case "otStatus":
+          return r.otStatus;
+        case "late":
+          return `${r.lateHours} hours`;
+        case "deviceIn":
+          return r.fullDevIn;
+        case "deviceOut":
+          return r.fullDevOut;
+        case "period":
+          return `${r.periodHours} hours`;
+        case "status":
+          return r.status === "active" ? "Active" : "Completed";
+        default:
+          return "";
+      }
+    };
+  
+    const body = displayed.map((r) => csvCols.map((c) => wrap(cell(r, c.value))));
+    const csvContent = [header, ...body].map((row) => row.join(",")).join("\r\n");
+  
+    // Enhanced filename for CSV
+    const today = new Date();
+    const dateStr = today.toISOString().slice(0, 10);
+    const timeStr = today.toTimeString().slice(0, 5).replace(':', '');
+    
+    let filename = `${companyName || "PunchLogs"}_Export_${dateStr}`;
+    
+    if (filters.from && filters.to) {
+      filename += `_${filters.from.replace(/-/g, '')}-${filters.to.replace(/-/g, '')}`;
+    }
+    
+    filename += `_${displayed.length}records_${timeStr}.csv`;
+    
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${companyName || "Punch Logs"}_${today}.csv`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-    toast.message("CSV exported");
+    
+    toast.success(`CSV exported: ${filename}`);
     setExporting(false);
   };
+
   const exportPDF = () => {
     if (!displayed.length) {
       toast.message("No rows to export");
       return;
     }
     setPdfExporting(true);
+    
+    // Enhanced PDF columns with better spacing
     const pdfCols = [
-      { key: "id", label: "ID" },
-      { key: "employee", label: "Employee" },
-      { key: "shiftName", label: "Shift" },
-      { key: "dateTimeIn", label: "Time In" },
-      { key: "dateTimeOut", label: "Time Out" },
-      { key: "schedOut", label: "Sched Out" },
-      { key: "duration", label: "Dur." },
-      { key: "coffee", label: "Coffee" },
-      { key: "lunch", label: "Lunch" },
-      { key: "ot", label: "OT hrs" },
-      { key: "late", label: "Late" },
-      { key: "period", label: "Period" },
+      { key: "employeeShort", label: "Employee", width: 35 },
+      { key: "shift", label: "Shift", width: 15 },
+      { key: "dateTimeIn", label: "Time In", width: 25 },
+      { key: "dateTimeOut", label: "Time Out", width: 25 },
+      { key: "duration", label: "Duration", width: 15 },
+      { key: "coffee", label: "Coffee", width: 12 },
+      { key: "lunch", label: "Lunch", width: 12 },
+      { key: "ot", label: "OT", width: 12 },
+      { key: "late", label: "Late", width: 12 },
+      { key: "period", label: "Period", width: 15 },
     ];
+  
     const header = pdfCols.map((c) => c.label);
+    
+    // Enhanced cell value function with better formatting
     const cellValue = (r, k) => {
       switch (k) {
-        case "id":
-          return r.id;
-        case "employee":
-          return r.employeeName;
-        case "shiftName":
-          return r.shiftName;
+        case "employeeShort":
+          // Show last 6 digits of ID + email prefix
+          const idShort = r.userId.toString().slice(-6);
+          const emailPrefix = r.employeeName.split('@')[0];
+          return `${idShort}\n${emailPrefix}`;
+        case "shift":
+          return r.shiftName !== "—" ? r.shiftName : "Unscheduled";
         case "dateTimeIn":
-          return safeDateTime(r.timeIn);
+          return r.timeIn ? new Date(r.timeIn).toLocaleString('en-US', {
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          }) : "—";
         case "dateTimeOut":
-          return safeDateTime(r.timeOut);
-        case "schedOut":
-          return r.schedOut;
+          return r.timeOut ? new Date(r.timeOut).toLocaleString('en-US', {
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          }) : "—";
         case "duration":
-          return r.duration;
+          return `${r.duration}h`;
         case "coffee":
-          return r.coffeeMins;
+          return `${r.coffeeMins}h`;
         case "lunch":
-          return r.lunchMins;
+          return `${r.lunchMins}h`;
         case "ot":
-          return r.otStatus === "approved" ? r.otHours : "0.00";
+          return r.otStatus === "approved" ? `${r.otHours}h` : "0.00h";
         case "late":
-          return r.lateHours;
+          return `${r.lateHours}h`;
         case "period":
-          return r.periodHours;
+          return `${r.periodHours}h`;
         default:
           return "";
       }
     };
+  
     const rows = displayed.filter((r) => r.status === "completed");
     if (!rows.length) {
       toast.message("No completed rows to export");
       setPdfExporting(false);
       return;
     }
+  
     const body = rows.map((r) => pdfCols.map((c) => cellValue(r, c.key)));
-    const doc = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
-    doc.setFontSize(12);
+  
+    // Use landscape orientation for better layout
+    const doc = new jsPDF({ 
+      orientation: "landscape", 
+      unit: "mm", 
+      format: "a4" 
+    });
+  
+    // Enhanced header with better formatting
+    doc.setFontSize(16);
+    doc.setFont(undefined, "bold");
     let y = 20;
-    doc.text(`Company : ${companyName || "—"}`, 14, y);
-    y += 6;
+    
+    // Company header
+    doc.text(`${companyName || "Company"} - Punch Logs Report`, 20, y);
+    y += 8;
+    
+    doc.setFontSize(10);
+    doc.setFont(undefined, "normal");
+    
+    // Date range information
     const hasFrom = Boolean(filters.from);
     const hasTo = Boolean(filters.to);
     if (hasFrom || hasTo) {
-      const fmt = (d) =>
-        new Date(d).toLocaleDateString(undefined, {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        });
-      const periodLabel =
-        hasFrom && hasTo
-          ? `${fmt(filters.from)} – ${fmt(filters.to)}`
-          : hasFrom
-          ? `From ${fmt(filters.from)}`
-          : `Up to ${fmt(filters.to)}`;
-      doc.text(`Period   : ${periodLabel}`, 14, y);
-      y += 6;
+      const fmt = (d) => new Date(d).toLocaleDateString('en-US', {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+      const periodLabel = hasFrom && hasTo 
+        ? `${fmt(filters.from)} to ${fmt(filters.to)}`
+        : hasFrom 
+        ? `From ${fmt(filters.from)}`
+        : `Up to ${fmt(filters.to)}`;
+      doc.text(`Report Period: ${periodLabel}`, 20, y);
+      y += 5;
     }
-    doc.text(`Total Hours : ${totalPeriodHours}`, 14, y);
-    y += 8;
-    const summaryHeader = ["Employee ID", "Employee Email", "Total Period Hours"];
+    
+    // Summary information
+    const completedCount = rows.length;
+    const totalActiveCount = displayed.filter(r => r.status === 'active').length;
+    doc.text(`Records: ${completedCount} completed, ${totalActiveCount} active | Total Period Hours: ${totalPeriodHours}`, 20, y);
+    y += 5;
+    
+    // Generation timestamp
+    const timestamp = new Date().toLocaleString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    });
+    doc.text(`Generated: ${timestamp}`, 20, y);
+    y += 10;
+  
+    // Enhanced summary table
+    const summaryHeader = ["Employee ID", "Email", "Total Hours", "Days Worked", "Avg Hours/Day"];
     const summaryMap = {};
+    
     rows.forEach((r) => {
-      const uid = r.userId;
+      const uid = r.userId.toString().slice(-6); // Last 6 digits
       const email = r.employeeName;
       const hrs = parseFloat(r.periodHours || "0") || 0;
-      if (!summaryMap[uid]) summaryMap[uid] = { id: uid, email, total: 0 };
+      const date = r.timeIn ? r.timeIn.slice(0, 10) : "";
+      
+      if (!summaryMap[uid]) {
+        summaryMap[uid] = { 
+          id: uid, 
+          email: email.split('@')[0], // Just email prefix
+          total: 0, 
+          days: new Set() 
+        };
+      }
       summaryMap[uid].total += hrs;
+      if (date) summaryMap[uid].days.add(date);
     });
-    const summaryBody = Object.values(summaryMap).map((s) => [s.id, s.email, s.total.toFixed(2)]);
+  
+    const summaryBody = Object.values(summaryMap).map((s) => [
+      s.id, 
+      s.email, 
+      s.total.toFixed(2), 
+      s.days.size,
+      s.days.size > 0 ? (s.total / s.days.size).toFixed(1) : "0.0"
+    ]);
+  
+    // Summary table with enhanced styling
     autoTable(doc, {
       head: [summaryHeader],
       body: summaryBody,
       startY: y,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [255, 165, 0] },
+      styles: { 
+        fontSize: 8,
+        cellPadding: 2,
+        lineColor: [200, 200, 200],
+        lineWidth: 0.1
+      },
+      headStyles: { 
+        fillColor: [255, 165, 0],
+        textColor: [255, 255, 255],
+        fontStyle: "bold"
+      },
+      alternateRowStyles: {
+        fillColor: [245, 245, 245]
+      },
+      margin: { left: 20, right: 20 }
     });
+  
     const afterSummaryY = doc.lastAutoTable?.finalY || y;
-    const mainStartY = afterSummaryY + 8;
+    const mainStartY = afterSummaryY + 10;
+  
+    // Main data table with column widths
     autoTable(doc, {
       head: [header],
       body,
       startY: mainStartY,
-      styles: { fontSize: 7 },
-      headStyles: { fillColor: [255, 165, 0] },
+      styles: { 
+        fontSize: 7,
+        cellPadding: 2,
+        lineColor: [200, 200, 200],
+        lineWidth: 0.1,
+        overflow: 'linebreak'
+      },
+      headStyles: { 
+        fillColor: [255, 165, 0],
+        textColor: [255, 255, 255],
+        fontStyle: "bold"
+      },
+      alternateRowStyles: {
+        fillColor: [250, 250, 250]
+      },
+      columnStyles: Object.fromEntries(
+        pdfCols.map((col, index) => [
+          index, 
+          { cellWidth: col.width, halign: index === 0 ? 'left' : 'center' }
+        ])
+      ),
+      margin: { left: 20, right: 20 }
     });
-    const approverLine = `Approver : ${currentUserName || "—"} (${currentUserEmail || "—"})`;
+  
+    // Enhanced footer
     const finalY = doc.lastAutoTable?.finalY || mainStartY;
-    doc.text(approverLine, 14, finalY + 10);
-    const stamp = new Date().toISOString().slice(0, 10);
-    doc.save(`${companyName || "Punch Logs"}_${stamp}.pdf`);
-    toast.message("PDF exported");
+    doc.setFontSize(8);
+    doc.text(`Report approved by: ${currentUserName || "—"} (${currentUserEmail || "—"})`, 20, finalY + 15);
+    
+    // Page numbering
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.width - 30, doc.internal.pageSize.height - 10);
+    }
+  
+    // Enhanced filename with more context
+    const today = new Date();
+    const dateStr = today.toISOString().slice(0, 10);
+    const timeStr = today.toTimeString().slice(0, 5).replace(':', '');
+    
+    let filename = `${companyName || "PunchLogs"}_Report_${dateStr}`;
+    
+    // Add period context to filename
+    if (hasFrom && hasTo) {
+      const fromStr = filters.from.replace(/-/g, '');
+      const toStr = filters.to.replace(/-/g, '');
+      filename += `_${fromStr}-${toStr}`;
+    } else if (hasFrom) {
+      filename += `_from${filters.from.replace(/-/g, '')}`;
+    } else if (hasTo) {
+      filename += `_until${filters.to.replace(/-/g, '')}`;
+    }
+    
+    // Add record count and timestamp
+    filename += `_${completedCount}records_${timeStr}.pdf`;
+  
+    doc.save(filename);
+    toast.success(`PDF exported: ${filename}`);
     setPdfExporting(false);
-  };
+  };  
+
   const refreshAll = async () => {
     setRefreshing(true);
     await Promise.all([bootstrap(), fetchTimelogs({ pageParam: 1, append: false })]);
     toast.message("Data refreshed");
     setRefreshing(false);
   };
+
   const labelClass = "my-auto shrink-0 text-sm font-medium text-muted-foreground";
   const NUM2DAY = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
   const parseRRuleDays = (str) => {
@@ -583,10 +1018,173 @@ export default function EmployeesPunchLogs() {
       timeZone: "UTC",
     });
   const fmtLatLng = (lat, lng) => `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
+
+  // Improved location display component
+  const LocationDisplay = ({ location, type }) => {
+    if (location.lat == null) {
+      return <span className="text-muted-foreground text-xs">—</span>;
+    }
+
+    return (
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <a
+              href={`https://www.google.com/maps?q=${location.lat},${location.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+            >
+              <MapPin className="w-3 h-3" />
+              View
+            </a>
+          </TooltipTrigger>
+          <TooltipContent>
+            <div className="text-xs">
+              <div>Lat: {location.lat.toFixed(5)}</div>
+              <div>Lng: {location.lng.toFixed(5)}</div>
+              <div className="text-muted-foreground mt-1">Click to view on Google Maps</div>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
+  // Device display component with better tooltips
+  const DeviceDisplay = ({ device, type }) => {
+    if (!device || device === "—") {
+      return <span className="text-muted-foreground text-xs">—</span>;
+    }
+
+    return (
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="text-xs cursor-help border-b border-dotted border-muted-foreground">
+              {truncate(device)}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">
+            <div className="text-xs whitespace-pre-wrap">{device}</div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
+  // Enhanced Summary Statistics with Hover Definitions
+  const SummaryStats = ({ data }) => {
+    const stats = useMemo(() => {
+      const active = data.filter(d => d.status === 'active').length;
+      const completed = data.filter(d => d.status === 'completed').length;
+      const scheduled = data.filter(d => d.isScheduled).length;
+      const avgHours = data.length ? (data.reduce((sum, d) => sum + (parseFloat(d.periodHours) || 0), 0) / data.length).toFixed(1) : '0.0';
+      
+      return { active, completed, scheduled, avgHours };
+    }, [data]);
+
+    const getDefinition = (type) => {
+      switch (type) {
+        case 'active':
+          return "Active Sessions: Number of employees currently clocked in and working. These sessions are ongoing and time is being tracked in real-time.";
+        case 'completed':
+          return "Completed Sessions: Number of finished work sessions where employees have clocked out. These are ready for payroll processing.";
+        case 'scheduled':
+          return "Scheduled Sessions: Work sessions that follow a predefined shift schedule. Hours are calculated against expected start/end times.";
+        case 'avgHours':
+          return "Average Period Hours: Mean number of productive work hours per session, excluding breaks and unapproved overtime.";
+        default:
+          return "";
+      }
+    };
+
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 cursor-help hover:bg-blue-100 dark:hover:bg-blue-950/30 transition-colors">
+                <div className="p-2 rounded-full bg-blue-500/10">
+                  <Timer className="h-4 w-4 text-blue-600" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-blue-600">Active</div>
+                  <div className="text-lg font-bold">{stats.active}</div>
+                </div>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <div className="text-sm">{getDefinition('active')}</div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 dark:bg-green-950/20 cursor-help hover:bg-green-100 dark:hover:bg-green-950/30 transition-colors">
+                <div className="p-2 rounded-full bg-green-500/10">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-green-600">Completed</div>
+                  <div className="text-lg font-bold">{stats.completed}</div>
+                </div>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <div className="text-sm">{getDefinition('completed')}</div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-orange-50 dark:bg-orange-950/20 cursor-help hover:bg-orange-100 dark:hover:bg-orange-950/30 transition-colors">
+                <div className="p-2 rounded-full bg-orange-500/10">
+                  <Calendar className="h-4 w-4 text-orange-600" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-orange-600">Scheduled</div>
+                  <div className="text-lg font-bold">{stats.scheduled}</div>
+                </div>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <div className="text-sm">{getDefinition('scheduled')}</div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-purple-50 dark:bg-purple-950/20 cursor-help hover:bg-purple-100 dark:hover:bg-purple-950/30 transition-colors">
+                <div className="p-2 rounded-full bg-purple-500/10">
+                  <Clock className="h-4 w-4 text-purple-600" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-purple-600">Avg Hours</div>
+                  <div className="text-lg font-bold">{stats.avgHours}</div>
+                </div>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <div className="text-sm">{getDefinition('avgHours')}</div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+    );
+  };
+
   function ScheduleDialog({ open, onOpenChange, scheduleList }) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-md border-2 dark:border-white/30">
+          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5 text-orange-600" />
@@ -614,40 +1212,23 @@ export default function EmployeesPunchLogs() {
                   }
                   return (
                     <div key={s.id} className="p-3 border rounded-md bg-muted/50 space-y-2 text-sm">
-                      <div>
-                        <strong>Shift:</strong> <span className="capitalize">{s.shift?.shiftName || "—"}</span>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">{s.shift?.shiftName || "—"}</Badge>
                       </div>
-                      <div>
-                        <strong>Start:</strong> {s.shift?.startTime ? fmtUTCTime(s.shift.startTime) : "—"}
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                        <div><span className="font-medium">Start:</span> {s.shift?.startTime ? fmtUTCTime(s.shift.startTime) : "—"}</div>
+                        <div><span className="font-medium">End:</span> {s.shift?.endTime ? fmtUTCTime(s.shift.endTime) : "—"}</div>
+                        <div><span className="font-medium">Duration:</span> {durationStr} hrs</div>
+                        <div><span className="font-medium">Days:</span> {daysLabel || "—"}</div>
                       </div>
-                      <div>
-                        <strong>End:</strong> {s.shift?.endTime ? fmtUTCTime(s.shift.endTime) : "—"}
-                      </div>
-                      <div>
-                        <strong>Duration:</strong> {durationStr}
-                      </div>
-                      <div>
-                        <strong>Schedule Start:</strong>{" "}
-                        {startDate
-                          ? new Date(startDate).toLocaleDateString(undefined, {
-                              month: "long",
-                              day: "numeric",
-                              year: "numeric",
-                            })
-                          : "—"}
-                      </div>
-                      <div>
-                        <strong>Schedule End:</strong>{" "}
-                        {endDate
-                          ? new Date(endDate).toLocaleDateString(undefined, {
-                              month: "long",
-                              day: "numeric",
-                              year: "numeric",
-                            })
-                          : "—"}
-                      </div>
-                      <div>
-                        <strong>Days:</strong> {daysLabel || "—"}
+                      <div className="pt-2 border-t text-xs space-y-1">
+                        <div>
+                          <span className="font-medium">Schedule Period:</span>
+                        </div>
+                        <div>
+                          {startDate ? new Date(startDate).toLocaleDateString() : "—"} 
+                          {endDate ? ` → ${new Date(endDate).toLocaleDateString()}` : " → Ongoing"}
+                        </div>
                       </div>
                     </div>
                   );
@@ -655,20 +1236,25 @@ export default function EmployeesPunchLogs() {
               </div>
             </ScrollArea>
           ) : (
-            <p className="text-center text-muted-foreground py-4">No schedule details.</p>
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+              <Calendar className="h-8 w-8 mb-2 opacity-50" />
+              <p>No schedule details available</p>
+            </div>
           )}
         </DialogContent>
       </Dialog>
     );
   }
+
   function LocationDialog({ open, onOpenChange, list }) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-md border-2 dark:border-white/30">
+          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <MapPin className="h-5 w-5 text-orange-600" />
-              Location Restriction Details
+              Location Restrictions
             </DialogTitle>
           </DialogHeader>
           {list.length ? (
@@ -676,35 +1262,48 @@ export default function EmployeesPunchLogs() {
               <div className="space-y-4">
                 {list.map((loc) => (
                   <div key={loc.id} className="p-3 border rounded-md bg-muted/50 space-y-2 text-sm">
-                    <div>
-                      <strong>Name:</strong> <span className="capitalize">{loc.name}</span>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">{loc.name}</Badge>
                     </div>
-                    <div>
-                      <strong>Coords:</strong> {fmtLatLng(loc.latitude, loc.longitude)}
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                      <div><span className="font-medium">Latitude:</span> {Number(loc.latitude).toFixed(5)}</div>
+                      <div><span className="font-medium">Longitude:</span> {Number(loc.longitude).toFixed(5)}</div>
+                      <div><span className="font-medium">Radius:</span> {loc.radius}m</div>
+                      <div><span className="font-medium">ID:</span> {loc.id}</div>
                     </div>
-                    <div>
-                      <strong>Radius:</strong> {loc.radius} m
-                    </div>
-                    <div>
-                      <strong>Location ID:</strong> {loc.id}
+                    <div className="pt-2 border-t">
+                      <a
+                        href={`https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+                      >
+                        <MapPin className="w-3 h-3" />
+                        View on Google Maps
+                      </a>
                     </div>
                   </div>
                 ))}
               </div>
             </ScrollArea>
           ) : (
-            <p className="text-center text-muted-foreground py-4">No location restriction.</p>
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+              <MapPin className="h-8 w-8 mb-2 opacity-50" />
+              <p>No location restrictions</p>
+            </div>
           )}
         </DialogContent>
       </Dialog>
     );
   }
+
   const openEditDialog = (log) => {
     setEditLog(log);
     setEditTimeIn(toLocalInputValue(log.timeIn));
     setEditTimeOut(toLocalInputValue(log.timeOut));
     setEditDialogOpen(true);
   };
+
   const submitEdit = async () => {
     try {
       if (!editLog) return;
@@ -719,7 +1318,7 @@ export default function EmployeesPunchLogs() {
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.message || "Update failed");
-      toast.success("Date/Time updated.");
+      toast.success("Date/Time updated successfully");
       setEditDialogOpen(false);
       setEditLog(null);
       await fetchTimelogs({ pageParam: page, append: false });
@@ -727,18 +1326,29 @@ export default function EmployeesPunchLogs() {
       toast.error(e.message);
     }
   };
+
   return (
-    <div className="max-w-full mx-auto p-4 lg:px-6 px-2 space-y-8">
+    <div className="max-w-full mx-auto p-4 lg:px-6 px-2 space-y-6">
       <Toaster position="top-center" />
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
+      
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
             <Clock className="h-7 w-7 text-orange-500" />
             Employee Punch Logs
           </h2>
+          <p className="text-muted-foreground mt-1">
+            Track and manage employee time tracking and attendance
+          </p>
         </div>
         <div className="flex gap-2">
-          <IconBtn icon={RefreshCw} tooltip="Refresh data" spinning={refreshing} onClick={refreshAll} />
+          <IconBtn 
+            icon={RefreshCw} 
+            tooltip="Refresh data" 
+            spinning={refreshing} 
+            onClick={refreshAll} 
+          />
           <IconBtn
             icon={Download}
             tooltip="Export CSV"
@@ -755,118 +1365,151 @@ export default function EmployeesPunchLogs() {
           />
         </div>
       </div>
+
+      {/* Summary Statistics */}
+      <SummaryStats data={displayed} />
+
+      {/* Filters Card */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-2 relative">
-          <CardTitle className="flex items-center gap-2">
-            <div className="p-2 rounded-full bg-orange-500/10 text-orange-500">
-              <Filter className="h-5 w-5" />
-            </div>
-            Table Controls
-          </CardTitle>
-          <span className="absolute top-2 right-4 text-sm text-muted-foreground">
-            {rowsLoaded} of {totalRows}
-          </span>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500">
+                <Filter className="h-4 w-4" />
+              </div>
+              Filters & Controls
+            </CardTitle>
+            <span className="text-sm text-muted-foreground">
+              Showing {rowsLoaded} of {totalRows} records
+            </span>
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-3 items-center">
-              <span className={labelClass}>Column:</span>
-              <ColumnSelector options={columnOptions} visible={columnVisibility} setVisible={setColumnVisibility} />
+        <CardContent className="space-y-4">
+          {/* Column Selector */}
+          <div className="flex flex-wrap gap-3 items-center">
+            <span className={labelClass}>
+              <Eye className="w-4 h-4 mr-1 inline" />
+              Columns:
+            </span>
+            <ColumnSelector 
+              options={columnOptions} 
+              visible={columnVisibility} 
+              setVisible={setColumnVisibility} 
+            />
+          </div>
+
+          {/* Employee and Department Filters */}
+          <div className="flex flex-wrap gap-3 items-center">
+            <span className={labelClass}>
+              <Users className="w-4 h-4 mr-1 inline" />
+              Employee:
+            </span>
+            <MultiSelect
+              options={employees.map((e) => ({ value: e.id, label: e.email }))}
+              selected={filters.employeeIds}
+              onChange={(v) => toggleListFilter("employeeIds", v)}
+              allLabel="All employees"
+              width={220}
+            />
+            
+            <span className={labelClass}>
+              <Building className="w-4 h-4 mr-1 inline" />
+              Department:
+            </span>
+            <div className="min-w-[180px]">
+              <Select value={filters.departmentId} onValueChange={(v) => setFilters({ ...filters, departmentId: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All departments" />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  <SelectItem value="all">All departments</SelectItem>
+                  {departments.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="flex flex-wrap gap-3 items-center">
-              <span className={labelClass}>Filter:</span>
-              <MultiSelect
-                options={employees.map((e) => ({ value: e.id, label: e.email }))}
-                selected={filters.employeeIds}
-                onChange={(v) => toggleListFilter("employeeIds", v)}
-                allLabel="All employees"
-                width={200}
+
+            <div className="min-w-[140px]">
+              <Select value={filters.status} onValueChange={(v) => setFilters({ ...filters, status: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Date Range Filters */}
+          <div className="flex flex-wrap gap-3 items-center">
+            <span className={labelClass}>
+              <Calendar className="w-4 h-4 mr-1 inline" />
+              Date Range:
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">From:</span>
+              <Input
+                type="date"
+                value={filters.from}
+                onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+                className="h-9 w-auto"
               />
-              <div className="min-w-[180px]">
-                <Select value={filters.departmentId} onValueChange={(v) => setFilters({ ...filters, departmentId: v })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All departments" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    <SelectItem value="all">All departments</SelectItem>
-                    {departments.map((d) => (
-                      <SelectItem key={d.id} value={d.id}>
-                        {d.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="min-w-[160px]">
-                <Select value={filters.status} onValueChange={(v) => setFilters({ ...filters, status: v })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All statuses" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All statuses</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">From:</span>
-                <Input
-                  type="date"
-                  value={filters.from}
-                  onChange={(e) => setFilters({ ...filters, from: e.target.value })}
-                  className="h-8"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm">To:</span>
-                <Input
-                  type="date"
-                  value={filters.to}
-                  onChange={(e) => setFilters({ ...filters, to: e.target.value })}
-                  className="h-8"
-                />
-              </div>
-              {anyFilterActive && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={clearAllFilters}
-                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                >
-                  Clear Filters
-                </Button>
-              )}
             </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">To:</span>
+              <Input
+                type="date"
+                value={filters.to}
+                onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+                className="h-9 w-auto"
+              />
+            </div>
+            {anyFilterActive && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearAllFilters}
+                className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+              >
+                Clear All Filters
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
-      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10 text-neutral-600 dark:text-neutral-300">
+
+      {/* Main Table Card */}
+      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-2 flex justify-between items-start">
-          <div className="flex flex-row justify-between items-center w-full">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <div className="p-2 rounded-full bg-orange-500/10  text-orange-500">
-                  <Clock className="h-5 w-5" />
-                </div>
-                Punch Logs
-              </CardTitle>
+        <CardHeader className="pb-3">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+            <CardTitle className="flex items-center gap-2">
+              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500">
+                <Clock className="h-4 w-4" />
+              </div>
+              Punch Logs
+            </CardTitle>
+            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+              <span>Total Period Hours: <span className="font-semibold text-foreground">{totalPeriodHours}</span></span>
             </div>
-            <div className="text-sm text-muted-foreground mt-2 md:mt-1 whitespace-nowrap">Total hours: {totalPeriodHours}</div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="rounded-md border">
+          <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="bg-muted/50">
                   {columnOptions
                     .filter((c) => columnVisibility.includes(c.value))
                     .map(({ value, label }) => (
-                      <TableHead key={value} className="text-center text-nowrap">
+                      <TableHead key={value} className="text-center text-nowrap font-semibold">
                         {label}
                       </TableHead>
                     ))}
@@ -877,174 +1520,169 @@ export default function EmployeesPunchLogs() {
                   <TableSkeleton rows={6} cols={columnVisibility.length} />
                 ) : displayed.length ? (
                   <AnimatePresence>
-                    {displayed.map((t) => (
+                    {displayed.map((t, index) => (
                       <motion.tr
                         key={t.id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="border-b transition-colors hover:bg-muted/50"
+                        transition={{ duration: 0.2, delay: index * 0.02 }}
+                        className={`border-b transition-all hover:bg-muted/50 ${
+                          expandedRow === t.id ? 'bg-muted/30' : ''
+                        }`}
                       >
                         {columnVisibility.includes("id") && (
-                          <TableCell className="font-mono text-xs text-center">{t.id}</TableCell>
+                          <TableCell className="font-mono text-xs text-center">
+                            <Badge variant="outline" className="font-mono">
+                              {t.id}
+                            </Badge>
+                          </TableCell>
                         )}
                         {columnVisibility.includes("schedule") && (
                           <TableCell className="text-center">
-                            <Button
-                              size="sm"
-                              className="bg-orange-500 hover:bg-orange-600 text-white text-xs"
+                            <ScheduleBadge
+                              isScheduled={t.isScheduled}
                               onClick={() => {
                                 setScheduleList(t.scheduleList);
                                 setSchedDialogOpen(true);
                               }}
-                            >
-                              {t.isScheduled ? "Yes" : "No"}
-                            </Button>
+                            />
                           </TableCell>
                         )}
                         {columnVisibility.includes("locationRestricted") && (
                           <TableCell className="text-center">
-                            <Button
-                              size="sm"
-                              className="bg-orange-500 hover:bg-orange-600 text-white text-xs"
-                              disabled={!t.isLocRestricted}
+                            <LocationBadge
+                              isRestricted={t.isLocRestricted}
                               onClick={() => {
                                 setLocationDialogList(t.locList);
                                 setLocationDialogOpen(true);
                               }}
-                            >
-                              {t.isLocRestricted ? "Yes" : "No"}
-                            </Button>
+                            />
                           </TableCell>
                         )}
                         {columnVisibility.includes("employee") && (
-                          <TableCell className="text-left text-nowrap text-xs">{t.employeeName}</TableCell>
+                          <TableCell className="text-left text-sm font-medium">
+                            <div className="max-w-[200px] truncate" title={t.employeeName}>
+                              {t.employeeName}
+                            </div>
+                          </TableCell>
                         )}
                         {columnVisibility.includes("dateTimeIn") && (
-                          <TableCell className="text-center text-nowrap text-xs">{safeDateTime(t.timeIn)}</TableCell>
+                          <TableCell className="text-center text-sm">
+                            <div className="font-mono">{safeDateTime(t.timeIn)}</div>
+                          </TableCell>
                         )}
                         {columnVisibility.includes("dateTimeOut") && (
-                          <TableCell className="text-center text-nowrap text-xs">{safeDateTime(t.timeOut)}</TableCell>
+                          <TableCell className="text-center text-sm">
+                            <div className="font-mono">{safeDateTime(t.timeOut)}</div>
+                          </TableCell>
                         )}
                         {columnVisibility.includes("duration") && (
-                          <TableCell className="text-center text-nowrap text-xs">{t.duration}</TableCell>
+                          <TableCell className="text-center text-sm font-medium">
+                            <TimeDisplayWithTooltip time={t.duration} type="duration" />
+                          </TableCell>
                         )}
                         {columnVisibility.includes("coffee") && (
-                          <TableCell className="text-center text-nowrap text-xs">{t.coffeeMins}</TableCell>
+                          <TableCell className="text-center text-sm">
+                            <div className="flex items-center justify-center gap-1">
+                              <Coffee className="w-3 h-3 text-amber-600" />
+                              <TimeDisplayWithTooltip time={t.coffeeMins} type="coffee" />
+                            </div>
+                          </TableCell>
                         )}
                         {columnVisibility.includes("lunch") && (
-                          <TableCell className="text-center text-nowrap text-xs">{t.lunchMins}</TableCell>
+                          <TableCell className="text-center text-sm">
+                            <TimeDisplayWithTooltip time={t.lunchMins} type="lunch" />
+                          </TableCell>
                         )}
                         {columnVisibility.includes("ot") && (
-                          <TableCell className="text-center text-nowrap text-xs">{t.otHours}</TableCell>
+                          <TableCell className="text-center text-sm font-medium">
+                            <TimeDisplayWithTooltip 
+                              time={parseFloat(t.otHours) > 0 ? t.otHours : null} 
+                              type="overtime" 
+                            />
+                          </TableCell>
                         )}
                         {columnVisibility.includes("otStatus") && (
-                          <TableCell className="text-center text-nowrap text-xs">
-                            <Button
-                              size="sm"
-                              className="bg-orange-500 hover:bg-orange-600 text-white text-xs px-2"
-                              disabled={!t.overtimeRec}
+                          <TableCell className="text-center">
+                            <OvertimeBadge
+                              otStatus={t.otStatus}
+                              overtimeRec={t.overtimeRec}
                               onClick={() => {
-                                if (!t.overtimeRec) return;
-                                setOtViewData({ ot: t.overtimeRec, log: t });
-                                setOtDialogOpen(true);
+                                if (t.overtimeRec) {
+                                  setOtViewData({ ot: t.overtimeRec, log: t });
+                                  setOtDialogOpen(true);
+                                }
                               }}
-                            >
-                              {t.otStatus}
-                            </Button>
+                            />
                           </TableCell>
                         )}
                         {columnVisibility.includes("late") && (
-                          <TableCell className="text-center text-xs text-nowrap">{t.lateHours}</TableCell>
+                          <TableCell className="text-center text-sm">
+                            {parseFloat(t.lateHours) > 0 ? (
+                              <TimeDisplayWithTooltip 
+                                time={t.lateHours} 
+                                type="late" 
+                                className="text-red-600 font-medium"
+                              />
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                         )}
                         {columnVisibility.includes("deviceIn") && (
-                          <TableCell className="text-center text-xs">
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="flex flex-col items-center leading-tight cursor-default text-xs">
-                                    {(t.fullDevIn ?? "—").split(",").map((p, i) => (
-                                      <span key={i}>{truncate(p.trim())}</span>
-                                    ))}
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent className="break-all max-w-xs whitespace-pre-wrap text-xs">
-                                  {t.fullDevIn || "—"}
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
+                          <TableCell className="text-center">
+                            <DeviceDisplay device={t.fullDevIn} type="in" />
                           </TableCell>
                         )}
                         {columnVisibility.includes("deviceOut") && (
-                          <TableCell className="text-center text-xs">
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="flex flex-col items-center leading-tight cursor-default text-xs">
-                                    {(t.fullDevOut ?? "—").split(",").map((p, i) => (
-                                      <span key={i}>{truncate(p.trim())}</span>
-                                    ))}
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent className="break-all max-w-xs whitespace-pre-wrap text-xs">
-                                  {t.fullDevOut || "—"}
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
+                          <TableCell className="text-center">
+                            <DeviceDisplay device={t.fullDevOut} type="out" />
                           </TableCell>
                         )}
                         {columnVisibility.includes("locationIn") && (
-                          <TableCell className="text-center text-xs">
-                            {t.locIn.lat != null ? (
-                              <Button className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 leading-tight text-xs">
-                                <a
-                                  href={`https://www.google.com/maps?q=${t.locIn.lat},${t.locIn.lng}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs flex flex-col items-center"
-                                >
-                                  <span className="text-xs">{t.locIn.lat.toFixed(5)}</span>
-                                  <span className="text-xs">{t.locIn.lng.toFixed(5)}</span>
-                                </a>
-                              </Button>
-                            ) : (
-                              t.locIn.txt
-                            )}
+                          <TableCell className="text-center">
+                            <LocationDisplay location={t.locIn} type="in" />
                           </TableCell>
                         )}
                         {columnVisibility.includes("locationOut") && (
-                          <TableCell className="text-center text-xs">
-                            {t.locOut.lat != null ? (
-                              <Button className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 leading-tight">
-                                <a
-                                  href={`https://www.google.com/maps?q=${t.locOut.lat},${t.locOut.lng}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs flex flex-col items-center"
-                                >
-                                  <span>{t.locOut.lat.toFixed(5)}</span>
-                                  <span>{t.locOut.lng.toFixed(5)}</span>
-                                </a>
-                              </Button>
-                            ) : (
-                              t.locOut.txt
-                            )}
+                          <TableCell className="text-center">
+                            <LocationDisplay location={t.locOut} type="out" />
                           </TableCell>
                         )}
                         {columnVisibility.includes("period") && (
-                          <TableCell className="text-center text-xs">{t.periodHours}</TableCell>
+                          <TableCell className="text-center text-sm font-semibold">
+                            <TimeDisplayWithTooltip time={t.periodHours} type="period" />
+                          </TableCell>
                         )}
                         {columnVisibility.includes("status") && (
-                          <TableCell className="text-center text-xs">{t.status === "active" ? "Active" : "Completed"}</TableCell>
+                          <TableCell className="text-center">
+                            <StatusBadge status={t.status} />
+                          </TableCell>
                         )}
                         {columnVisibility.includes("actions") && (
-                          <TableCell className="text-center text-xs">
-                            {canEdit ? (
-                              <IconBtn icon={Edit3} tooltip="Edit Time In/Out" onClick={() => openEditDialog(t)} />
-                            ) : (
-                              "—"
-                            )}
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              {canEdit ? (
+                                <TooltipProvider delayDuration={200}>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => openEditDialog(t)}
+                                        className="h-8 w-8 p-0 hover:bg-orange-50 hover:text-orange-600"
+                                      >
+                                        <Edit3 className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Edit Time In/Out</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">—</span>
+                              )}
+                            </div>
                           </TableCell>
                         )}
                       </motion.tr>
@@ -1052,15 +1690,20 @@ export default function EmployeesPunchLogs() {
                   </AnimatePresence>
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={columnVisibility.length} className="h-28 text-center">
+                    <TableCell colSpan={columnVisibility.length} className="h-32 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
-                        <div className="w-16 h-16 bg-black/5 dark:bg.white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <div className="w-16 h-16 bg-muted/30 rounded-full flex items-center justify-center mb-4">
                           <Clock className="h-8 w-8 text-orange-500/50" />
                         </div>
-                        <p>No timelogs match the selected filters.</p>
+                        <h3 className="font-medium mb-2">No punch logs found</h3>
+                        <p className="text-sm">No records match your current filter criteria.</p>
                         {anyFilterActive && (
-                          <Button variant="link" onClick={clearAllFilters} className="text-orange-600 hover:text-orange-700 mt-2">
-                            Clear all filters
+                          <Button 
+                            variant="link" 
+                            onClick={clearAllFilters} 
+                            className="text-orange-600 hover:text-orange-700 mt-2"
+                          >
+                            Clear all filters to see more data
                           </Button>
                         )}
                       </div>
@@ -1071,102 +1714,129 @@ export default function EmployeesPunchLogs() {
             </Table>
           </div>
         </CardContent>
+
+        {/* Enhanced Pagination */}
         {totalPages > 1 && (
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-4">
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex gap-1"
-                disabled={page === 1}
-                onClick={() => {
-                  setPage(1);
-                  fetchTimelogs({ pageParam: 1, append: false });
-                }}
-              >
-                <ChevronsLeft className="h-4 w-4" />
-                First
-              </Button>
-              {[...Array(totalPages)].map((_, i) => {
-                const p = i + 1;
-                if (p === 1 || p === totalPages || Math.abs(p - page) <= 1)
-                  return (
-                    <Button
-                      key={p}
-                      size="sm"
-                      variant={p === page ? "default" : "outline"}
-                      onClick={() => {
-                        setPage(p);
-                        fetchTimelogs({ pageParam: p, append: false });
-                      }}
-                    >
-                      {p}
-                    </Button>
-                  );
-                if ((p === page - 2 && p > 1) || (p === page + 2 && p < totalPages))
-                  return (
-                    <span key={p} className="px-1 text-muted-foreground">
-                      …
-                    </span>
-                  );
-                return null;
-              })}
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex gap-1"
-                disabled={page === totalPages}
-                onClick={() => {
-                  setPage(totalPages);
-                  fetchTimelogs({ pageParam: totalPages, append: false });
-                }}
-              >
-                Last
-                <ChevronsRight className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="flex items-center gap-2">
-              {page < totalPages && (
-                <Button
-                  size="sm"
-                  onClick={async () => {
-                    const next = page + 1;
-                    await fetchTimelogs({ pageParam: next, append: true });
-                    setPage(next);
-                  }}
-                >
-                  Load more ({page + 1}/{totalPages})
-                </Button>
-              )}
-              {rowsLoaded < totalRows && (
+          <div className="border-t bg-muted/30 p-4">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              {/* Page Navigation */}
+              <div className="flex items-center gap-2">
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={async () => {
-                    for (let p = page + 1; p <= totalPages; p += 1) await fetchTimelogs({ pageParam: p, append: true });
-                    setPage(totalPages);
-                  }}
-                >
-                  Show all
-                </Button>
-              )}
-              {rowsLoaded > perPage && (
-                <Button
-                  size="sm"
-                  variant="outline"
+                  className="flex gap-1"
+                  disabled={page === 1}
                   onClick={() => {
-                    fetchTimelogs({ pageParam: 1, append: false });
                     setPage(1);
+                    fetchTimelogs({ pageParam: 1, append: false });
                   }}
                 >
-                  Show less
+                  <ChevronsLeft className="h-4 w-4" />
+                  First
                 </Button>
-              )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page === 1}
+                  onClick={() => {
+                    const prev = page - 1;
+                    setPage(prev);
+                    fetchTimelogs({ pageParam: prev, append: false });
+                  }}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                
+                {/* Page Numbers */}
+                <div className="flex items-center gap-1">
+                  {[...Array(totalPages)].map((_, i) => {
+                    const p = i + 1;
+                    if (p === 1 || p === totalPages || Math.abs(p - page) <= 1) {
+                      return (
+                        <Button
+                          key={p}
+                          size="sm"
+                          variant={p === page ? "default" : "outline"}
+                          className={p === page ? "bg-orange-500 hover:bg-orange-600" : ""}
+                          onClick={() => {
+                            setPage(p);
+                            fetchTimelogs({ pageParam: p, append: false });
+                          }}
+                        >
+                          {p}
+                        </Button>
+                      );
+                    }
+                    if ((p === page - 2 && p > 1) || (p === page + 2 && p < totalPages)) {
+                      return (
+                        <span key={p} className="px-1 text-muted-foreground text-sm">
+                          …
+                        </span>
+                      );
+                    }
+                    return null;
+                  })}
+                </div>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page === totalPages}
+                  onClick={() => {
+                    const next = page + 1;
+                    setPage(next);
+                    fetchTimelogs({ pageParam: next, append: false });
+                  }}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex gap-1"
+                  disabled={page === totalPages}
+                  onClick={() => {
+                    setPage(totalPages);
+                    fetchTimelogs({ pageParam: totalPages, append: false });
+                  }}
+                >
+                  Last
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Load More Options */}
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>
+                  Page {page} of {totalPages} • {rowsLoaded} of {totalRows} records
+                </span>
+                {page < totalPages && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      const next = page + 1;
+                      await fetchTimelogs({ pageParam: next, append: true });
+                      setPage(next);
+                    }}
+                    className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                  >
+                    Load More
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         )}
       </Card>
-      <ScheduleDialog open={schedDialogOpen} onOpenChange={setSchedDialogOpen} scheduleList={scheduleList} />
+
+      {/* Dialogs */}
+      <ScheduleDialog 
+        open={schedDialogOpen} 
+        onOpenChange={setSchedDialogOpen} 
+        scheduleList={scheduleList} 
+      />
+
       <Dialog open={otDialogOpen} onOpenChange={setOtDialogOpen}>
         <DialogContent className="sm:max-w-md border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -1178,37 +1848,54 @@ export default function EmployeesPunchLogs() {
           </DialogHeader>
           {otViewData ? (
             <ScrollArea className="max-h-[60vh]">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>Request ID</div>
-                <div>{otViewData.ot.id}</div>
-                <div>Status</div>
-                <div className="capitalize">{otViewData.ot.status}</div>
-                <div>Requested At</div>
-                <div>
-                  {safeDate(otViewData.ot.createdAt)} {safeTime(otViewData.ot.createdAt)}
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-2">
+                    <div><span className="font-medium">Request ID:</span> {otViewData.ot.id}</div>
+                    <div><span className="font-medium">Status:</span> 
+                      <Badge variant="outline" className="ml-2 capitalize">
+                        {otViewData.ot.status}
+                      </Badge>
+                    </div>
+                    <div><span className="font-medium">OT Hours:</span> {otViewData.log.otHours}</div>
+                  </div>
+                  <div className="space-y-2">
+                    <div><span className="font-medium">Time In:</span> {safeTime(otViewData.log.timeIn)}</div>
+                    <div><span className="font-medium">Time Out:</span> {safeTime(otViewData.log.timeOut)}</div>
+                    <div><span className="font-medium">Requested:</span> {safeDate(otViewData.ot.createdAt)}</div>
+                  </div>
                 </div>
-                <div>OT Hours</div>
-                <div>{otViewData.log.otHours}</div>
-                <div>Time In</div>
-                <div>{safeTime(otViewData.log.timeIn)}</div>
-                <div>Time Out</div>
-                <div>{safeTime(otViewData.log.timeOut)}</div>
-                <div>Requester Reason</div>
-                <div>{otViewData.ot.requesterReason || "—"}</div>
-                <div>Approver Comments</div>
-                <div>{otViewData.ot.approverComments || "—"}</div>
-              </div>
-              <div className="pt-4">
-                <div className="text-sm font-medium mb-1">Raw OT Record</div>
-                <pre className="bg-muted p-2 rounded-md text-xs overflow-auto">{JSON.stringify(otViewData.ot, null, 2)}</pre>
+                
+                {otViewData.ot.requesterReason && (
+                  <div>
+                    <span className="font-medium text-sm">Requester Reason:</span>
+                    <p className="text-sm bg-muted p-2 rounded mt-1">{otViewData.ot.requesterReason}</p>
+                  </div>
+                )}
+                
+                {otViewData.ot.approverComments && (
+                  <div>
+                    <span className="font-medium text-sm">Approver Comments:</span>
+                    <p className="text-sm bg-muted p-2 rounded mt-1">{otViewData.ot.approverComments}</p>
+                  </div>
+                )}
               </div>
             </ScrollArea>
           ) : (
-            <p className="text-center text-muted-foreground py-4">No data</p>
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+              <Info className="h-8 w-8 mb-2 opacity-50" />
+              <p>No overtime data available</p>
+            </div>
           )}
         </DialogContent>
       </Dialog>
-      <LocationDialog open={locationDialogOpen} onOpenChange={setLocationDialogOpen} list={locationDialogList} />
+
+      <LocationDialog 
+        open={locationDialogOpen} 
+        onOpenChange={setLocationDialogOpen} 
+        list={locationDialogList} 
+      />
+
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="sm:max-w-md border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -1218,6 +1905,40 @@ export default function EmployeesPunchLogs() {
               Edit Time In / Time Out
             </DialogTitle>
           </DialogHeader>
+          {editLog && (
+            <div className="space-y-4 py-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Time In</label>
+                <Input
+                  type="datetime-local"
+                  value={editTimeIn}
+                  onChange={(e) => setEditTimeIn(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Time Out</label>
+                <Input
+                  type="datetime-local"
+                  value={editTimeOut}
+                  onChange={(e) => setEditTimeOut(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+              <div className="bg-muted/50 p-3 rounded-lg text-sm">
+                <div className="font-medium mb-1">Employee: {editLog.employeeName}</div>
+                <div className="text-muted-foreground">Log ID: {editLog.id}</div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={submitEdit} className="bg-orange-500 hover:bg-orange-600">
+              Save Changes
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
