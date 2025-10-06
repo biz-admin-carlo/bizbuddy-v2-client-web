@@ -1,4 +1,3 @@
-// components/Dashboard/DashboardContent/CompanyPanel/PunchLogs&Overtime&Leaves/EmployeesOvertimeRequests.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
@@ -17,6 +16,7 @@ import {
   AlertCircle,
   FileText,
   Eye,
+  TrendingUp,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
@@ -42,6 +42,7 @@ const statusClasses = {
   approved: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
   rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
 };
+
 const statusIcons = {
   pending: <Clock className="h-3 w-3 mr-1" />,
   approved: <CheckCircle2 className="h-3 w-3 mr-1" />,
@@ -66,7 +67,7 @@ const diffHours = (inTs, outTs) => {
 };
 
 export default function EmployeesOvertimeRequests() {
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sortKey, setSortKey] = useState("requestedNewest");
@@ -78,6 +79,7 @@ export default function EmployeesOvertimeRequests() {
   const [actionLoading, setActionLoading] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [logData, setLogData] = useState(null);
+  const [expandedRow, setExpandedRow] = useState(null);
 
   const columnOptions = [
     { value: "otId", label: "Overtime ID" },
@@ -100,7 +102,29 @@ export default function EmployeesOvertimeRequests() {
     lateVals: ["all"],
     reasons: ["all"],
     statuses: ["all"],
+    dateFrom: "",
+    dateTo: "",
   });
+
+  // Check if user can approve (admin, supervisor, superadmin)
+  const canApprove = useMemo(() => {
+    return ["admin", "supervisor", "superadmin"].includes(user?.role);
+  }, [user?.role]);
+
+  // Calculate statistics
+  const stats = useMemo(() => {
+    const total = rows.length;
+    const pending = rows.filter((r) => r.status === "pending").length;
+    const approved = rows.filter((r) => r.status === "approved").length;
+    const approvedHours = rows
+      .filter((r) => r.status === "approved")
+      .reduce((sum, r) => {
+        const hours = r.requestedHours ?? r.timeLog?.otHours ?? 0;
+        return sum + Number(hours);
+      }, 0);
+
+    return { total, pending, approved, approvedHours: approvedHours.toFixed(1) };
+  }, [rows]);
 
   const toggleFilter = (key, val) =>
     setFilters((prev) => {
@@ -118,6 +142,7 @@ export default function EmployeesOvertimeRequests() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const j = await res.json();
+      console.log(j);
       if (!res.ok) throw new Error(j.message || "Failed to fetch overtime.");
       setRows(
         (j.data || []).map((o) => ({
@@ -126,7 +151,7 @@ export default function EmployeesOvertimeRequests() {
         }))
       );
     } catch (e) {
-      toast.message(e.message || "Fetch error");
+      toast.error(e.message || "Failed to fetch overtime requests");
     }
     setLoading(false);
   }, [token]);
@@ -147,6 +172,21 @@ export default function EmployeesOvertimeRequests() {
       : r.timeLog?.otHours ?? diffHours(r.timeLog?.timeIn, r.timeLog?.timeOut) ?? "—";
 
   const lateVal = (r) => (r.lateHours != null ? Number(r.lateHours).toFixed(2) : r.timeLog?.lateHours ?? "—");
+
+  const getProjectedTime = (row) => {
+    if (!row.timeLog?.timeOut || !row.requestedHours) return null;
+    const originalOut = new Date(row.timeLog.timeOut);
+    const withOT = new Date(originalOut.getTime() + Number(row.requestedHours) * 3600000);
+    return withOT;
+  };
+
+  const getTotalHours = (row) => {
+    if (!row.timeLog?.timeIn || !row.timeLog?.timeOut || !row.requestedHours) return null;
+    const projected = getProjectedTime(row);
+    if (!projected) return null;
+    const hours = (projected - new Date(row.timeLog.timeIn)) / 3600000;
+    return hours.toFixed(2);
+  };
 
   const otIdOpts = useMemo(() => [...new Set(rows.map((r) => r.id))].map((v) => ({ value: v, label: v })), [rows]);
   const reqOpts = useMemo(
@@ -190,6 +230,16 @@ export default function EmployeesOvertimeRequests() {
     if (!f.lateVals.includes("all")) list = list.filter((r) => f.lateVals.includes(lateVal(r)));
     if (!f.reasons.includes("all")) list = list.filter((r) => f.reasons.includes(r.requesterReason || "—"));
     if (!f.statuses.includes("all")) list = list.filter((r) => f.statuses.includes(r.status));
+
+    // Date range filtering
+    if (f.dateFrom) {
+      list = list.filter((r) => new Date(r.createdAt) >= new Date(f.dateFrom));
+    }
+    if (f.dateTo) {
+      const endDate = new Date(f.dateTo);
+      endDate.setHours(23, 59, 59, 999);
+      list = list.filter((r) => new Date(r.createdAt) <= endDate);
+    }
 
     const cmpStr = (a, b) => a.localeCompare(b);
     const cmpNum = (a, b) => a - b;
@@ -267,6 +317,7 @@ export default function EmployeesOvertimeRequests() {
     setSelected(row);
     setComment("");
   };
+
   const closeDialog = () => {
     setDialogType(null);
     setSelected(null);
@@ -287,11 +338,22 @@ export default function EmployeesOvertimeRequests() {
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.message || "Operation failed.");
-      toast.message(j.message || "Success");
+      
+      // Enhanced success notification
+      toast.success(
+        `Overtime request ${endpoint === "approve" ? "approved" : "rejected"} successfully!`,
+        {
+          description: `Request ID: ${selected.id}`,
+        }
+      );
+      
       fetchRows();
       closeDialog();
     } catch (e) {
-      toast.message(e.message || "Error");
+      // Enhanced error notification
+      toast.error(e.message || "Operation failed", {
+        description: "Please try again or contact support.",
+      });
     }
     setActionLoading(false);
   };
@@ -306,12 +368,12 @@ export default function EmployeesOvertimeRequests() {
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.message || "Delete failed.");
-      toast.message(j.message || "Deleted");
+      toast.success("Overtime request deleted successfully");
       setRows((p) => p.filter((row) => row.id !== selected.id));
       setShowDelete(false);
       setSelected(null);
     } catch (e) {
-      toast.message(e.message || "Delete failed");
+      toast.error(e.message || "Delete failed");
     }
     setActionLoading(false);
   };
@@ -328,7 +390,9 @@ export default function EmployeesOvertimeRequests() {
 
   return (
     <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
-      <Toaster position="top-center" />
+      <Toaster position="top-center" richColors />
+      
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
         <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
           <Clock className="h-7 w-7 text-orange-500" />
@@ -345,6 +409,55 @@ export default function EmployeesOvertimeRequests() {
           </Tooltip>
         </TooltipProvider>
       </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="border-2 border-blue-500 shadow-md overflow-hidden dark:border-blue-500/50">
+          <div className="h-1 w-full bg-blue-500" />
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 mb-2">
+              <Clock className="h-5 w-5" />
+              <span className="text-sm font-medium">Total Requests</span>
+            </div>
+            <p className="text-3xl font-bold">{stats.total}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-2 border-amber-500 shadow-md overflow-hidden dark:border-amber-500/50">
+          <div className="h-1 w-full bg-amber-500" />
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 mb-2">
+              <Clock className="h-5 w-5" />
+              <span className="text-sm font-medium">Pending</span>
+            </div>
+            <p className="text-3xl font-bold">{stats.pending}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-2 border-green-500 shadow-md overflow-hidden dark:border-green-500/50">
+          <div className="h-1 w-full bg-green-500" />
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-green-600 dark:text-green-400 mb-2">
+              <CheckCircle2 className="h-5 w-5" />
+              <span className="text-sm font-medium">Approved</span>
+            </div>
+            <p className="text-3xl font-bold">{stats.approved}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-2 border-orange-500 shadow-md overflow-hidden dark:border-orange-500/50">
+          <div className="h-1 w-full bg-orange-500" />
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400 mb-2">
+              <TrendingUp className="h-5 w-5" />
+              <span className="text-sm font-medium">Approved Hours</span>
+            </div>
+            <p className="text-3xl font-bold">{stats.approvedHours}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Table Controls */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
@@ -378,8 +491,28 @@ export default function EmployeesOvertimeRequests() {
               selKey="statuses"
             />
           </div>
+          <div className="flex flex-wrap gap-3 items-center">
+            <span className="text-sm font-medium text-muted-foreground">Date Range:</span>
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+              className="px-3 py-2 border rounded-lg text-sm bg-background"
+              placeholder="From"
+            />
+            <span className="text-sm text-muted-foreground">to</span>
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+              className="px-3 py-2 border rounded-lg text-sm bg-background"
+              placeholder="To"
+            />
+          </div>
         </CardContent>
       </Card>
+
+      {/* Overtime Requests Table */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
         <CardHeader className="pb-2">
@@ -396,6 +529,8 @@ export default function EmployeesOvertimeRequests() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="text-center w-12">Expand</TableHead>
+
                   {columnVisibility.includes("otId") && (
                     <TableHead
                       className="cursor-pointer text-center whitespace-nowrap"
@@ -546,151 +681,282 @@ export default function EmployeesOvertimeRequests() {
 
               <TableBody>
                 {loading ? (
-                  <TableSkeleton rows={5} cols={columnVisibility.length + 1} />
+                  <TableSkeleton rows={5} cols={columnVisibility.length + 2} />
                 ) : viewRows.length ? (
                   <AnimatePresence>
                     {viewRows.map((r) => (
-                      <motion.tr
-                        key={r.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="border-b hover:bg-muted/50"
-                      >
-                        {columnVisibility.includes("otId") && (
-                          <TableCell className="text-center text-nowrap text-xs">{r.id}</TableCell>
-                        )}
-                        {columnVisibility.includes("requester") && (
-                          <TableCell className="text-center text-nowrap text-xs">
-                            {r.requester?.email || r.requester?.username || "—"}
+                      <React.Fragment key={r.id}>
+                        <motion.tr
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="border-b hover:bg-muted/50"
+                        >
+                          <TableCell className="text-center">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setExpandedRow(expandedRow === r.id ? null : r.id)}
+                              className="h-6 w-6"
+                            >
+                              {expandedRow === r.id ? (
+                                <ChevronUp className="h-4 w-4" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4" />
+                              )}
+                            </Button>
                           </TableCell>
-                        )}
-                        {columnVisibility.includes("timeLogId") && (
-                          <TableCell className="text-center text-nowrap text-xs">{r.timeLogId || "—"}</TableCell>
-                        )}
-                        {columnVisibility.includes("otHours") && (
-                          <TableCell className="text-center text-nowrap text-xs">{otVal(r)}</TableCell>
-                        )}
-                        {columnVisibility.includes("lateHours") && (
-                          <TableCell className="text-center text-nowrap text-xs">{lateVal(r)}</TableCell>
-                        )}
-                        {columnVisibility.includes("reason") && (
-                          <TableCell className="max-w-xs truncate text-xs">
-                            {r.requesterReason || <span className="italic text-muted-foreground text-xs">—</span>}
+
+                          {columnVisibility.includes("otId") && (
+                            <TableCell className="text-center text-nowrap text-xs">{r.id}</TableCell>
+                          )}
+                          {columnVisibility.includes("requester") && (
+                            <TableCell className="text-center text-nowrap text-xs">
+                              {r.requester?.email || r.requester?.username || "—"}
+                            </TableCell>
+                          )}
+                          {columnVisibility.includes("timeLogId") && (
+                            <TableCell className="text-center text-nowrap text-xs">{r.timeLogId || "—"}</TableCell>
+                          )}
+                          {columnVisibility.includes("otHours") && (
+                            <TableCell className="text-center text-nowrap text-xs">{otVal(r)}</TableCell>
+                          )}
+                          {columnVisibility.includes("lateHours") && (
+                            <TableCell className="text-center text-nowrap text-xs">{lateVal(r)}</TableCell>
+                          )}
+                          {columnVisibility.includes("reason") && (
+                            <TableCell className="max-w-xs truncate text-xs">
+                              {r.requesterReason || <span className="italic text-muted-foreground text-xs">—</span>}
+                            </TableCell>
+                          )}
+                          {columnVisibility.includes("status") && (
+                            <TableCell className="text-center text-nowrap text-xs">
+                              <StatusBadge status={r.status} />
+                            </TableCell>
+                          )}
+                          {columnVisibility.includes("createdAt") && (
+                            <TableCell className="text-center text-nowrap text-xs">{fmtMMDDYYYY_hhmma(r.createdAt)}</TableCell>
+                          )}
+                          {columnVisibility.includes("updatedAt") && (
+                            <TableCell className="text-center text-nowrap text-xs">{fmtMMDDYYYY_hhmma(r.updatedAt)}</TableCell>
+                          )}
+
+                          <TableCell className="text-center whitespace-nowrap text-xs">
+                            <div className="flex justify-center gap-1">
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-sky-700 hover:bg-sky-500/10 dark:text-sky-400 dark:hover:bg-sky-500/20 text-xs"
+                                      onClick={() => {
+                                        setLogData(r.timeLog);
+                                        setLogOpen(true);
+                                      }}
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>View Time Log</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20 text-xs"
+                                      onClick={() => {
+                                        setSelected(r);
+                                        setDetailsOpen(true);
+                                      }}
+                                    >
+                                      <Info className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Overtime Details</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+
+                              {r.status === "pending" && canApprove && (
+                                <>
+                                  <TooltipProvider delayDuration={300}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 text-green-700 hover:bg-green-500/10 dark:text-green-400 dark:hover:bg-green-500/20 text-xs"
+                                          onClick={() => openDialog("approve", r)}
+                                        >
+                                          <CheckCircle2 className="h-4 w-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Approve</TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+
+                                  <TooltipProvider delayDuration={300}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 text-red-700 hover:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 text-xs"
+                                          onClick={() => openDialog("reject", r)}
+                                        >
+                                          <XCircle className="h-4 w-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Reject</TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                </>
+                              )}
+
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <DeleteBtn
+                                      onClick={() => {
+                                        setSelected(r);
+                                        setShowDelete(true);
+                                      }}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </DeleteBtn>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Delete</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
                           </TableCell>
-                        )}
-                        {columnVisibility.includes("status") && (
-                          <TableCell className="text-center text-nowrap text-xs">
-                            <StatusBadge status={r.status} />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("createdAt") && (
-                          <TableCell className="text-center text-nowrap text-xs">{fmtMMDDYYYY_hhmma(r.createdAt)}</TableCell>
-                        )}
-                        {columnVisibility.includes("updatedAt") && (
-                          <TableCell className="text-center text-nowrap text-xs">{fmtMMDDYYYY_hhmma(r.updatedAt)}</TableCell>
-                        )}
+                        </motion.tr>
 
-                        <TableCell className="text-center whitespace-nowrap text-xs">
-                          <div className="flex justify-center gap-1">
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 text-sky-700 hover:bg-sky-500/10 dark:text-sky-400 dark:hover:bg-sky-500/20 text-xs"
-                                    onClick={() => {
-                                      setLogData(r.timeLog);
-                                      setLogOpen(true);
-                                    }}
+                        {/* Expandable Details Row */}
+                        {expandedRow === r.id && (
+                          <motion.tr
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <TableCell colSpan={columnVisibility.length + 2}>
+                              <div className="p-6 bg-muted/30 space-y-4">
+                                {/* Projected Times */}
+                                {getProjectedTime(r) && (
+                                  <div className="bg-background rounded-lg p-4 border">
+                                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                                      <Clock className="h-4 w-4 text-orange-500" />
+                                      Projected Times
+                                    </h4>
+                                    <div className="space-y-2 text-sm">
+                                      <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Original Clock-out:</span>
+                                        <span>{fmtMMDDYYYY_hhmma(r.timeLog?.timeOut)}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-muted-foreground">With {otVal(r)}h OT:</span>
+                                        <span className="text-orange-600 dark:text-orange-400 font-medium">
+                                          {fmtMMDDYYYY_hhmma(getProjectedTime(r))}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Total Hours:</span>
+                                        <span className="font-bold">{getTotalHours(r)}h</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Request & Approval Details */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="bg-background rounded-lg p-4 border">
+                                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                                      <FileText className="h-4 w-4 text-orange-500" />
+                                      Request Details
+                                    </h4>
+                                    <div className="space-y-2 text-sm">
+                                      <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Request ID:</span>
+                                        <span className="font-mono text-xs">{r.id}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-muted-foreground">TimeLog ID:</span>
+                                        <span className="font-mono text-xs">{r.timeLogId}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Requested Hours:</span>
+                                        <span className="font-bold">{otVal(r)} hrs</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Late Hours:</span>
+                                        <span>{lateVal(r)} hrs</span>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="bg-background rounded-lg p-4 border">
+                                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                                      <CheckCircle2 className="h-4 w-4 text-orange-500" />
+                                      Approval Information
+                                    </h4>
+                                    <div className="space-y-2 text-sm">
+                                      <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Submitted:</span>
+                                        <span>{fmtMMDDYYYY_hhmma(r.createdAt)}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Last Updated:</span>
+                                        <span>{fmtMMDDYYYY_hhmma(r.updatedAt)}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Approver:</span>
+                                        <span className="truncate max-w-[200px]">
+                                          {r.requester?.email || r.requester?.username || "—"}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Reason for Overtime */}
+                                {r.requesterReason && (
+                                  <div className="bg-background rounded-lg p-4 border text-center">
+                                    <h4 className="font-semibold mb-2">Reason for Overtime</h4>
+                                    <p className="text-sm p-3 bg-muted rounded">{r.requesterReason}</p>
+                                  </div>
+                                )}
+
+                                {/* Approver Comments */}
+                                {r.approverComments && (
+                                  <div
+                                    className={`rounded-lg p-4 ${
+                                      r.status === "approved"
+                                        ? "bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800"
+                                        : "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"
+                                    }`}
                                   >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>View Time Log</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20 text-xs"
-                                    onClick={() => {
-                                      setSelected(r);
-                                      setDetailsOpen(true);
-                                    }}
-                                  >
-                                    <Info className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Overtime Details</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-
-                            {r.status === "pending" && (
-                              <>
-                                <TooltipProvider delayDuration={300}>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 text-green-700 hover:bg-green-500/10 dark:text-green-400 dark:hover:bg-green-500/20 text-xs"
-                                        onClick={() => openDialog("approve", r)}
-                                      >
-                                        <CheckCircle2 className="h-4 w-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Approve</TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-
-                                <TooltipProvider delayDuration={300}>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 text-red-700 hover:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 text-xs"
-                                        onClick={() => openDialog("reject", r)}
-                                      >
-                                        <XCircle className="h-4 w-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Reject</TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              </>
-                            )}
-
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <DeleteBtn
-                                    onClick={() => {
-                                      setSelected(r);
-                                      setShowDelete(true);
-                                    }}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </DeleteBtn>
-                                </TooltipTrigger>
-                                <TooltipContent>Delete</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </TableCell>
-                      </motion.tr>
+                                    <h4 className="font-semibold mb-2">
+                                      {r.status === "approved" ? "Approval" : "Rejection"} Comments
+                                    </h4>
+                                    <p className="text-sm">{r.approverComments}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                          </motion.tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </AnimatePresence>
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={columnVisibility.length + 1} className="h-28 text-center text-xs">
+                    <TableCell colSpan={columnVisibility.length + 2} className="h-28 text-center text-xs">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
                         <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 text-xs italic">
                           <Calendar className="h-8 w-8 text-orange-500/50" />
@@ -706,6 +972,7 @@ export default function EmployeesOvertimeRequests() {
         </CardContent>
       </Card>
 
+      {/* Approve/Reject Dialog */}
       <Dialog open={!!dialogType} onOpenChange={(o) => !o && closeDialog()}>
         <DialogContent className="sm:max-w-md border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -777,6 +1044,7 @@ export default function EmployeesOvertimeRequests() {
         </DialogContent>
       </Dialog>
 
+      {/* Details Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="sm:max-w-md border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -850,6 +1118,7 @@ export default function EmployeesOvertimeRequests() {
         </DialogContent>
       </Dialog>
 
+      {/* Time Log Dialog */}
       <Dialog open={logOpen} onOpenChange={setLogOpen}>
         <DialogContent className="sm:max-w-lg border-2 dark:border-white/10">
           <div className="h-1 w-full bg-sky-500 -mt-6 mb-4" />
@@ -914,6 +1183,7 @@ export default function EmployeesOvertimeRequests() {
         </DialogContent>
       </Dialog>
 
+      {/* Delete Dialog */}
       <Dialog open={showDelete} onOpenChange={setShowDelete}>
         <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-900/40">
           <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />

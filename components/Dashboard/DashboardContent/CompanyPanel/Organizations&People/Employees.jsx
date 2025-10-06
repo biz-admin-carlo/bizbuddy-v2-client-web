@@ -1,4 +1,3 @@
-// components/Dashboard/DashboardContent/CompanyPanel/Organizations&People/Employees.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
@@ -21,6 +20,7 @@ import {
   Info,
   FileText,
   Plus,
+  Eye,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Papa from "papaparse";
@@ -97,6 +97,10 @@ export default function Employees() {
   const [importReport, setImportReport] = useState({ total: 0, success: 0, failed: [], processed: 0 });
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showInfoDialog, setShowInfoDialog] = useState(false);
+
+  // Details modal state
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
 
   const blankEmployment = {
     jobTitle: "",
@@ -177,7 +181,18 @@ export default function Employees() {
     { value: "updatedAt", label: "Updated At" },
     { value: "actions", label: "Actions" },
   ];
-  const [visibleCols, setVisibleCols] = useState(columnOptions.map((o) => o.value));
+  
+  // Updated default visible columns - focusing on essential information
+  const [visibleCols, setVisibleCols] = useState([
+    "employeeId", // Company Employee ID (not system ID)
+    "name", 
+    "email", 
+    "role", 
+    "department", 
+    "hireDate",
+    "jobTitle",
+    "actions"
+  ]);
 
   useEffect(() => {
     if (!token) return;
@@ -361,6 +376,9 @@ export default function Employees() {
   };
 
   const handleCreateEmployee = async () => {
+    console.log("handleCreateEmployee called");
+    console.log("createForm:", createForm);
+    
     if (!createForm.firstName.trim()) return toast.error("First name required");
     if (!createForm.lastName.trim()) return toast.error("Last name required");
     if (!createForm.email.trim()) return toast.error("Email required");
@@ -483,6 +501,11 @@ export default function Employees() {
     }
     setDeleteLoading(false);
     setShowDeleteModal(false);
+  };
+
+  const openDetails = (e) => {
+    setSelectedEmployee(e);
+    setShowDetailsModal(true);
   };
 
   const openFile = () => fileRef.current?.click();
@@ -651,6 +674,36 @@ export default function Employees() {
     doc.save(`Employees_${stamp}.pdf`);
     toast.message("PDF exported");
     setPdfExporting(false);
+  };
+
+  // Helper component for employee details tooltip
+  const EmployeeDetailsTooltip = ({ employee, children }) => {
+    const d = employee.employmentDetail ?? {};
+    const name = `${employee.profile?.firstName || ""} ${employee.profile?.lastName || ""}`.trim();
+    
+    return (
+      <TooltipProvider delayDuration={500}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {children}
+          </TooltipTrigger>
+          <TooltipContent className="max-w-sm p-4 bg-white dark:bg-gray-800 border shadow-lg" side="right">
+            <div className="space-y-2">
+              <div className="font-medium text-sm border-b pb-1">{name}</div>
+              <div className="text-xs space-y-1 text-muted-foreground">
+                <div><span className="font-medium">Status:</span> {d.employmentStatus ? d.employmentStatus.replace('_', '-') : "—"}</div>
+                <div><span className="font-medium">Type:</span> {d.employmentType ? d.employmentType.replace('_', ' ') : "—"}</div>
+                <div><span className="font-medium">Location:</span> {d.workLocation || "—"}</div>
+                <div><span className="font-medium">Exempt:</span> {d.exemptStatus ? d.exemptStatus.replace('_', '-') : "—"}</div>
+                {d.timeZone && <div><span className="font-medium">Timezone:</span> {d.timeZone}</div>}
+                {d.supervisor?.email && <div><span className="font-medium">Supervisor:</span> {d.supervisor.email}</div>}
+                {d.probationEndDate && <div><span className="font-medium">Probation Ends:</span> {fmtMMDDYYYY(d.probationEndDate)}</div>}
+              </div>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
   };
 
   return (
@@ -824,110 +877,133 @@ export default function Employees() {
                       const d = e.employmentDetail ?? {};
                       const name = `${e.profile?.firstName || ""} ${e.profile?.lastName || ""}`.trim();
                       return (
-                        <motion.tr
-                          key={e.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="border-b hover:bg-muted/50"
-                        >
-                          {visibleCols.includes("id") && (
-                            <TableCell className="text-center text-xs text-nowrap">{e.id}</TableCell>
-                          )}
-                          {visibleCols.includes("employeeId") && (
-                            <TableCell className="text-center text-xs text-nowrap">{e.employeeId || "—"}</TableCell>
-                          )}
-                          {visibleCols.includes("name") && (
-                            <TableCell className="text-center capitalize text-xs text-nowrap">{name}</TableCell>
-                          )}
-                          {visibleCols.includes("email") && (
-                            <TableCell className="text-center text-xs text-nowrap ">{e.email}</TableCell>
-                          )}
-                          {visibleCols.includes("role") && (
-                            <TableCell className="text-center text-nowrap text-xs">
-                              <RoleBadge role={e.role} />
-                            </TableCell>
-                          )}
-                          {visibleCols.includes("department") && (
-                            <TableCell className="text-center capitalize text-xs text-nowrap ">
-                              {e.department ? (
-                                e.department.name
-                              ) : (
-                                <span className="text-muted-foreground text-xs italic">No Department Assigned</span>
-                              )}
-                            </TableCell>
-                          )}
-                          {visibleCols.includes("hireDate") && (
-                            <TableCell className="text-center text-xs text-nowrap">{fmtMMDDYYYY(e.hireDate)}</TableCell>
-                          )}
-                          {visibleCols.includes("jobTitle") && (
-                            <TableCell className="text-center text-xs text-nowrap">{d.jobTitle || "—"}</TableCell>
-                          )}
-                          {visibleCols.includes("employmentStatus") && (
-                            <TableCell className="text-center text-xs capitalize">{d.employmentStatus || "—"}</TableCell>
-                          )}
-                          {visibleCols.includes("exemptStatus") && (
-                            <TableCell className="text-center text-xs capitalize">{d.exemptStatus || "—"}</TableCell>
-                          )}
-                          {visibleCols.includes("employmentType") && (
-                            <TableCell className="text-center text-xs capitalize">{d.employmentType || "—"}</TableCell>
-                          )}
-                          {visibleCols.includes("workLocation") && (
-                            <TableCell className="text-center text-xs capitalize">{d.workLocation || "—"}</TableCell>
-                          )}
-                          {visibleCols.includes("probationEndDate") && (
-                            <TableCell className="text-center text-xs">
-                              {d.probationEndDate ? fmtMMDDYYYY(d.probationEndDate.split("T")[0]) : "—"}
-                            </TableCell>
-                          )}
-                          {visibleCols.includes("timeZone") && (
-                            <TableCell className="text-center text-xs">{d.timeZone || "—"}</TableCell>
-                          )}
-                          {visibleCols.includes("supervisor") && (
-                            <TableCell className="text-center text-xs">{d.supervisor?.email || "—"}</TableCell>
-                          )}
-                          {visibleCols.includes("createdAt") && (
-                            <TableCell className="text-center text-xs text-nowrap">{fmtMMDDYYYY_hhmma(e.createdAt)}</TableCell>
-                          )}
-                          {visibleCols.includes("updatedAt") && (
-                            <TableCell className="text-center text-xs text-nowrap">{fmtMMDDYYYY_hhmma(e.updatedAt)}</TableCell>
-                          )}
-                          {visibleCols.includes("actions") && (
-                            <TableCell className="text-center">
-                              <div className="flex justify-center gap-2">
-                                <TooltipProvider delayDuration={300}>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => openEdit(e)}
-                                        className="text-orange-500 hover:bg-orange-500/10"
-                                      >
-                                        <EditIcon className="h-4 w-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Edit employee</TooltipContent>
-                                  </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => openDelete(e)}
-                                        className="text-red-500 hover:bg-red-500/10"
-                                      >
-                                        <TrashIcon className="h-4 w-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Delete employee</TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              </div>
-                            </TableCell>
-                          )}
-                        </motion.tr>
+                        <EmployeeDetailsTooltip key={e.id} employee={e}>
+                          <motion.tr
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="border-b hover:bg-muted/50 cursor-pointer"
+                          >
+                            {visibleCols.includes("id") && (
+                              <TableCell className="text-center text-xs text-nowrap">{e.id}</TableCell>
+                            )}
+                            {visibleCols.includes("employeeId") && (
+                              <TableCell className="text-center text-xs text-nowrap">{e.employeeId || "—"}</TableCell>
+                            )}
+                            {visibleCols.includes("name") && (
+                              <TableCell className="text-center capitalize text-xs text-nowrap">{name}</TableCell>
+                            )}
+                            {visibleCols.includes("email") && (
+                              <TableCell className="text-center text-xs text-nowrap ">{e.email}</TableCell>
+                            )}
+                            {visibleCols.includes("role") && (
+                              <TableCell className="text-center text-nowrap text-xs">
+                                <RoleBadge role={e.role} />
+                              </TableCell>
+                            )}
+                            {visibleCols.includes("department") && (
+                              <TableCell className="text-center capitalize text-xs text-nowrap ">
+                                {e.department ? (
+                                  e.department.name
+                                ) : (
+                                  <span className="text-muted-foreground text-xs italic">No Department Assigned</span>
+                                )}
+                              </TableCell>
+                            )}
+                            {visibleCols.includes("hireDate") && (
+                              <TableCell className="text-center text-xs text-nowrap">{fmtMMDDYYYY(e.hireDate)}</TableCell>
+                            )}
+                            {visibleCols.includes("jobTitle") && (
+                              <TableCell className="text-center text-xs text-nowrap">{d.jobTitle || "—"}</TableCell>
+                            )}
+                            {visibleCols.includes("employmentStatus") && (
+                              <TableCell className="text-center text-xs capitalize">{d.employmentStatus || "—"}</TableCell>
+                            )}
+                            {visibleCols.includes("exemptStatus") && (
+                              <TableCell className="text-center text-xs capitalize">{d.exemptStatus || "—"}</TableCell>
+                            )}
+                            {visibleCols.includes("employmentType") && (
+                              <TableCell className="text-center text-xs capitalize">{d.employmentType || "—"}</TableCell>
+                            )}
+                            {visibleCols.includes("workLocation") && (
+                              <TableCell className="text-center text-xs capitalize">{d.workLocation || "—"}</TableCell>
+                            )}
+                            {visibleCols.includes("probationEndDate") && (
+                              <TableCell className="text-center text-xs">
+                                {d.probationEndDate ? fmtMMDDYYYY(d.probationEndDate.split("T")[0]) : "—"}
+                              </TableCell>
+                            )}
+                            {visibleCols.includes("timeZone") && (
+                              <TableCell className="text-center text-xs">{d.timeZone || "—"}</TableCell>
+                            )}
+                            {visibleCols.includes("supervisor") && (
+                              <TableCell className="text-center text-xs">{d.supervisor?.email || "—"}</TableCell>
+                            )}
+                            {visibleCols.includes("createdAt") && (
+                              <TableCell className="text-center text-xs text-nowrap">{fmtMMDDYYYY_hhmma(e.createdAt)}</TableCell>
+                            )}
+                            {visibleCols.includes("updatedAt") && (
+                              <TableCell className="text-center text-xs text-nowrap">{fmtMMDDYYYY_hhmma(e.updatedAt)}</TableCell>
+                            )}
+                            {visibleCols.includes("actions") && (
+                              <TableCell className="text-center">
+                                <div className="flex justify-center gap-2">
+                                  <TooltipProvider delayDuration={300}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={(ev) => {
+                                            ev.stopPropagation();
+                                            openDetails(e);
+                                          }}
+                                          className="text-blue-500 hover:bg-blue-500/10"
+                                        >
+                                          <Eye className="h-4 w-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>View details</TooltipContent>
+                                    </Tooltip>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={(ev) => {
+                                            ev.stopPropagation();
+                                            openEdit(e);
+                                          }}
+                                          className="text-orange-500 hover:bg-orange-500/10"
+                                        >
+                                          <EditIcon className="h-4 w-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Edit employee</TooltipContent>
+                                    </Tooltip>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={(ev) => {
+                                            ev.stopPropagation();
+                                            openDelete(e);
+                                          }}
+                                          className="text-red-500 hover:bg-red-500/10"
+                                        >
+                                          <TrashIcon className="h-4 w-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Delete employee</TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                </div>
+                              </TableCell>
+                            )}
+                          </motion.tr>
+                        </EmployeeDetailsTooltip>
                       );
                     })}
                   </AnimatePresence>
@@ -953,6 +1029,149 @@ export default function Employees() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Employee Details Modal */}
+      <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
+        <DialogContent className="border-2 max-w-2xl">
+          <div className="h-1 w-full bg-blue-500 -mt-4 mb-4" />
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="p-2 rounded-full bg-blue-200/20 text-blue-500">
+                <Eye className="h-5 w-5" />
+              </div>
+              Employee Details
+            </DialogTitle>
+            <DialogDescription>Complete employee information</DialogDescription>
+          </DialogHeader>
+          {selectedEmployee && (
+            <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Employee ID</label>
+                    <p className="text-sm">{selectedEmployee.id}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Company Employee ID</label>
+                    <p className="text-sm">{selectedEmployee.employeeId || "—"}</p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Name</label>
+                    <p className="text-sm capitalize">
+                      {`${selectedEmployee.profile?.firstName || ""} ${selectedEmployee.profile?.lastName || ""}`.trim()}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Email</label>
+                    <p className="text-sm">{selectedEmployee.email}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Role</label>
+                    <div className="mt-1">
+                      <RoleBadge role={selectedEmployee.role} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Department</label>
+                    <p className="text-sm">
+                      {selectedEmployee.department ? selectedEmployee.department.name : "No Department Assigned"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Hire Date</label>
+                    <p className="text-sm">{fmtMMDDYYYY(selectedEmployee.hireDate)}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Job Title</label>
+                    <p className="text-sm">{selectedEmployee.employmentDetail?.jobTitle || "—"}</p>
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h3 className="text-sm font-medium mb-3">Employment Details</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Employment Status</label>
+                      <p className="text-sm capitalize">{selectedEmployee.employmentDetail?.employmentStatus || "—"}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Exempt Status</label>
+                      <p className="text-sm capitalize">{selectedEmployee.employmentDetail?.exemptStatus || "—"}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 mt-3">
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Employment Type</label>
+                      <p className="text-sm capitalize">{selectedEmployee.employmentDetail?.employmentType?.replace('_', ' ') || "—"}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Work Location</label>
+                      <p className="text-sm capitalize">{selectedEmployee.employmentDetail?.workLocation || "—"}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 mt-3">
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Time Zone</label>
+                      <p className="text-sm">{selectedEmployee.employmentDetail?.timeZone || "—"}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Supervisor</label>
+                      <p className="text-sm">{selectedEmployee.employmentDetail?.supervisor?.email || "—"}</p>
+                    </div>
+                  </div>
+
+                  {selectedEmployee.employmentDetail?.probationEndDate && (
+                    <div className="mt-3">
+                      <label className="text-sm font-medium text-muted-foreground">Probation End Date</label>
+                      <p className="text-sm">{fmtMMDDYYYY(selectedEmployee.employmentDetail.probationEndDate)}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t pt-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Created At</label>
+                      <p className="text-sm">{fmtMMDDYYYY_hhmma(selectedEmployee.createdAt)}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Updated At</label>
+                      <p className="text-sm">{fmtMMDDYYYY_hhmma(selectedEmployee.updatedAt)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDetailsModal(false)}>
+              Close
+            </Button>
+            {selectedEmployee && (
+              <Button 
+                onClick={() => {
+                  setShowDetailsModal(false);
+                  openEdit(selectedEmployee);
+                }}
+                className="bg-orange-500 text-white"
+              >
+                Edit Employee
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
         <DialogContent className="border-2">
