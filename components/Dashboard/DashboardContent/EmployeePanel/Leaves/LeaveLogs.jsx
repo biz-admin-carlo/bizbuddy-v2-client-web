@@ -1,72 +1,90 @@
 // components/Dashboard/DashboardContent/EmployeePanel/Leaves/LeaveLogs.jsx
-/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, RefreshCw, Calendar, Clock, Filter, AlertCircle, XCircle, ChevronDown, Check } from "lucide-react";
+import { CheckCircle2, RefreshCw, Calendar, Clock, AlertCircle, XCircle, Filter, Search, X } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
-import { motion, AnimatePresence } from "framer-motion";
 import { fmtMMDDYYYY_hhmma } from "@/lib/dateTimeFormatter";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import TableSkeleton from "@/components/common/TableSkeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 const statusColors = {
-  pending: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
-  approved: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-};
-const statusIcons = {
-  pending: <Clock className="h-3 w-3 mr-1" />,
-  approved: <CheckCircle2 className="h-3 w-3 mr-1" />,
-  rejected: <XCircle className="h-3 w-3 mr-1" />,
+  pending: "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/50 dark:text-amber-400 dark:border-amber-900",
+  approved: "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-400 dark:border-emerald-900",
+  rejected: "bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/50 dark:text-red-400 dark:border-red-900",
 };
 
-const labelClass = "my-auto shrink-0 text-sm font-medium text-muted-foreground";
+const statusIcons = {
+  pending: <Clock className="h-3.5 w-3.5" />,
+  approved: <CheckCircle2 className="h-3.5 w-3.5" />,
+  rejected: <XCircle className="h-3.5 w-3.5" />,
+};
 
 const columnOptions = [
-  { value: "id", label: "ID" },
-  { value: "leaveType", label: "Leave Type" },
-  { value: "dateRange", label: "Date Range" },
-  { value: "leaveReason", label: "My Reason" },
-  { value: "approver", label: "Approver" },
-  { value: "approverComments", label: "Approver Comments" },
-  { value: "createdAt", label: "Created At" },
-  { value: "updatedAt", label: "Updated At" },
-  { value: "status", label: "Status" },
+  { value: "id", label: "ID", defaultVisible: false },
+  { value: "leaveType", label: "Leave Type", defaultVisible: true },
+  { value: "dateRange", label: "Date Range", defaultVisible: true },
+  { value: "leaveReason", label: "Reason", defaultVisible: true },
+  { value: "approver", label: "Approver", defaultVisible: true },
+  { value: "approverComments", label: "Comments", defaultVisible: false },
+  { value: "createdAt", label: "Submitted", defaultVisible: true },
+  { value: "updatedAt", label: "Last Updated", defaultVisible: false },
+  { value: "status", label: "Status", defaultVisible: true },
 ];
+
+const formatDateWithDay = (dateStr) => {
+  const date = new Date(dateStr);
+  const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'Asia/Manila' });
+  const formattedDate = date.toLocaleString('en-US', { 
+    month: 'short', 
+    day: 'numeric', 
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Manila'
+  });
+  return { dayOfWeek, formattedDate: `${formattedDate} PHT` };
+};
 
 export default function LeaveLogs() {
   const { token } = useAuthStore();
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterTypes, setFilterTypes] = useState([]);
-  const [filterIds, setFilterIds] = useState([]);
   const [sortKey, setSortKey] = useState("newest");
-  const [columnVisibility, setColumnVisibility] = useState(columnOptions.map((c) => c.value));
+  const [columnVisibility, setColumnVisibility] = useState(
+    columnOptions.filter((c) => c.defaultVisible).map((c) => c.value)
+  );
 
   const fetchLeaves = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/leaves/my`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_URL}/api/leaves/my`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await res.json();
       if (res.ok) {
         setLeaves(data.data || []);
-        toast.message("Leave logs refreshed", { icon: <CheckCircle2 className="h-5 w-5 text-orange-500" /> });
+        toast.message("Leave logs refreshed", {
+          icon: <CheckCircle2 className="h-5 w-5 text-orange-500" />,
+        });
       } else {
         throw new Error(data.message || "Failed to fetch leaves");
       }
     } catch (err) {
-      toast.message(err.message, { icon: <AlertCircle className="h-5 w-5 text-red-500" />, duration: 5000 });
+      toast.message(err.message, {
+        icon: <AlertCircle className="h-5 w-5 text-red-500" />,
+        duration: 5000,
+      });
     } finally {
       setLoading(false);
     }
@@ -76,375 +94,433 @@ export default function LeaveLogs() {
     fetchLeaves();
   }, [fetchLeaves]);
 
-  const passesFilters = (l) => {
-    if (filterStatus !== "all" && l.status !== filterStatus) return false;
-    if (filterTypes.length && !filterTypes.includes(l.leaveType)) return false;
-    if (filterIds.length && !filterIds.includes(l.id)) return false;
-    return true;
-  };
-
   const list = useMemo(() => {
-    let l = leaves.filter(passesFilters);
+    let filtered = [...leaves];
 
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (l) =>
+          l.id.toString().includes(query) ||
+          l.leaveType?.toLowerCase().includes(query) ||
+          l.leaveReason?.toLowerCase().includes(query) ||
+          l.approver?.email?.toLowerCase().includes(query)
+      );
+    }
+
+    // Status filter
+    if (filterStatus !== "all") {
+      filtered = filtered.filter((l) => l.status === filterStatus);
+    }
+
+    // Type filter
+    if (filterTypes.length > 0) {
+      filtered = filtered.filter((l) => filterTypes.includes(l.leaveType));
+    }
+
+    // Sorting
     switch (sortKey) {
       case "id":
-        l.sort((a, b) => a.id - b.id);
-        break;
-      case "createdAt":
-        l.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        break;
-      case "updatedAt":
-        l.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-        break;
-      case "oldest":
-        l.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+        filtered.sort((a, b) => a.id - b.id);
         break;
       case "type":
-        l.sort((a, b) => a.leaveType.localeCompare(b.leaveType));
+        filtered.sort((a, b) => a.leaveType.localeCompare(b.leaveType));
         break;
       case "status":
-        l.sort((a, b) => a.status.localeCompare(b.status));
+        filtered.sort((a, b) => a.status.localeCompare(b.status));
+        break;
+      case "oldest":
+        filtered.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+        break;
+      case "createdAt":
+        filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        break;
+      case "updatedAt":
+        filtered.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
         break;
       case "newest":
       default:
-        l.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+        filtered.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
     }
-    return l;
-  }, [leaves, filterStatus, filterTypes, filterIds, sortKey]);
+
+    return filtered;
+  }, [leaves, searchQuery, filterStatus, filterTypes, sortKey]);
+
+  const availableTypes = useMemo(
+    () => Array.from(new Set(leaves.map((l) => l.leaveType))).sort(),
+    [leaves]
+  );
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filterStatus !== "all") count++;
+    if (filterTypes.length > 0) count++;
+    if (searchQuery) count++;
+    return count;
+  }, [filterStatus, filterTypes, searchQuery]);
+
+  const clearAllFilters = () => {
+    setSearchQuery("");
+    setFilterStatus("all");
+    setFilterTypes([]);
+  };
 
   const StatusBadge = ({ status }) => (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
-        statusColors[status] || "bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-300"
+      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium ${
+        statusColors[status] || "bg-gray-100 text-gray-700 border border-gray-200"
       }`}
     >
       {statusIcons[status]}
-      {status}
+      <span className="capitalize">{status}</span>
     </span>
   );
 
-  const toggleColumn = (val) =>
-    setColumnVisibility((prev) => (prev.includes(val) ? prev.filter((x) => x !== val) : [...prev, val]));
-
-  const ColumnSelect = () => {
-    const allChecked = columnVisibility.length === columnOptions.length;
-    const toggle = (val) =>
-      val === "all" ? setColumnVisibility(allChecked ? [] : columnOptions.map((o) => o.value)) : toggleColumn(val);
-    const label = allChecked
-      ? "All columns"
-      : columnVisibility.length === 0
-      ? "No columns"
-      : `${columnVisibility.length} selected`;
-    return (
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" className="min-w-[180px] justify-between">
-            {label}
-            <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-64 p-2 space-y-1" align="start">
-          <div className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer" onClick={() => toggle("all")}>
-            <Checkbox checked={allChecked} /> <span>All columns</span>
-            {allChecked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
-          </div>
-          <div className="max-h-64 overflow-y-auto pr-1">
-            {columnOptions.map((opt) => {
-              const checked = columnVisibility.includes(opt.value);
-              return (
-                <div
-                  key={opt.value}
-                  className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer"
-                  onClick={() => toggle(opt.value)}
-                >
-                  <Checkbox checked={checked} /> <span>{opt.label}</span>
-                  {checked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
-                </div>
-              );
-            })}
-          </div>
-        </PopoverContent>
-      </Popover>
-    );
-  };
-
-  const IdFilterSelect = () => {
-    const ids = leaves.map((l) => l.id);
-    const allChecked = filterIds.length === ids.length;
-    const toggle = (val) => {
-      if (val === "all") return setFilterIds(allChecked ? [] : ids);
-      const num = Number(val);
-      setFilterIds((p) => (p.includes(num) ? p.filter((x) => x !== num) : [...p, num]));
-    };
-    const label = allChecked ? "All IDs" : filterIds.length === 0 ? "No IDs" : `${filterIds.length} selected`;
-    return (
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" className="min-w-[180px] justify-between">
-            {label}
-            <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-64 p-2 space-y-1" align="start">
-          <div className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer" onClick={() => toggle("all")}>
-            <Checkbox checked={allChecked} /> <span>All IDs</span>
-            {allChecked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
-          </div>
-          <div className="max-h-64 overflow-y-auto pr-1">
-            {ids.map((id) => {
-              const checked = filterIds.includes(id);
-              return (
-                <div
-                  key={id}
-                  className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer"
-                  onClick={() => toggle(id)}
-                >
-                  <Checkbox checked={checked} /> <span>{id}</span>
-                  {checked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
-                </div>
-              );
-            })}
-          </div>
-        </PopoverContent>
-      </Popover>
-    );
-  };
-
-  const TypeFilterSelect = () => {
-    const types = Array.from(new Set(leaves.map((l) => l.leaveType))).sort();
-    const allChecked = filterTypes.length === types.length;
-    const toggle = (val) => {
-      if (val === "all") return setFilterTypes(allChecked ? [] : types);
-      setFilterTypes((p) => (p.includes(val) ? p.filter((t) => t !== val) : [...p, val]));
-    };
-    const label = allChecked ? "All types" : filterTypes.length === 0 ? "No types" : `${filterTypes.length} selected`;
-    return (
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" className="min-w-[180px] justify-between">
-            {label}
-            <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-64 p-2 space-y-1" align="start">
-          <div className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer" onClick={() => toggle("all")}>
-            <Checkbox checked={allChecked} /> <span>All types</span>
-            {allChecked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
-          </div>
-          <div className="max-h-64 overflow-y-auto pr-1">
-            {types.map((t) => {
-              const checked = filterTypes.includes(t);
-              return (
-                <div
-                  key={t}
-                  className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer"
-                  onClick={() => toggle(t)}
-                >
-                  <Checkbox checked={checked} /> <span>{t}</span>
-                  {checked && <Check className="ml-auto h-4 w-4 text-orange-500" />}
-                </div>
-              );
-            })}
-          </div>
-        </PopoverContent>
-      </Popover>
-    );
-  };
-
   return (
-    <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <Toaster position="top-center" />
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
-        <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
-          <Calendar className="h-7 w-7 text-orange-500" />
-          Leave Logs
-        </h2>
-        <TooltipProvider delayDuration={300}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="icon" onClick={fetchLeaves} disabled={loading}>
-                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Refresh leave history</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-
-      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-2 relative">
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5 text-orange-500" />
-            Table Controls
-          </CardTitle>
-          <span className="absolute top-2 right-4 text-sm text-muted-foreground">
-            {list.length} of {leaves.length}
-          </span>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-3 items-center">
-            <span className={labelClass}>Columns:</span>
-            <ColumnSelect />
+      <div className="max-w-7xl mx-auto p-4 lg:p-6 space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-orange-100 dark:bg-orange-950 rounded-lg">
+              <Calendar className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                Leave History
+              </h1>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                View and track all your leave requests
+              </p>
+            </div>
           </div>
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={fetchLeaves}
+                  disabled={loading}
+                  variant="outline"
+                  size="default"
+                  className="gap-2"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                  <span className="hidden sm:inline">Refresh</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Refresh leave history</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
 
-          <div className="flex flex-wrap gap-3 items-center">
-            <span className={labelClass}>Filters:</span>
-            <IdFilterSelect />
-            <TypeFilterSelect />
-          </div>
-        </CardContent>
-      </Card>
+        {/* Filters Card */}
+        <Card className="border-2 shadow-sm dark:border-white/10">
+          <div className="h-1 w-full bg-orange-500" />
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Filter className="h-4 w-4 text-orange-500" />
+                Filters & Search
+                {activeFiltersCount > 0 && (
+                  <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-orange-100 dark:bg-orange-950 text-orange-600 dark:text-orange-400 text-xs font-medium">
+                    {activeFiltersCount}
+                  </span>
+                )}
+              </CardTitle>
+              {activeFiltersCount > 0 && (
+                <Button
+                  variant="link"
+                  onClick={clearAllFilters}
+                  className="text-orange-600 dark:text-orange-400 hover:text-orange-700 p-0 h-auto text-xs"
+                >
+                  Clear all
+                </Button>
+              )}
+            </div>
+          </CardHeader>
 
-      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-orange-500" />
-            Leave History
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {columnOptions
-                    .filter((c) => columnVisibility.includes(c.value))
-                    .map(({ value, label }) => (
-                      <TableHead
-                        key={value}
-                        className="cursor-pointer text-nowrap"
-                        onClick={() => {
-                          const next = sortKey === value ? `${value}-desc` : sortKey === `${value}-desc` ? "newest" : value;
-                          setSortKey(
-                            next === `${value}-desc`
-                              ? value.includes("AscSwitch") // no-op
-                              : value
-                          );
-                          if (["id", "createdAt", "updatedAt"].includes(value)) setSortKey(value);
-                          if (value === "leaveType") setSortKey("type");
-                          if (value === "status") setSortKey("status");
-                          if (value === "dateRange") setSortKey(sortKey === "newest" ? "oldest" : "newest");
-                        }}
-                      >
-                        {label}
-                        {["id", "leaveType", "dateRange", "status", "createdAt", "updatedAt"].includes(value) &&
-                          sortKey.startsWith(value.replace("leaveType", "type").replace("dateRange", "")) && (
-                            <ChevronDown
-                              className={`h-4 w-4 inline ${
-                                sortKey === "oldest" || sortKey === "id" || sortKey === "createdAt" || sortKey === "updatedAt"
-                                  ? "rotate-180"
-                                  : ""
-                              }`}
-                            />
-                          )}
-                      </TableHead>
+          <CardContent className="space-y-4">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by ID, type, reason, or approver..."
+                className="w-full pl-10 pr-10 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-600"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Status Filter */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  Status
+                </label>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="all">All statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+
+              {/* Type Filter */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  Leave Type
+                </label>
+                <div className="relative">
+                  <select
+                    value={filterTypes[0] || ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFilterTypes(val ? [val] : []);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value="">All types ({availableTypes.length})</option>
+                    {availableTypes.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
                     ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableSkeleton rows={5} cols={columnVisibility.length} />
-                ) : list.length ? (
-                  <AnimatePresence>
-                    {list.map((l) => (
-                      <motion.tr
-                        key={l.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="border-b transition-colors hover:bg-muted/50"
+                  </select>
+                </div>
+              </div>
+
+              {/* Column Visibility */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  Visible Columns
+                </label>
+                <div className="relative">
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setColumnVisibility((prev) =>
+                        prev.includes(val)
+                          ? prev.filter((x) => x !== val)
+                          : [...prev, val]
+                      );
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value="">
+                      {columnVisibility.length}/{columnOptions.length} columns visible
+                    </option>
+                    {columnOptions.map((col) => (
+                      <option key={col.value} value={col.value}>
+                        {columnVisibility.includes(col.value) ? "✓ " : "○ "}
+                        {col.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Results Summary */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-sm">
+          <p className="text-gray-600 dark:text-gray-400">
+            Showing{" "}
+            <span className="font-semibold text-gray-900 dark:text-gray-100">
+              {list.length}
+            </span>{" "}
+            of{" "}
+            <span className="font-semibold text-gray-900 dark:text-gray-100">
+              {leaves.length}
+            </span>{" "}
+            leave requests
+          </p>
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value)}
+            className="px-3 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="type">By type</option>
+            <option value="status">By status</option>
+            <option value="createdAt">By submission date</option>
+            <option value="updatedAt">By last update</option>
+          </select>
+        </div>
+
+        {/* Table */}
+        <Card className="border-2 shadow-sm dark:border-white/10">
+          <div className="h-1 w-full bg-orange-500" />
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Calendar className="h-5 w-5 text-orange-500" />
+              Leave History
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="rounded-md border overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                  <tr>
+                    {columnOptions
+                      .filter((c) => columnVisibility.includes(c.value))
+                      .map((col) => (
+                        <th
+                          key={col.value}
+                          className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap"
+                        >
+                          {col.label}
+                        </th>
+                      ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-800 bg-white dark:bg-gray-900">
+                  {loading ? (
+                    <TableSkeleton rows={5} cols={columnVisibility.length} />
+                  ) : list.length > 0 ? (
+                    list.map((leave) => (
+                      <tr
+                        key={leave.id}
+                        className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                       >
-                        {columnVisibility.includes("id") && <TableCell className="text-nowrap text-xs">{l.id}</TableCell>}
-
-                        {columnVisibility.includes("leaveType") && (
-                          <TableCell className="text-nowrap text-xs">{l.leaveType}</TableCell>
+                        {columnVisibility.includes("id") && (
+                          <td className="px-4 py-3 text-xs font-mono text-gray-400 dark:text-gray-600 whitespace-nowrap">
+                            {leave.id}
+                          </td>
                         )}
-
+                        {columnVisibility.includes("leaveType") && (
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                            {leave.leaveType}
+                          </td>
+                        )}
                         {columnVisibility.includes("dateRange") && (
-                          <TableCell className="text-nowrap text-xs">
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center">
-                                <span className="text-xs text-muted-foreground mr-1"></span> {fmtMMDDYYYY_hhmma(l.startDate)}
+                          <td className="px-4 py-3 text-sm whitespace-nowrap">
+                            <div className="space-y-2">
+                              <div>
+                                <span className="text-xs text-gray-400 dark:text-gray-500">Start: {formatDateWithDay(leave.startDate).dayOfWeek}</span>
+                                <div className="text-gray-900 dark:text-gray-100 font-medium">
+                                  {formatDateWithDay(leave.startDate).formattedDate}
+                                </div>
                               </div>
-                              <div className="flex items-center">
-                                <span className="text-xs text-muted-foreground mr-1"></span> {fmtMMDDYYYY_hhmma(l.endDate)}
+                              <div>
+                                <span className="text-xs text-gray-400 dark:text-gray-500">End: {formatDateWithDay(leave.endDate).dayOfWeek}</span>
+                                <div className="text-gray-600 dark:text-gray-400">
+                                  {formatDateWithDay(leave.endDate).formattedDate}
+                                </div>
                               </div>
                             </div>
-                          </TableCell>
+                          </td>
                         )}
-
                         {columnVisibility.includes("leaveReason") && (
-                          <TableCell className="text-nowrap text-xs">
-                            {l.leaveReason ? (
-                              <span className="text-xs text-nowrap">{l.leaveReason}</span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground italic">No reason provided</span>
+                          <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 max-w-xs truncate">
+                            {leave.leaveReason || (
+                              <span className="text-gray-400 italic">
+                                No reason provided
+                              </span>
                             )}
-                          </TableCell>
+                          </td>
                         )}
-
                         {columnVisibility.includes("approver") && (
-                          <TableCell className="text-nowrap text-xs">{l.approver?.email || l.approverId || "—"}</TableCell>
+                          <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                            {leave.approver?.email || leave.approverId || "—"}
+                          </td>
                         )}
-
                         {columnVisibility.includes("approverComments") && (
-                          <TableCell className="text-nowrap text-xs">
-                            {l.approverComments ? (
-                              <span className="text-xs">{l.approverComments}</span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground italic">No comments</span>
+                          <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 max-w-xs truncate">
+                            {leave.approverComments || (
+                              <span className="text-gray-400 italic">
+                                No comments
+                              </span>
                             )}
-                          </TableCell>
+                          </td>
                         )}
-
                         {columnVisibility.includes("createdAt") && (
-                          <TableCell className="text-nowrap text-xs">{fmtMMDDYYYY_hhmma(l.createdAt)}</TableCell>
+                          <td className="px-4 py-3 text-sm whitespace-nowrap">
+                            <div>
+                              <span className="text-xs text-gray-400 dark:text-gray-500 block">
+                                {formatDateWithDay(leave.createdAt).dayOfWeek}
+                              </span>
+                              <span className="text-gray-700 dark:text-gray-300">
+                                {formatDateWithDay(leave.createdAt).formattedDate}
+                              </span>
+                            </div>
+                          </td>
                         )}
                         {columnVisibility.includes("updatedAt") && (
-                          <TableCell className="text-nowrap text-xs">{fmtMMDDYYYY_hhmma(l.updatedAt)}</TableCell>
+                          <td className="px-4 py-3 text-sm whitespace-nowrap">
+                            <div>
+                              <span className="text-xs text-gray-400 dark:text-gray-500 block">
+                                {formatDateWithDay(leave.updatedAt).dayOfWeek}
+                              </span>
+                              <span className="text-gray-700 dark:text-gray-300">
+                                {formatDateWithDay(leave.updatedAt).formattedDate}
+                              </span>
+                            </div>
+                          </td>
                         )}
-
                         {columnVisibility.includes("status") && (
-                          <TableCell>
-                            <StatusBadge status={l.status} />
-                          </TableCell>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <StatusBadge status={leave.status} />
+                          </td>
                         )}
-                      </motion.tr>
-                    ))}
-                  </AnimatePresence>
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={columnVisibility.length} className="h-32 text-center">
-                      <div className="flex flex-col items-center justify-center text-muted-foreground">
-                        <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <Calendar className="h-8 w-8 text-orange-500/50" />
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={columnVisibility.length}
+                        className="px-4 py-12 text-center"
+                      >
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded-full">
+                            <Calendar className="h-8 w-8 text-gray-400" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                              No leave requests found
+                            </p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                              {activeFiltersCount > 0
+                                ? "Try adjusting your filters"
+                                : "You haven't submitted any leave requests yet"}
+                            </p>
+                          </div>
+                          {activeFiltersCount > 0 && (
+                            <Button
+                              variant="link"
+                              onClick={clearAllFilters}
+                              className="text-orange-600 dark:text-orange-400 hover:text-orange-700"
+                            >
+                              Clear all filters
+                            </Button>
+                          )}
                         </div>
-                        <p>No leave requests found.</p>
-                        {(filterStatus !== "all" || filterTypes.length || filterIds.length) && (
-                          <Button
-                            variant="link"
-                            onClick={() => {
-                              setFilterStatus("all");
-                              setFilterTypes([]);
-                              setFilterIds([]);
-                            }}
-                            className="text-orange-500 hover:text-orange-600 mt-2"
-                          >
-                            Clear all filters
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

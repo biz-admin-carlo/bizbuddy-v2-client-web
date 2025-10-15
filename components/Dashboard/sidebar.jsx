@@ -61,6 +61,7 @@ const CompanyPanelItems = [
     children: [
       { id: "company/departments", label: "Departments" },
       { id: "company/employees", label: "Employees" },
+      { id: "company/employee-deletion", label: "Employee Account Deletion" },
     ],
   },
   {
