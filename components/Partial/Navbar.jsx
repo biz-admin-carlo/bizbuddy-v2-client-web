@@ -29,40 +29,20 @@ const navLinks = [
   { href: "/contact", label: "Contact Us" },
 ];
 
-const sampleNotifications = [
-  {
-    id: 1,
-    type: "success",
-    title: "Payment Successful",
-    message: "Your subscription has been renewed for another month.",
-    timestamp: "2 minutes ago",
-    read: false,
-  },
-  {
-    id: 2,
-    type: "info",
-    title: "New Feature Available",
-    message: "Check out our new analytics dashboard with enhanced reporting features.",
-    timestamp: "1 hour ago",
-    read: false,
-  },
-  {
-    id: 3,
-    type: "warning",
-    title: "Maintenance Scheduled",
-    message: "System maintenance scheduled for tonight from 2:00 AM to 4:00 AM EST.",
-    timestamp: "3 hours ago",
-    read: true,
-  },
-  {
-    id: 4,
-    type: "info",
-    title: "Profile Updated",
-    message: "Your profile information has been successfully updated.",
-    timestamp: "1 day ago",
-    read: true,
-  },
-];
+const getInitialNotifications = () => {
+  const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION || '2.3.0';
+  
+  return [
+    {
+      id: 1,
+      type: "info",
+      title: "BizBuddy Application Updated",
+      message: `We've updated BizBuddy to v${currentVersion}! We've made improvements to enhance your experience. If you notice any differences or issues with features, please let us know through our contact page.`,
+      timestamp: "Just now",
+      read: false,
+    },
+  ];
+};
 
 function DesktopNavLinks({ pathname }) {
   return (
@@ -261,7 +241,7 @@ function NotificationPanel({ notifications, onMarkAsRead, onRemove, onMarkAllAsR
       </div>
 
       {/* Footer */}
-      {notifications.length > 0 && (
+      {/* {notifications.length > 0 && (
         <div className="p-3 border-t border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
           <Link
             href="/notifications"
@@ -272,13 +252,13 @@ function NotificationPanel({ notifications, onMarkAsRead, onRemove, onMarkAllAsR
             View all notifications
           </Link>
         </div>
-      )}
+      )} */}
     </motion.div>
   );
 }
 
 function NotificationButton() {
-  const [notifications, setNotifications] = useState(sampleNotifications);
+  const [notifications, setNotifications] = useState(getInitialNotifications());
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef(null);
   const panelRef = useRef(null);
@@ -376,7 +356,7 @@ function NotificationButton() {
         )}
       </motion.button>
 
-      {/* <AnimatePresence>
+      <AnimatePresence>
         {isOpen && (
           <div ref={panelRef}>
             <NotificationPanel
@@ -388,7 +368,7 @@ function NotificationButton() {
             />
           </div>
         )}
-      </AnimatePresence> */}
+      </AnimatePresence>
     </div>
   );
 }
