@@ -1,814 +1,488 @@
-// components/Dashboard/DashboardContent/CompanyPanel/PunchLogs&Overtime&Leaves/EmployeesLeaveRequests.jsx
-/* eslint-disable react-hooks/exhaustive-deps */
+// Supervisor Leave Requests - Modern DataTable Version
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  ChevronDown,
-  ChevronUp,
-  Filter,
-  Trash2,
+  Calendar,
   CheckCircle2,
   XCircle,
-  Calendar,
-  Clock,
-  RefreshCw,
-  Info,
+  Eye,
   FileText,
+  TrendingUp,
+  Clock,
+  User,
   AlertCircle,
+  MessageSquare,
+  Loader2,
+  Trash2,
 } from "lucide-react";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
-import { motion, AnimatePresence } from "framer-motion";
-import ColumnSelector from "@/components/common/ColumnSelector";
-import MultiSelect from "@/components/common/MultiSelect";
-
+import DataTable from "@/components/common/DataTable";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Skeleton } from "@/components/ui/skeleton";
-import { fmtMMDDYYYY_hhmma } from "@/lib/dateTimeFormatter";
+import { Textarea } from "@/components/ui/textarea";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-/* ---------- helpers ---------- */
-
-const statusColors = {
-  pending: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
-  approved: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+const statusConfig = {
+  pending: {
+    label: "Pending",
+    color: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+    icon: Clock,
+  },
+  approved: {
+    label: "Approved", 
+    color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+    icon: CheckCircle2,
+  },
+  rejected: {
+    label: "Rejected",
+    color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400", 
+    icon: XCircle,
+  },
 };
 
-const statusIcons = {
-  pending: <Clock className="h-3 w-3 mr-1" />,
-  approved: <CheckCircle2 className="h-3 w-3 mr-1" />,
-  rejected: <XCircle className="h-3 w-3 mr-1" />,
+const StatusBadge = ({ status }) => {
+  const config = statusConfig[status];
+  if (!config) return status;
+  
+  const Icon = config.icon;
+  return (
+    <Badge variant="secondary" className={`${config.color} border-0`}>
+      <Icon className="h-3 w-3 mr-1" />
+      {config.label}
+    </Badge>
+  );
 };
 
-export default function EmployeesLeaveRequests() {
-  const { token } = useAuthStore();
-
+export default function SupervisorLeaveRequests() {
+  const { token, user } = useAuthStore();
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [sortKey, setSortKey] = useState("newest");
-  const [dialogType, setDialogType] = useState(null);
-  const [selectedLeave, setSelectedLeave] = useState(null);
+  
+  // Dialog states
+  const [detailDialog, setDetailDialog] = useState({ open: false, request: null });
+  const [actionDialog, setActionDialog] = useState({ open: false, type: null, request: null });
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, request: null });
   const [comment, setComment] = useState("");
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
-  const columnOptions = [
-    { value: "requester", label: "Requester Email" },
-    { value: "leaveType", label: "Leave Type" },
-    { value: "dateRange", label: "Date Range" },
-    { value: "reason", label: "Reason" },
-    { value: "status", label: "Status" },
-    { value: "createdAt", label: "Created At" },
-    { value: "updatedAt", label: "Updated At" },
+  // Calculate stats
+  const stats = useMemo(() => {
+    const total = leaves.length;
+    const pending = leaves.filter(r => r.status === "pending").length;
+    const approved = leaves.filter(r => r.status === "approved").length;
+    const rejected = leaves.filter(r => r.status === "rejected").length;
+
+    return { total, pending, approved, rejected };
+  }, [leaves]);
+
+  // Status tabs for the table
+  const statusTabs = useMemo(() => [
+    { label: "All", value: "all", count: stats.total },
+    { label: "Pending", value: "pending", count: stats.pending },
+    { label: "Approved", value: "approved", count: stats.approved },
+    { label: "Rejected", value: "rejected", count: stats.rejected },
+  ], [leaves, stats]);
+
+  // Table columns
+  const columns = [
+    {
+      key: "requester",
+      label: "Employee",
+      render: (_, row) => (
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+            <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          </div>
+          <div>
+            <div className="font-medium">{row.requester?.email || row.User?.email || "Unknown"}</div>
+            <div className="text-xs text-muted-foreground">
+              {row.requester?.department?.name || row.User?.department?.name || "No department"}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "leaveType",
+      label: "Leave Type",
+      render: (type) => (
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center">
+            <Calendar className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+          </div>
+          <span className="font-medium">{type}</span>
+        </div>
+      ),
+    },
+    {
+      key: "dateRange",
+      label: "Date Range",
+      render: (_, row) => (
+        <div className="text-sm">
+          <div className="font-medium">{new Date(row.startDate).toLocaleDateString()}</div>
+          <div className="text-xs text-muted-foreground">
+            to {new Date(row.endDate).toLocaleDateString()}
+          </div>
+          <div className="text-xs text-orange-600 font-medium">
+            {(() => {
+              const start = new Date(row.startDate);
+              const end = new Date(row.endDate);
+              start.setHours(0, 0, 0, 0);
+              end.setHours(0, 0, 0, 0);
+              const diffTime = end - start;
+              const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+              return `${diffDays} day${diffDays === 1 ? '' : 's'}`;
+            })()}
+          </div>
+        </div>
+      ),
+      sortable: true,
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (status) => <StatusBadge status={status} />,
+      sortable: true,
+    },
+    {
+      key: "leaveReason",
+      label: "Reason",
+      render: (reason) => (
+        <div className="max-w-32 truncate text-sm text-muted-foreground">
+          {reason || "No reason provided"}
+        </div>
+      ),
+    },
+    {
+      key: "createdAt",
+      label: "Submitted",
+      render: (date) => (
+        <div className="text-sm text-muted-foreground">
+          {new Date(date).toLocaleDateString()}
+        </div>
+      ),
+      sortable: true,
+    },
   ];
-  const [columnVisibility, setColumnVisibility] = useState(columnOptions.map((o) => o.value));
 
-  const [filters, setFilters] = useState({
-    statuses: ["all"],
-    types: ["all"],
-  });
-
-  const toggleListFilter = (key, val) =>
-    setFilters((prev) => {
-      if (val === "all") return { ...prev, [key]: ["all"] };
-      let list = prev[key].filter((x) => x !== "all");
-      list = list.includes(val) ? list.filter((x) => x !== val) : [...list, val];
-      if (!list.length) list = ["all"];
-      return { ...prev, [key]: list };
-    });
-
-  const clearAllFilters = () => setFilters({ statuses: ["all"], types: ["all"] });
+  // Table actions
+  const actions = [
+    {
+      label: "View Details",
+      icon: Eye,
+      onClick: (request) => setDetailDialog({ open: true, request }),
+    },
+    {
+      label: "Approve",
+      icon: CheckCircle2,
+      onClick: (request) => setActionDialog({ open: true, type: "approve", request }),
+      condition: (request) => request.status === "pending",
+      className: "text-green-600 hover:text-green-700",
+    },
+    {
+      label: "Reject",
+      icon: XCircle,
+      onClick: (request) => setActionDialog({ open: true, type: "reject", request }),
+      condition: (request) => request.status === "pending",
+      className: "text-red-600 hover:text-red-700",
+    },
+    {
+      label: "Delete",
+      icon: Trash2,
+      onClick: (request) => setDeleteDialog({ open: true, request }),
+      className: "text-red-600 hover:text-red-700",
+    },
+  ];
 
   const fetchLeaves = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/leaves`, {
+      const response = await fetch(`${API_URL}/api/leaves`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
-      if (res.ok) setLeaves(data.data || []);
-      else toast.message(data.message || "Failed to fetch leave requests.");
-    } catch {
-      toast.message("Failed to fetch leave requests.");
+      const data = await response.json();
+      
+      if (!response.ok) throw new Error(data.message || "Failed to fetch leave requests");
+      
+      setLeaves(data.data || []);
+    } catch (error) {
+      toast.error(error.message || "Failed to fetch leave requests");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [token]);
 
-  useEffect(() => {
-    fetchLeaves();
-  }, [fetchLeaves]);
-
-  const leaveTypeOptions = useMemo(
-    () =>
-      [...new Set(leaves.map((l) => l.leaveType))].map((t) => ({
-        value: t,
-        label: t,
-      })),
-    [leaves]
-  );
-
-  const processedLeaves = useMemo(() => {
-    let list = [...leaves];
-    if (!filters.statuses.includes("all")) list = list.filter((l) => filters.statuses.includes(l.status));
-    if (!filters.types.includes("all")) list = list.filter((l) => filters.types.includes(l.leaveType));
-
-    switch (sortKey) {
-      case "newest":
-        list.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
-        break;
-      case "oldest":
-        list.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
-        break;
-      case "requesterAsc":
-        list.sort((a, b) => (a.requester?.username || "").localeCompare(b.requester?.username || ""));
-        break;
-      case "requesterDesc":
-        list.sort((a, b) => (b.requester?.username || "").localeCompare(a.requester?.username || ""));
-        break;
-      case "typeAsc":
-        list.sort((a, b) => a.leaveType.localeCompare(b.leaveType));
-        break;
-      case "typeDesc":
-        list.sort((a, b) => b.leaveType.localeCompare(a.leaveType));
-        break;
-      case "statusAsc":
-        list.sort((a, b) => a.status.localeCompare(b.status));
-        break;
-      case "statusDesc":
-        list.sort((a, b) => b.status.localeCompare(a.status));
-        break;
-
-      case "createdNewest":
-        list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        break;
-      case "createdOld":
-        list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-        break;
-      case "updatedNewest":
-        list.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-        break;
-      case "updatedOld":
-        list.sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt));
-        break;
-
-      default:
-        list.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
-    }
-
-    return list;
-  }, [leaves, filters, sortKey]);
-
-  const openDialog = (type, leave) => {
-    setDialogType(type);
-    setSelectedLeave(leave);
-    setComment("");
-  };
-  const closeDialog = () => {
-    setDialogType(null);
-    setSelectedLeave(null);
-    setComment("");
-  };
-  const viewDetails = (leave) => {
-    setSelectedLeave(leave);
-    setDetailsDialogOpen(true);
-  };
-
-  async function handleAction(endpoint) {
-    if (!selectedLeave) return;
+  const handleAction = async () => {
+    if (!actionDialog.request || !actionDialog.type) return;
+    
     setActionLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/leaves/${selectedLeave.id}/${endpoint}`, {
+      const response = await fetch(`${API_URL}/api/leaves/${actionDialog.request.id}/${actionDialog.type}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ approverComments: comment }),
+        body: JSON.stringify({ approverComments: comment.trim() || null }),
       });
-      const data = await res.json();
-      if (res.ok) {
-        toast.message(data.message || "Success");
-        fetchLeaves();
-        closeDialog();
-      } else toast.message(data.message || "Something went wrong");
-    } catch {
-      toast.message("Something went wrong");
-    }
-    setActionLoading(false);
-  }
 
-  async function handleDelete() {
-    if (!selectedLeave) return;
+      const data = await response.json();
+
+      if (!response.ok) throw new Error(data.message || `Failed to ${actionDialog.type} leave request`);
+
+      toast.success(`Leave request ${actionDialog.type}d successfully!`);
+      setActionDialog({ open: false, type: null, request: null });
+      setComment("");
+      fetchLeaves();
+    } catch (error) {
+      toast.error(error.message || `Failed to ${actionDialog.type} leave request`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteDialog.request) return;
+    
     setActionLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/leaves/${selectedLeave.id}`, {
+      const response = await fetch(`${API_URL}/api/leaves/${deleteDialog.request.id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
-      if (res.ok) {
-        toast.message(data.message || "Deleted");
-        setLeaves((prev) => prev.filter((l) => l.id !== selectedLeave.id));
-      } else toast.message(data.message || "Delete failed");
-    } catch {
-      toast.message("Delete failed");
+
+      const data = await response.json();
+
+      if (!response.ok) throw new Error(data.message || "Failed to delete leave request");
+
+      toast.success("Leave request deleted successfully!");
+      setDeleteDialog({ open: false, request: null });
+      fetchLeaves();
+    } catch (error) {
+      toast.error(error.message || "Failed to delete leave request");
+    } finally {
+      setActionLoading(false);
     }
-    setActionLoading(false);
-    setShowDeleteModal(false);
-    setSelectedLeave(null);
-  }
+  };
 
-  const StatusBadge = ({ status }) => (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
-        statusColors[status] || "bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-300"
-      }`}
-    >
-      {statusIcons[status]}
-      {status}
-    </span>
-  );
-
-  const labelClass = "my-auto shrink-0 text-sm font-medium text-muted-foreground";
+  useEffect(() => {
+    fetchLeaves();
+  }, [fetchLeaves]);
 
   return (
-    <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
-      <Toaster position="top-center" />
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
-        <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
-          <Calendar className="h-7 w-7 text-orange-500" />
-          Employee Leave Requests
-        </h2>
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={fetchLeaves}
-          disabled={loading}
-          className="flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-black"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-        </Button>
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Leave Requests</h1>
+          <p className="text-muted-foreground">Review and manage employee leave requests</p>
+        </div>
       </div>
 
-      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-2 relative">
-          <CardTitle className="flex items-center gap-2">
-            <div className="p-2 rounded-full bg-orange-500/10 text-orange-500">
-              <Filter className="h-5 w-5" />
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Requests</CardTitle>
+              <FileText className="h-4 w-4 text-muted-foreground" />
             </div>
-            Table Controls
-          </CardTitle>
-          <span className="absolute top-2 right-4 text-sm text-muted-foreground">
-            {processedLeaves.length} of {leaves.length}
-          </span>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {/* column selector */}
-            <div className="flex flex-wrap gap-3 items-center">
-              <span className={labelClass}>Column:</span>
-              <ColumnSelector options={columnOptions} visible={columnVisibility} setVisible={setColumnVisibility} />
-            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.total}</div>
+          </CardContent>
+        </Card>
 
-            {/* filters */}
-            <div className="flex flex-wrap gap-3 items-center">
-              <span className={labelClass}>Filter:</span>
-              <MultiSelect
-                options={[
-                  { value: "pending", label: "Pending" },
-                  { value: "approved", label: "Approved" },
-                  { value: "rejected", label: "Rejected" },
-                ]}
-                selected={filters.statuses}
-                onChange={(v) => toggleListFilter("statuses", v)}
-                allLabel="All statuses"
-                width={180}
-              />
-              <MultiSelect
-                options={leaveTypeOptions}
-                selected={filters.types}
-                onChange={(v) => toggleListFilter("types", v)}
-                allLabel="All leave types"
-                width={180}
-              />
-              {(!filters.statuses.includes("all") || !filters.types.includes("all")) && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={clearAllFilters}
-                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                >
-                  Clear Filters
-                </Button>
-              )}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Pending Review</CardTitle>
+              <Clock className="h-4 w-4 text-amber-600" />
             </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-amber-600">{stats.pending}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Approved</CardTitle>
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{stats.approved}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Rejected</CardTitle>
+              <XCircle className="h-4 w-4 text-red-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{stats.rejected}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-orange-600" />
+            <CardTitle>Employee Leave Requests</CardTitle>
           </div>
+        </CardHeader>
+        <CardContent className="p-6">
+          <DataTable
+            data={leaves}
+            columns={columns}
+            loading={loading}
+            onRefresh={fetchLeaves}
+            actions={actions}
+            searchPlaceholder="Search by employee, leave type, or reason..."
+            statusTabs={statusTabs}
+            onRowClick={(request) => setDetailDialog({ open: true, request })}
+            pageSize={10}
+          />
         </CardContent>
       </Card>
 
-      {/* main table */}
-      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2">
-            <div className="p-2 rounded-full bg-orange-500/10 text-orange-500">
-              <Calendar className="h-5 w-5" />
-            </div>
-            Leave Requests
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent className="p-0">
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {columnVisibility.includes("requester") && (
-                    <TableHead
-                      className="cursor-pointer whitespace-nowrap"
-                      onClick={() => setSortKey((p) => (p === "requesterAsc" ? "requesterDesc" : "requesterAsc"))}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        Requester Email
-                        {sortKey === "requesterAsc" ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : sortKey === "requesterDesc" ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : null}
-                      </div>
-                    </TableHead>
-                  )}
-
-                  {columnVisibility.includes("leaveType") && (
-                    <TableHead
-                      className="cursor-pointer whitespace-nowrap"
-                      onClick={() => setSortKey((p) => (p === "typeAsc" ? "typeDesc" : "typeAsc"))}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        Leave&nbsp;Type
-                        {sortKey === "typeAsc" ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : sortKey === "typeDesc" ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : null}
-                      </div>
-                    </TableHead>
-                  )}
-
-                  {columnVisibility.includes("dateRange") && (
-                    <TableHead
-                      className="cursor-pointer whitespace-nowrap"
-                      onClick={() => setSortKey((p) => (p === "newest" ? "oldest" : "newest"))}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        Date&nbsp;Range
-                        {sortKey === "newest" ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : sortKey === "oldest" ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : null}
-                      </div>
-                    </TableHead>
-                  )}
-                  {columnVisibility.includes("reason") && <TableHead className="whitespace-nowrap text-center">Reason</TableHead>}
-                  {columnVisibility.includes("status") && (
-                    <TableHead
-                      className="cursor-pointer whitespace-nowrap"
-                      onClick={() => setSortKey((p) => (p === "statusAsc" ? "statusDesc" : "statusAsc"))}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        Status
-                        {sortKey === "statusAsc" ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : sortKey === "statusDesc" ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : null}
-                      </div>
-                    </TableHead>
-                  )}
-                  {columnVisibility.includes("createdAt") && (
-                    <TableHead
-                      className="cursor-pointer whitespace-nowrap"
-                      onClick={() => setSortKey((p) => (p === "createdNewest" ? "createdOld" : "createdNewest"))}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        Created&nbsp;At
-                        {sortKey === "createdNewest" ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : sortKey === "createdOld" ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : null}
-                      </div>
-                    </TableHead>
-                  )}
-                  {columnVisibility.includes("updatedAt") && (
-                    <TableHead
-                      className="cursor-pointer whitespace-nowrap"
-                      onClick={() => setSortKey((p) => (p === "updatedNewest" ? "updatedOld" : "updatedNewest"))}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        Updated&nbsp;At
-                        {sortKey === "updatedNewest" ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : sortKey === "updatedOld" ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : null}
-                      </div>
-                    </TableHead>
-                  )}
-
-                  <TableHead className="whitespace-nowrap text-center">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-
-              <TableBody>
-                {loading ? (
-                  [...Array(5)].map((_, i) => (
-                    <TableRow key={i}>
-                      {Array(columnVisibility.length + 1)
-                        .fill(0)
-                        .map((__, j) => (
-                          <TableCell key={j}>
-                            <Skeleton className="h-6 w-full" />
-                          </TableCell>
-                        ))}
-                    </TableRow>
-                  ))
-                ) : processedLeaves.length ? (
-                  <AnimatePresence>
-                    {processedLeaves.map((l) => (
-                      <motion.tr
-                        key={l.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="border-b transition-colors hover:bg-muted/50"
-                      >
-                        {columnVisibility.includes("requester") && (
-                          <TableCell className="text-center text-nowrap text-xs">
-                            {l.User?.email || l.requester?.username || "—"}
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("leaveType") && (
-                          <TableCell className="text-center text-nowrap text-xs">{l.leaveType}</TableCell>
-                        )}
-                        {columnVisibility.includes("dateRange") && (
-                          <TableCell className="text-center text-xs">
-                            <div className="flex flex-col gap-1">
-                              <span className="text-nowrap text-xs">{fmtMMDDYYYY_hhmma(l.startDate)}</span>
-                              <span className="text-nowrap text-xs">{fmtMMDDYYYY_hhmma(l.endDate)}</span>
-                            </div>
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("reason") && (
-                          <TableCell className="text-center text-nowrap text-xs">
-                            {l.reason ? (
-                              <span className="truncate block max-w-xs text-xs">{l.reason}</span>
-                            ) : (
-                              <span className="italic text-muted-foreground text-xs">No reason provided</span>
-                            )}
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("status") && (
-                          <TableCell className="text-center text-nowrap text-xs">
-                            <StatusBadge status={l.status} />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("createdAt") && (
-                          <TableCell className="text-center text-nowrap text-xs">{fmtMMDDYYYY_hhmma(l.createdAt)}</TableCell>
-                        )}
-                        {columnVisibility.includes("updatedAt") && (
-                          <TableCell className="text-center text-nowrap text-xs">{fmtMMDDYYYY_hhmma(l.updatedAt)}</TableCell>
-                        )}
-                        <TableCell>
-                          <div className="flex justify-center gap-1">
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    onClick={() => viewDetails(l)}
-                                    className="h-8 w-8 text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                                  >
-                                    <Info className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>View details</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-
-                            {l.status === "pending" && (
-                              <>
-                                <TooltipProvider delayDuration={300}>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        onClick={() => openDialog("approve", l)}
-                                        className="h-8 w-8 text-green-700 hover:bg-green-500/10 dark:text-green-400 dark:hover:bg-green-500/20"
-                                      >
-                                        <CheckCircle2 className="h-4 w-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Approve request</TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                                <TooltipProvider delayDuration={300}>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        onClick={() => openDialog("reject", l)}
-                                        className="h-8 w-8 text-red-700 hover:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
-                                      >
-                                        <XCircle className="h-4 w-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Reject request</TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              </>
-                            )}
-
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    onClick={() => {
-                                      setSelectedLeave(l);
-                                      setShowDeleteModal(true);
-                                    }}
-                                    className="h-8 w-8 text-red-700 hover:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Delete request</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </TableCell>
-                      </motion.tr>
-                    ))}
-                  </AnimatePresence>
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={columnVisibility.length + 1} className="h-32 text-center">
-                      <div className="flex flex-col items-center justify-center text-muted-foreground">
-                        <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <Calendar className="h-8 w-8 text-orange-500/50" />
-                        </div>
-                        <p className="text-xs italic">No leave requests found.</p>
-                        {(!filters.statuses.includes("all") || !filters.types.includes("all")) && (
-                          <Button variant="link" onClick={clearAllFilters} className="text-orange-500 hover:text-orange-600 mt-2">
-                            Clear all filters
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-      <Dialog open={!!dialogType} onOpenChange={(o) => !o && closeDialog()}>
-        <DialogContent className="sm:max-w-lg border-2 dark:border-white/10">
-          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
+      {/* Detail Dialog */}
+      <Dialog open={detailDialog.open} onOpenChange={(open) => !open && setDetailDialog({ open: false, request: null })}>
+        <DialogContent className="sm:max-w-lg">
+          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <div
-                className={`p-2 rounded-full ${
-                  dialogType === "approve"
-                    ? "bg-green-100 text-green-500 dark:bg-green-900/30 dark:text-green-400"
-                    : "bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400"
-                }`}
-              >
-                {dialogType === "approve" ? <CheckCircle2 className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
-              </div>
-              <span className="capitalize">{dialogType} Leave Request</span>
-            </DialogTitle>
-            <DialogDescription>
-              {dialogType === "approve"
-                ? "Optionally add comments before approving this leave request."
-                : "Provide a reason or comments for rejecting this leave request (optional)."}
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedLeave && (
-            <div className="bg-black/5 dark:bg-white/5 rounded-lg p-4 mb-4 border border-black/10 dark:border-white/10">
-              <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Requester Email:</span>{" "}
-                  <span className="font-medium">{selectedLeave.User?.email || selectedLeave.requester?.username || "—"}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Leave Type:</span>{" "}
-                  <span className="font-medium capitalize">{selectedLeave.leaveType}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Start Date:</span>{" "}
-                  <span className="font-medium">{fmtMMDDYYYY_hhmma(selectedLeave.startDate)}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">End Date:</span>{" "}
-                  <span className="font-medium">{fmtMMDDYYYY_hhmma(selectedLeave.endDate)}</span>
-                </div>
-                {selectedLeave.reason && (
-                  <div className="col-span-2 mt-2 pt-2 border-t border-black/10 dark:border-white/10">
-                    <span className="text-muted-foreground">Reason:</span>{" "}
-                    <span className="font-medium">{selectedLeave.reason}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <label htmlFor="comment" className="text-sm font-medium">
-              {dialogType === "approve" ? "Approval Comments" : "Rejection Reason"}
-            </label>
-            <Textarea
-              id="comment"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder={`${dialogType === "approve" ? "Approval" : "Rejection"} comments (optional)`}
-              className="min-h-[120px]"
-            />
-          </div>
-
-          <DialogFooter className="gap-2 pt-4">
-            <Button variant="outline" onClick={closeDialog}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => handleAction(dialogType)}
-              disabled={actionLoading}
-              className={`${
-                dialogType === "approve" ? "bg-green-500 hover:bg-green-600" : "bg-red-500 hover:bg-red-600"
-              } text-white`}
-            >
-              {actionLoading ? (
-                <span className="flex items-center">
-                  <svg
-                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  {dialogType === "approve" ? "Approving..." : "Rejecting..."}
-                </span>
-              ) : (
-                <span className="flex items-center">
-                  {dialogType === "approve" ? <CheckCircle2 className="mr-2 h-4 w-4" /> : <XCircle className="mr-2 h-4 w-4" />}
-                  {dialogType === "approve" ? "Approve Request" : "Reject Request"}
-                </span>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
-        <DialogContent className="sm:max-w-lg border-2 dark:border-white/10">
-          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4"></div>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
-                <FileText className="h-5 w-5" />
-              </div>
+              <Calendar className="h-5 w-5 text-orange-600" />
               Leave Request Details
             </DialogTitle>
           </DialogHeader>
 
-          {selectedLeave && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="font-medium text-md capitalize">{selectedLeave.leaveType}</h3>
-                <StatusBadge status={selectedLeave.status} />
-              </div>
-
-              <div className="flex flex-col">
-                <div className="flex justify-start items-center gap-1">
-                  <p className="text-sm ">Requester Email:</p>
-                  <p className="text-xs">{selectedLeave.User?.email || selectedLeave.requester?.username || "—"}</p>
-                </div>
-                <div className="flex justify-start items-center gap-1">
-                  <p className="text-sm ">Department:</p>
-                  <p className="text-xs">{selectedLeave.requester?.department?.name || "Not specified"}</p>
-                </div>
-                <div className="flex justify-start items-center gap-1">
-                  <p className="text-sm">Start Date:</p>
-                  <p className="text-xs">{fmtMMDDYYYY_hhmma(selectedLeave.startDate)}</p>
-                </div>
-                <div className="flex justify-start items-center gap-1">
-                  <p className="text-sm">End Date:</p>
-                  <p className="text-xs">{fmtMMDDYYYY_hhmma(selectedLeave.endDate)}</p>
+          {detailDialog.request && (
+            <div className="space-y-6">
+              {/* Status and Leave Type */}
+              <div className="flex items-center justify-between">
+                <StatusBadge status={detailDialog.request.status} />
+                <div className="text-right">
+                  <div className="text-lg font-bold">{detailDialog.request.leaveType}</div>
+                  <div className="text-sm text-muted-foreground">Leave Type</div>
                 </div>
               </div>
 
-              {selectedLeave.reason && (
-                <div className="space-y-1 pt-2 border-t border-black/10 dark:border-white/10">
-                  <p className="text-sm text-muted-foreground">Reason</p>
-                  <div className="bg-black/5 dark:bg-white/5 p-3 rounded-md">
-                    <p className="whitespace-pre-line">{selectedLeave.reason}</p>
+              {/* Employee Info */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <User className="h-4 w-4 text-blue-600" />
+                  <div className="font-medium text-blue-700 dark:text-blue-300">Employee Information</div>
+                </div>
+                <div className="grid grid-cols-1 gap-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Email:</span>
+                    <span className="font-medium">{detailDialog.request.requester?.email || detailDialog.request.User?.email || "Unknown"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Department:</span>
+                    <span className="font-medium">{detailDialog.request.requester?.department?.name || detailDialog.request.User?.department?.name || "Not specified"}</span>
                   </div>
                 </div>
-              )}
+              </div>
 
-              {selectedLeave.approverComments && (
-                <div className="space-y-1 pt-2 border-t border-black/10 dark:border-white/10">
-                  <p className="text-sm text-muted-foreground">
-                    {selectedLeave.status === "approved" ? "Approval" : "Rejection"} Comments
-                  </p>
-                  <div
-                    className={`p-3 rounded-md ${
-                      selectedLeave.status === "approved"
-                        ? "bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800/30"
-                        : "bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/30"
-                    }`}
-                  >
-                    <p className="whitespace-pre-line">{selectedLeave.approverComments}</p>
+              {/* Date Range */}
+              <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-lg border border-orange-200 dark:border-orange-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <Calendar className="h-4 w-4 text-orange-600" />
+                  <div className="font-medium text-orange-700 dark:text-orange-300">Leave Period</div>
+                </div>
+                <div className="grid grid-cols-1 gap-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Start Date:</span>
+                    <span className="font-medium">{new Date(detailDialog.request.startDate).toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">End Date:</span>
+                    <span className="font-medium">{new Date(detailDialog.request.endDate).toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Duration:</span>
+                    <span className="font-medium text-orange-600">
+                      {(() => {
+                        const start = new Date(detailDialog.request.startDate);
+                        const end = new Date(detailDialog.request.endDate);
+                        start.setHours(0, 0, 0, 0);
+                        end.setHours(0, 0, 0, 0);
+                        const diffTime = end - start;
+                        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                        return `${diffDays} day${diffDays === 1 ? '' : 's'}`;
+                      })()}
+                    </span>
                   </div>
                 </div>
-              )}
+              </div>
 
-              <div className="pt-2 border-t border-black/10 dark:border-white/10">
-                <div className="text-sm text-muted-foreground mb-1">Request Timeline</div>
+              {/* Request Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm text-muted-foreground">Request ID</div>
+                  <div className="font-mono text-xs">{detailDialog.request.id}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Submitted</div>
+                  <div className="font-medium">{new Date(detailDialog.request.createdAt).toLocaleDateString()} {new Date(detailDialog.request.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Last Updated</div>
+                  <div className="font-medium">{new Date(detailDialog.request.updatedAt).toLocaleDateString()} {new Date(detailDialog.request.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+              </div>
+
+              {/* Reason */}
+              {detailDialog.request.leaveReason && (
                 <div className="space-y-2">
-                  <div className="flex items-start gap-2">
-                    <div className="w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mt-0.5">
-                      <Calendar className="h-3 w-3 text-orange-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">Request Created</p>
-                      <p className="text-xs text-muted-foreground">
-                        {fmtMMDDYYYY_hhmma(selectedLeave.createdAt || selectedLeave.startDate)}
-                      </p>
-                    </div>
+                  <div className="text-sm text-muted-foreground">Reason for Leave</div>
+                  <div className="bg-muted p-3 rounded-md text-sm">
+                    {detailDialog.request.leaveReason}
                   </div>
-
-                  {selectedLeave.status !== "pending" && (
-                    <div className="flex items-start gap-2">
-                      <div
-                        className={`w-6 h-6 rounded-full flex items-center justify-center mt-0.5 ${
-                          selectedLeave.status === "approved"
-                            ? "bg-green-100 dark:bg-green-900/30"
-                            : "bg-red-100 dark:bg-red-900/30"
-                        }`}
-                      >
-                        {selectedLeave.status === "approved" ? (
-                          <CheckCircle2 className="h-3 w-3 text-green-500" />
-                        ) : (
-                          <XCircle className="h-3 w-3 text-red-500" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium capitalize">Request {selectedLeave.status}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {fmtMMDDYYYY_hhmma(selectedLeave.updatedAt || selectedLeave.startDate)}
-                        </p>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              </div>
+              )}
+
+              {/* Approver Comments */}
+              {detailDialog.request.approverComments && (
+                <div className="space-y-2">
+                  <div className="text-sm text-muted-foreground">
+                    {detailDialog.request.status === "approved" ? "Approval" : "Rejection"} Comments
+                  </div>
+                  <div className={`p-3 rounded-md text-sm border ${
+                    detailDialog.request.status === "approved"
+                      ? "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800"
+                      : "bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800"
+                  }`}>
+                    {detailDialog.request.approverComments}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           <DialogFooter>
-            {selectedLeave && selectedLeave.status === "pending" && (
+            {detailDialog.request?.status === "pending" && (
               <>
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setDetailsDialogOpen(false);
-                    openDialog("reject", selectedLeave);
+                    setDetailDialog({ open: false, request: null });
+                    setActionDialog({ open: true, type: "reject", request: detailDialog.request });
                   }}
                   className="border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800/50 dark:text-red-400 dark:hover:bg-red-900/20"
                 >
@@ -817,8 +491,8 @@ export default function EmployeesLeaveRequests() {
                 </Button>
                 <Button
                   onClick={() => {
-                    setDetailsDialogOpen(false);
-                    openDialog("approve", selectedLeave);
+                    setDetailDialog({ open: false, request: null });
+                    setActionDialog({ open: true, type: "approve", request: detailDialog.request });
                   }}
                   className="bg-green-500 hover:bg-green-600 text-white"
                 >
@@ -827,8 +501,8 @@ export default function EmployeesLeaveRequests() {
                 </Button>
               </>
             )}
-            {(!selectedLeave || selectedLeave.status !== "pending") && (
-              <Button onClick={() => setDetailsDialogOpen(false)} className="bg-orange-500 hover:bg-orange-600 text-white">
+            {detailDialog.request?.status !== "pending" && (
+              <Button onClick={() => setDetailDialog({ open: false, request: null })}>
                 Close
               </Button>
             )}
@@ -836,9 +510,78 @@ export default function EmployeesLeaveRequests() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
-        <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
-          <div className="h-1 w-full bg-red-500 -mt-6 mb-4"></div>
+      {/* Action Dialog (Approve/Reject) */}
+      <Dialog open={actionDialog.open} onOpenChange={(open) => !open && setActionDialog({ open: false, type: null, request: null })}>
+        <DialogContent className="sm:max-w-md">
+          <div className={`h-1 w-full -mt-6 mb-4 ${actionDialog.type === "approve" ? "bg-green-500" : "bg-red-500"}`} />
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className={`p-2 rounded-full ${
+                actionDialog.type === "approve" 
+                  ? "bg-green-100 text-green-500 dark:bg-green-900/30 dark:text-green-400"
+                  : "bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400"
+              }`}>
+                {actionDialog.type === "approve" ? <CheckCircle2 className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
+              </div>
+              {actionDialog.type === "approve" ? "Approve" : "Reject"} Leave Request
+            </DialogTitle>
+          </DialogHeader>
+
+          {actionDialog.request && (
+            <div className={`p-4 rounded-md border ${
+              actionDialog.type === "approve"
+                ? "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800"
+                : "bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800"
+            }`}>
+              <div className="text-sm space-y-1">
+                <div><strong>Employee:</strong> {actionDialog.request.requester?.email || actionDialog.request.User?.email || "Unknown"}</div>
+                <div><strong>Leave Type:</strong> {actionDialog.request.leaveType}</div>
+                <div><strong>Duration:</strong> {new Date(actionDialog.request.startDate).toLocaleDateString()} to {new Date(actionDialog.request.endDate).toLocaleDateString()}</div>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">
+              Comments <span className="text-muted-foreground">(optional)</span>
+            </label>
+            <Textarea
+              placeholder={`Add a comment for this ${actionDialog.type}...`}
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              className="min-h-[80px]"
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setActionDialog({ open: false, type: null, request: null })}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAction}
+              disabled={actionLoading}
+              className={actionDialog.type === "approve" ? "bg-green-500 hover:bg-green-600" : "bg-red-500 hover:bg-red-600"}
+            >
+              {actionLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  {actionDialog.type === "approve" ? "Approving..." : "Rejecting..."}
+                </>
+              ) : (
+                <>
+                  {actionDialog.type === "approve" ? <CheckCircle2 className="h-4 w-4 mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
+                  {actionDialog.type === "approve" ? "Approve" : "Reject"}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Dialog */}
+      <Dialog open={deleteDialog.open} onOpenChange={(open) => !open && setDeleteDialog({ open: false, request: null })}>
+        <DialogContent className="sm:max-w-md">
+          <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="p-2 rounded-full bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400">
@@ -851,64 +594,37 @@ export default function EmployeesLeaveRequests() {
             </DialogDescription>
           </DialogHeader>
 
-          {selectedLeave && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4 my-4">
-              <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-sm text-red-600 dark:text-red-400">
-                <div>
-                  <span className="opacity-70">Requester:</span>{" "}
-                  <span className="font-medium">{selectedLeave.User?.email || selectedLeave.requester?.username || "—"}</span>
-                </div>
-                <div>
-                  <span className="opacity-70">Leave Type:</span>{" "}
-                  <span className="font-medium capitalize">{selectedLeave.leaveType}</span>
-                </div>
-                <div>
-                  <span className="opacity-70">Start Date:</span>{" "}
-                  <span className="font-medium">{fmtMMDDYYYY_hhmma(selectedLeave.startDate)}</span>
-                </div>
-                <div>
-                  <span className="opacity-70">End Date:</span>{" "}
-                  <span className="font-medium">{fmtMMDDYYYY_hhmma(selectedLeave.endDate)}</span>
-                </div>
-                <div className="col-span-2">
-                  <span className="opacity-70">Status:</span>{" "}
-                  <span className="font-medium capitalize">{selectedLeave.status}</span>
-                </div>
+          {deleteDialog.request && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
+              <div className="text-sm space-y-1 text-red-600 dark:text-red-400">
+                <div><strong>Employee:</strong> {deleteDialog.request.requester?.email || deleteDialog.request.User?.email || "Unknown"}</div>
+                <div><strong>Leave Type:</strong> {deleteDialog.request.leaveType}</div>
+                <div><strong>Duration:</strong> {new Date(deleteDialog.request.startDate).toLocaleDateString()} to {new Date(deleteDialog.request.endDate).toLocaleDateString()}</div>
+                <div><strong>Status:</strong> {deleteDialog.request.status}</div>
               </div>
             </div>
           )}
 
-          <DialogFooter className="flex justify-between sm:justify-between">
-            <Button
-              variant="outline"
-              onClick={() => setShowDeleteModal(false)}
-              className="border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800/50 dark:text-red-400 dark:hover:bg-red-900/20"
-            >
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialog({ open: false, request: null })}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDelete} className="bg-red-500 hover:bg-red-600">
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={actionLoading}
+              className="bg-red-500 hover:bg-red-600"
+            >
               {actionLoading ? (
-                <span className="flex items-center">
-                  <svg
-                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
                   Deleting...
-                </span>
+                </>
               ) : (
-                <span className="flex items-center">
-                  <Trash2 className="mr-2 h-4 w-4" />
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
                   Delete Request
-                </span>
+                </>
               )}
             </Button>
           </DialogFooter>

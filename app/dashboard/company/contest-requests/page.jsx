@@ -18,7 +18,8 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
-  Building
+  Building,
+  Trash2,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
@@ -42,6 +43,8 @@ export default function AdminContestRequests() {
   const [loading, setLoading] = useState(false);
   const [contestRequests, setContestRequests] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   
   // Filter and view states
   const [sortConfig, setSort] = useState({ key: "submittedAt", direction: "descending" });
@@ -68,85 +71,88 @@ export default function AdminContestRequests() {
 
   const [visibleCols, setVisibleCols] = useState(columnOptions.map(o => o.value));
 
-  // Mock data for demonstration
   useEffect(() => {
-    // Mock employees
-    setEmployees([
-        { id: "202509260001", name: "Jane Doe", email: "jane.doe@nike.us" },
-        { id: "202509260002", name: "John Doe", email: "john.doe@nike.us.ph" },
-        { id: "202509260003", name: "Abraham Lincoln", email: "ab.lincon@nike.us.ph" },
-        { id: "202509260004", name: "Uncle Sam", email: "uncle.sam@nike.us.ph	" }
-      ]);
+    const fetchContestRequests = async () => {
+      try {
+        setLoading(true);
+  
+        const res = await fetch(`${API}/api/contest-policy/view-allContestTimeLogs`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+  
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.message || "Failed to fetch contest requests");
+        }
+  
+        const json = await res.json();  
+        const mapped = json.data.map((c) => ({
+          id: c.id,
+          employee: {
+            id: c.userId || "unknown",
+            name: c.userDisplayName || "Unknown User",
+            email: c.userEmail || "",
+          },
+          originalClockIn: c.currentClockIn,
+          originalClockOut: c.currentClockOut,
+          correctClockIn: c.requestedClockIn,
+          correctClockOut: c.requestedClockOut,
+          reason: c.reason || "N/A",
+          detailedExplanation: c.description?.trim() || "No description provided",
+          status: c.status?.toLowerCase() || "pending",
+          submittedAt: c.submittedAt,
+          approvedBy: c.approverDisplayName || null,
+          approvedAt: c.approvedAt || null,
+        }));
 
-    // Mock contest requests
-    setContestRequests([
-      {
-        id: "contest1",
-        employee: { id: "202509260001", name: "John Doe", email: "john.doe@company.com" },
-        originalPunchLog: "09/26/2025 (11:56 AM to 11:56 AM)",
-        correctClockIn: "2025-09-26T08:00:00",
-        correctClockOut: "2025-09-26T17:00:00",
-        reason: "System Clock Error",
-        detailedExplanation: "The system clock was showing incorrect time due to server synchronization issues. I actually worked from 8 AM to 5 PM but the system recorded wrong times.",
-        status: "pending",
-        submittedAt: "2025-09-26T12:30:00Z",
-        approvedBy: null,
-        approvedAt: null
-      },
-      {
-        id: "contest2",
-        employee: { id: "emp2", name: "Jane Smith", email: "jane.smith@company.com" },
-        originalPunchLog: "09/25/2025 (08:00 AM to 05:00 PM)",
-        correctClockIn: "2025-09-25T08:00:00",
-        correctClockOut: "2025-09-25T18:00:00",
-        reason: "Device Malfunction",
-        detailedExplanation: "My punch device was malfunctioning and didn't record my actual clock out time. I worked overtime until 6 PM.",
-        status: "approved",
-        submittedAt: "2025-09-25T18:15:00Z",
-        approvedBy: "Admin User",
-        approvedAt: "2025-09-26T09:00:00Z"
-      },
-      {
-        id: "contest3",
-        employee: { id: "emp3", name: "Mike Johnson", email: "mike.johnson@company.com" },
-        originalPunchLog: "09/24/2025 (09:00 AM to 04:00 PM)",
-        correctClockIn: "2025-09-24T08:30:00",
-        correctClockOut: "2025-09-24T17:30:00",
-        reason: "Network Issue",
-        detailedExplanation: "There was a network connectivity issue that prevented proper time recording. I have email timestamps to prove my actual work hours.",
-        status: "rejected",
-        submittedAt: "2025-09-24T17:45:00Z",
-        approvedBy: "Admin User",
-        approvedAt: "2025-09-25T10:30:00Z"
-      },
-      {
-        id: "contest4",
-        employee: { id: "emp4", name: "Sarah Wilson", email: "sarah.wilson@company.com" },
-        originalPunchLog: "09/23/2025 (07:45 AM to 04:45 PM)",
-        correctClockIn: "2025-09-23T08:00:00",
-        correctClockOut: "2025-09-23T17:00:00",
-        reason: "Power Outage",
-        detailedExplanation: "There was a power outage in our building that affected the time clock system. Security cameras can verify my actual arrival and departure times.",
-        status: "pending",
-        submittedAt: "2025-09-23T18:00:00Z",
-        approvedBy: null,
-        approvedAt: null
-      },
-      {
-        id: "contest5",
-        employee: { id: "202509260001", name: "John Doe", email: "john.doe@company.com" },
-        originalPunchLog: "09/22/2025 (08:15 AM to 05:15 PM)",
-        correctClockIn: "2025-09-22T08:00:00",
-        correctClockOut: "2025-09-22T17:00:00",
-        reason: "Other",
-        detailedExplanation: "I forgot to punch in exactly at 8 AM and punched in 15 minutes later. Same for punch out. This was due to helping a colleague with an urgent issue.",
-        status: "pending",
-        submittedAt: "2025-09-22T19:30:00Z",
-        approvedBy: null,
-        approvedAt: null
+        setContestRequests(mapped);
+  
+        // Optionally pre-load employee list for filters
+        const uniqueEmployees = Array.from(
+          new Map(
+            mapped.map((r) => [r.employee.id, { id: r.employee.id, name: r.employee.name, email: r.employee.email }])
+          ).values()
+        );
+        setEmployees(uniqueEmployees);
+      } catch (err) {
+        console.error("❌ Error loading contest requests:", err);
+        toast.error("Failed to load contest requests");
+      } finally {
+        setLoading(false);
       }
-    ]);
-  }, []);
+    };
+  
+    if (token) fetchContestRequests();
+  }, [token, API]);
+
+  const handleDelete = async (requestId) => {
+  
+    setActionLoading(true);
+    try {
+      const res = await fetch(`${API}/api/contest-policy/delete/${requestId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+  
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || "Failed to delete");
+  
+      toast.success("Contest request deleted successfully!");
+      setContestRequests((prev) => prev.filter((r) => r.id !== requestId));
+    } catch (err) {
+      console.error("❌ Error deleting contest:", err);
+      toast.error(err.message || "Failed to delete contest request");
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const requestSort = (k) =>
     setSort((p) => ({
@@ -231,27 +237,46 @@ export default function AdminContestRequests() {
 
   const handleApproveReject = async (requestId, action) => {
     setActionLoading(true);
-    
+  
     try {
-      // Mock API call - replace with actual endpoint
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setContestRequests(prev => prev.map(req => 
-        req.id === requestId 
-          ? { 
-              ...req, 
-              status: action,
-              approvedBy: user?.profile?.firstName + " " + user?.profile?.lastName || "Admin",
-              approvedAt: new Date().toISOString()
-            }
-          : req
-      ));
-      
-      toast.success(`Contest request ${action}!`);
+      const endpoint =
+        action === "approved"
+          ? `${API}/api/contest-policy/approve/${requestId}`
+          : `${API}/api/contest-policy/reject/${requestId}`;
+  
+      const res = await fetch(endpoint, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+  
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || "Failed to update request");
+  
+      // Update table immediately after success
+      setContestRequests((prev) =>
+        prev.map((req) =>
+          req.id === requestId
+            ? {
+                ...req,
+                status: action,
+                approvedBy:
+                  user?.profile?.firstName + " " + user?.profile?.lastName || "Admin",
+                approvedAt: new Date().toISOString(),
+              }
+            : req
+        )
+      );
+  
+      toast.success(
+        `Contest request ${action === "approved" ? "approved" : "rejected"} successfully!`
+      );
       setShowDetailsModal(false);
-      
-    } catch (error) {
-      toast.error(`Failed to ${action} contest request`);
+    } catch (err) {
+      console.error(`❌ Failed to ${action} request:`, err);
+      toast.error(`Failed to ${action} contest request.`);
     } finally {
       setActionLoading(false);
     }
@@ -479,10 +504,23 @@ export default function AdminContestRequests() {
                           </TableCell>
                         )}
                         {visibleCols.includes("punchLog") && (
-                          <TableCell className="text-center text-xs font-mono min-w-[180px]">
-                            <div className="space-y-1">
+                          <TableCell className="text-center text-xs min-w-[200px]">
+                            <div className="space-y-2">
                               <div className="font-semibold text-muted-foreground text-[10px]">ORIGINAL</div>
-                              <div className="text-xs">{request.originalPunchLog}</div>
+                              <div className="space-y-1">
+                                <div className="bg-green-50 border border-green-200 rounded px-2 py-1">
+                                  <div className="text-green-700 font-medium text-[10px]">CLOCK IN</div>
+                                  <div className="text-xs font-medium">
+                                    {formatDateTime(request.originalClockIn || request.currentClockIn)}
+                                  </div>
+                                </div>
+                                <div className="bg-red-50 border border-red-200 rounded px-2 py-1">
+                                  <div className="text-red-700 font-medium text-[10px]">CLOCK OUT</div>
+                                  <div className="text-xs font-medium">
+                                    {formatDateTime(request.originalClockOut || request.currentClockOut)}
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           </TableCell>
                         )}
@@ -524,58 +562,80 @@ export default function AdminContestRequests() {
                           </TableCell>
                         )}
                         {visibleCols.includes("actions") && (
-                          <TableCell className="text-center">
-                            <div className="flex justify-center gap-2">
-                              <TooltipProvider delayDuration={300}>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => openDetails(request)}
-                                      className="text-blue-500 hover:bg-blue-500/10"
-                                    >
-                                      <Eye className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>View details</TooltipContent>
-                                </Tooltip>
-                                {request.status === "pending" && (
-                                  <>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => handleApproveReject(request.id, "approved")}
-                                          className="text-green-500 hover:bg-green-500/10"
-                                          disabled={actionLoading}
-                                        >
-                                          <Check className="h-4 w-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Approve request</TooltipContent>
-                                    </Tooltip>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => handleApproveReject(request.id, "rejected")}
-                                          className="text-red-500 hover:bg-red-500/10"
-                                          disabled={actionLoading}
-                                        >
-                                          <X className="h-4 w-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Reject request</TooltipContent>
-                                    </Tooltip>
-                                  </>
-                                )}
-                              </TooltipProvider>
-                            </div>
-                          </TableCell>
-                        )}
+                        <TableCell className="text-center">
+                          <div className="flex justify-center gap-2">
+                            <TooltipProvider delayDuration={300}>
+                              {/* 👁 View Button */}
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => openDetails(request)}
+                                    className="text-blue-500 hover:bg-blue-500/10"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>View details</TooltipContent>
+                              </Tooltip>
+
+                              {/* ✅ Approve / ❌ Reject */}
+                              {request.status === "pending" && (
+                                <>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleApproveReject(request.id, "approved")}
+                                        className="text-green-500 hover:bg-green-500/10"
+                                        disabled={actionLoading}
+                                      >
+                                        <Check className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Approve request</TooltipContent>
+                                  </Tooltip>
+
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleApproveReject(request.id, "rejected")}
+                                        className="text-red-500 hover:bg-red-500/10"
+                                        disabled={actionLoading}
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Reject request</TooltipContent>
+                                  </Tooltip>
+                                </>
+                              )}
+
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setDeleteTarget(request);
+                                      setShowDeleteModal(true);
+                                    }}
+                                    className="text-red-600 hover:bg-red-600/10"
+                                    disabled={actionLoading}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Delete request</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                        </TableCell>
+                      )}
                       </motion.tr>
                     ))}
                   </AnimatePresence>
@@ -603,6 +663,57 @@ export default function AdminContestRequests() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+        <DialogContent className="border-2 max-w-md">
+          <div className="h-1 w-full bg-red-500 -mt-4 mb-4" />
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              Confirm Deletion
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this contest request? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteTarget && (
+            <div className="bg-muted/50 rounded-md p-3 mt-3 text-sm text-muted-foreground">
+              <p>
+                <strong>Employee:</strong> {deleteTarget.employee.name}
+              </p>
+              <p>
+                <strong>Reason:</strong> {deleteTarget.reason}
+              </p>
+              <p>
+                <strong>Submitted:</strong> {fmtMMDDYYYY_hhmma(deleteTarget.submittedAt)}
+              </p>
+            </div>
+          )}
+
+          <DialogFooter className="mt-6">
+            <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!deleteTarget) return;
+                await handleDelete(deleteTarget.id);
+                setShowDeleteModal(false);
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={actionLoading}
+            >
+              {actionLoading ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Details Modal */}
       <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
@@ -634,27 +745,51 @@ export default function AdminContestRequests() {
               </div>
 
               {/* Time Details */}
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <h3 className="text-sm font-medium text-muted-foreground">Time Information</h3>
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Original Punch Log */}
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-2">
                     <h4 className="font-medium text-red-800 mb-2">Original Punch Log</h4>
-                    <p className="text-sm font-mono">{selectedRequest.originalPunchLog}</p>
-                  </div>
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <h4 className="font-medium text-green-800 mb-2">Requested Correction</h4>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span className="font-medium">Clock In:</span>
-                        <span>{formatDateTime(selectedRequest.correctClockIn)}</span>
+                    <div className="space-y-2 text-sm">
+                      <div className="bg-white/70 border border-red-100 rounded px-2 py-1 flex justify-between items-center">
+                        <span className="text-red-700 font-semibold text-[11px]">CLOCK IN</span>
+                        <span className="font-mono">{formatDateTime(selectedRequest.originalClockIn || selectedRequest.currentClockIn)}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="font-medium">Clock Out:</span>
-                        <span>{formatDateTime(selectedRequest.correctClockOut)}</span>
+                      <div className="bg-white/70 border border-red-100 rounded px-2 py-1 flex justify-between items-center">
+                        <span className="text-red-700 font-semibold text-[11px]">CLOCK OUT</span>
+                        <span className="font-mono">{formatDateTime(selectedRequest.originalClockOut || selectedRequest.currentClockOut)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Requested Correction */}
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2">
+                    <h4 className="font-medium text-green-800 mb-2">Requested Correction</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="bg-white/70 border border-green-100 rounded px-2 py-1 flex justify-between items-center">
+                        <span className="text-green-700 font-semibold text-[11px]">CLOCK IN</span>
+                        <span className="font-mono">{formatDateTime(selectedRequest.correctClockIn)}</span>
+                      </div>
+                      <div className="bg-white/70 border border-green-100 rounded px-2 py-1 flex justify-between items-center">
+                        <span className="text-green-700 font-semibold text-[11px]">CLOCK OUT</span>
+                        <span className="font-mono">{formatDateTime(selectedRequest.correctClockOut)}</span>
                       </div>
                     </div>
                   </div>
                 </div>
+
+                {(selectedRequest.correctClockIn || selectedRequest.correctClockOut) && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-1">
+                    <p className="text-xs text-blue-700">
+                      The employee is requesting to adjust their recorded time from 
+                      <span className="font-semibold"> {formatDateTime(selectedRequest.originalClockIn)} – {formatDateTime(selectedRequest.originalClockOut)} </span>
+                      to 
+                      <span className="font-semibold"> {formatDateTime(selectedRequest.correctClockIn)} – {formatDateTime(selectedRequest.correctClockOut)}</span>.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Reason and Explanation */}
@@ -692,7 +827,7 @@ export default function AdminContestRequests() {
                   {selectedRequest.approvedBy && (
                     <>
                       <div className="flex justify-between">
-                        <span className="text-sm font-medium">Reviewed by:</span>
+                        <span className="text-sm font-medium">Request Approver:</span>
                         <span className="text-sm">{selectedRequest.approvedBy}</span>
                       </div>
                       <div className="flex justify-between">
@@ -709,26 +844,6 @@ export default function AdminContestRequests() {
             <Button variant="outline" onClick={() => setShowDetailsModal(false)} disabled={actionLoading}>
               Close
             </Button>
-            {selectedRequest && selectedRequest.status === "pending" && (
-              <div className="flex gap-2">
-                <Button 
-                  onClick={() => handleApproveReject(selectedRequest.id, "rejected")}
-                  disabled={actionLoading}
-                  variant="destructive"
-                >
-                  {actionLoading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <X className="h-4 w-4 mr-2" />}
-                  Reject
-                </Button>
-                <Button 
-                  onClick={() => handleApproveReject(selectedRequest.id, "approved")}
-                  disabled={actionLoading}
-                  className="bg-green-500 hover:bg-green-600 text-white"
-                >
-                  {actionLoading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
-                  Approve
-                </Button>
-              </div>
-            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

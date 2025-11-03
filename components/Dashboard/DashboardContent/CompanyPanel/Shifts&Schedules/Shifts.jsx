@@ -22,7 +22,13 @@ import {
   Zap,
   Calendar,
   Target,
-  Loader2
+  Loader2,
+  Globe,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  X
 } from "lucide-react";
 import Link from "next/link";
 import { toast, Toaster } from "sonner";
@@ -48,6 +54,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const toUtcIso = (hhmm) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -100,6 +107,22 @@ const totalHours = (a, b) => {
   let diff = new Date(b) - new Date(a);
   if (diff < 0) diff += 86400000;
   return (diff / 3600000).toFixed(2);
+};
+
+// Get timezone abbreviation
+const getTimezoneAbbr = (timezone) => {
+  try {
+    const date = new Date();
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      timeZoneName: 'short'
+    });
+    const parts = formatter.formatToParts(date);
+    const tzPart = parts.find(part => part.type === 'timeZoneName');
+    return tzPart ? tzPart.value : '';
+  } catch {
+    return '';
+  }
 };
 
 // Enhanced time display with tooltips
@@ -187,6 +210,7 @@ const columnOptions = [
   { value: "startTime", label: "Start Time", essential: true, group: "basic" },
   { value: "endTime", label: "End Time", essential: true, group: "basic" },
   { value: "totalHours", label: "Duration", essential: true, group: "basic" },
+  { value: "timeZone", label: "Timezone", essential: true, group: "basic" },
   { value: "differentialMultiplier", label: "Pay Multiplier", essential: false, group: "advanced" },
   { value: "createdAt", label: "Created", essential: false, group: "timestamps" },
   { value: "updatedAt", label: "Last Updated", essential: false, group: "timestamps" },
@@ -199,6 +223,16 @@ export default function Shifts() {
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [companyTimezone, setCompanyTimezone] = useState("America/Los_Angeles");
+  const [loadingTimezone, setLoadingTimezone] = useState(true);
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+
+  // Selection states
+  const [selectedShifts, setSelectedShifts] = useState(new Set());
+  const [showBulkDelete, setShowBulkDelete] = useState(false);
 
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -228,8 +262,31 @@ export default function Shifts() {
   const essentialColumns = columnOptions.filter(c => c.essential).map(c => c.value);
   const [columnVisibility, setColumnVisibility] = useState(essentialColumns);
 
+  // Fetch company timezone
+  const fetchCompanyTimezone = async () => {
+    setLoadingTimezone(true);
+    try {
+      const r = await fetch(`${API}/api/company-settings`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const j = await r.json();
+      if (r.ok && j.data?.timezone) {
+        setCompanyTimezone(j.data.timezone);
+      } else {
+        setCompanyTimezone("America/Los_Angeles");
+      }
+    } catch (error) {
+      console.error('Failed to fetch company timezone:', error);
+      setCompanyTimezone("America/Los_Angeles");
+    }
+    setLoadingTimezone(false);
+  };
+
   useEffect(() => {
-    if (token) fetchShifts();
+    if (token) {
+      fetchCompanyTimezone();
+      fetchShifts();
+    }
   }, [token]);
 
   const fetchShifts = async () => {
@@ -275,6 +332,97 @@ export default function Shifts() {
     }
     return data;
   }, [shifts, filters, sortConfig]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredSorted.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentPageData = filteredSorted.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedShifts(new Set()); // Clear selection when filters change
+  }, [filters.name]);
+
+  // Clear selection when page changes
+  useEffect(() => {
+    setSelectedShifts(new Set());
+  }, [currentPage]);
+
+  // Selection handlers
+  const handleSelectAll = (checked) => {
+    if (checked) {
+      const newSelected = new Set(currentPageData.map(s => s.id));
+      setSelectedShifts(newSelected);
+    } else {
+      setSelectedShifts(new Set());
+    }
+  };
+
+  const handleSelectShift = (shiftId, checked) => {
+    const newSelected = new Set(selectedShifts);
+    if (checked) {
+      newSelected.add(shiftId);
+    } else {
+      newSelected.delete(shiftId);
+    }
+    setSelectedShifts(newSelected);
+  };
+
+  const isAllSelected = currentPageData.length > 0 && currentPageData.every(s => selectedShifts.has(s.id));
+  const isSomeSelected = currentPageData.some(s => selectedShifts.has(s.id)) && !isAllSelected;
+
+  // Clear all selections
+  const clearSelection = () => {
+    setSelectedShifts(new Set());
+  };
+
+  // Bulk delete handler
+  const handleBulkDelete = async () => {
+    setActionLoading(true);
+    
+    try {
+      const shiftIds = Array.from(selectedShifts);
+      
+      // Sample JSON body that will be sent to the API
+      const payload = {
+        shiftIds: shiftIds
+      };
+            
+      const response = await fetch(`${API}/api/shifts/bulk-delete`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success(data.message || `Successfully deleted ${shiftIds.length} shift template${shiftIds.length > 1 ? 's' : ''}`);
+        setShifts(prev => prev.filter(s => !selectedShifts.has(s.id)));
+        setSelectedShifts(new Set());
+        setShowBulkDelete(false);
+      } else {
+        toast.error(data.message || "Failed to delete shift templates");
+      }
+    } catch (error) {
+      console.error("Bulk delete error:", error);
+      toast.error("An error occurred while deleting shift templates");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Pagination handlers
+  const goToFirstPage = () => setCurrentPage(1);
+  const goToLastPage = () => setCurrentPage(totalPages);
+  const goToPreviousPage = () => setCurrentPage(prev => Math.max(1, prev - 1));
+  const goToNextPage = () => setCurrentPage(prev => Math.min(totalPages, prev + 1));
+  const goToPage = (page) => setCurrentPage(Math.min(Math.max(1, page), totalPages));
 
   const toggleColumn = (c) => setColumnVisibility((p) => (p.includes(c) ? p.filter((x) => x !== c) : [...p, c]));
 
@@ -422,6 +570,25 @@ export default function Shifts() {
 
   const labelClass = "my-auto shrink-0 text-sm font-medium text-muted-foreground";
 
+  // Component to display timezone badge
+  const TimezoneBadge = () => {
+    const tzAbbr = getTimezoneAbbr(companyTimezone);
+    return (
+      <div className="flex items-center justify-center gap-2 p-3 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+        <Globe className="h-4 w-4 text-orange-600" />
+        <div className="text-sm">
+          <span className="font-semibold text-orange-900 dark:text-orange-100">Company Timezone: </span>
+          <span className="font-mono text-orange-700 dark:text-orange-300">
+            {companyTimezone}
+          </span>
+          {tzAbbr && (
+            <span className="ml-1 text-orange-600 dark:text-orange-400">({tzAbbr})</span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // Summary statistics component
   const SummaryStats = ({ data }) => {
     const stats = useMemo(() => {
@@ -535,6 +702,186 @@ export default function Shifts() {
     );
   };
 
+  // Pagination Component
+  const PaginationControls = () => {
+    const pageNumbers = [];
+    const maxVisiblePages = 5;
+    
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    
+    if (endPage - startPage < maxVisiblePages - 1) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(i);
+    }
+
+    return (
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4 px-2">
+        {/* Left side - Items info */}
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span>
+            Showing {startIndex + 1}-{Math.min(endIndex, filteredSorted.length)} of {filteredSorted.length} shifts
+          </span>
+          <span className="hidden sm:inline">•</span>
+          <Select
+            value={itemsPerPage.toString()}
+            onValueChange={(value) => {
+              setItemsPerPage(Number(value));
+              setCurrentPage(1);
+            }}
+          >
+            <SelectTrigger className="w-[100px] h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10">10 / page</SelectItem>
+              <SelectItem value="20">20 / page</SelectItem>
+              <SelectItem value="50">50 / page</SelectItem>
+              <SelectItem value="100">100 / page</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Right side - Page navigation */}
+        <div className="flex items-center gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToFirstPage}
+                  disabled={currentPage === 1}
+                  className="h-8 w-8 p-0"
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>First page</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToPreviousPage}
+                  disabled={currentPage === 1}
+                  className="h-8 w-8 p-0"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Previous page</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <div className="flex items-center gap-1">
+            {startPage > 1 && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => goToPage(1)}
+                  className="h-8 w-8 p-0"
+                >
+                  1
+                </Button>
+                {startPage > 2 && (
+                  <span className="text-muted-foreground px-1">...</span>
+                )}
+              </>
+            )}
+
+            {pageNumbers.map((page) => (
+              <Button
+                key={page}
+                variant={currentPage === page ? "default" : "outline"}
+                size="sm"
+                onClick={() => goToPage(page)}
+                className={`h-8 w-8 p-0 ${
+                  currentPage === page
+                    ? "bg-orange-500 hover:bg-orange-600 text-white"
+                    : ""
+                }`}
+              >
+                {page}
+              </Button>
+            ))}
+
+            {endPage < totalPages && (
+              <>
+                {endPage < totalPages - 1 && (
+                  <span className="text-muted-foreground px-1">...</span>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => goToPage(totalPages)}
+                  className="h-8 w-8 p-0"
+                >
+                  {totalPages}
+                </Button>
+              </>
+            )}
+          </div>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToNextPage}
+                  disabled={currentPage === totalPages}
+                  className="h-8 w-8 p-0"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Next page</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToLastPage}
+                  disabled={currentPage === totalPages}
+                  className="h-8 w-8 p-0"
+                >
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Last page</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      </div>
+    );
+  };
+
+  // Get selected shift details for display
+  const getSelectedShiftDetails = () => {
+    return Array.from(selectedShifts).map(id => {
+      const shift = shifts.find(s => s.id === id);
+      return shift ? {
+        id: shift.id,
+        name: shift.shiftName,
+        time: `${fmtClockWith12Hour(shift.startTime)} - ${fmtClockWith12Hour(shift.endTime)}`,
+        duration: totalHours(shift.startTime, shift.endTime)
+      } : null;
+    }).filter(Boolean);
+  };
+
   return (
     <div className="max-w-full mx-auto p-4 lg:px-6 px-2 space-y-6">
       <Toaster position="top-center" />
@@ -579,6 +926,60 @@ export default function Shifts() {
           </Button>
         </div>
       </div>
+
+      {/* Selection Bar - Shows when items are selected */}
+      <AnimatePresence>
+        {selectedShifts.size > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Card className="border-2 border-orange-500 shadow-lg">
+              <CardContent className="py-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-full bg-orange-100 dark:bg-orange-900/30">
+                      <Check className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-orange-900 dark:text-orange-100">
+                        {selectedShifts.size} shift{selectedShifts.size > 1 ? 's' : ''} selected
+                      </p>
+                      <p className="text-sm text-orange-700 dark:text-orange-300">
+                        {selectedShifts.size === currentPageData.length 
+                          ? "All shifts on this page are selected" 
+                          : "Select shifts to perform bulk actions"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={clearSelection}
+                      className="gap-2"
+                    >
+                      <X className="h-4 w-4" />
+                      Clear
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setShowBulkDelete(true)}
+                      className="gap-2 bg-red-500 hover:bg-red-600"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete Selected
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Summary Statistics */}
       <SummaryStats data={filteredSorted} />
@@ -654,6 +1055,17 @@ export default function Shifts() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
+                  {/* Select All Checkbox */}
+                  <TableHead className="w-12">
+                    <div className="flex items-center justify-center">
+                      <Checkbox
+                        checked={isAllSelected}
+                        indeterminate={isSomeSelected}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all shifts on this page"
+                      />
+                    </div>
+                  </TableHead>
                   {columnOptions
                     .filter((c) => columnVisibility.includes(c.value))
                     .map(({ value, label }) => (
@@ -683,10 +1095,13 @@ export default function Shifts() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  Array(5)
+                  Array(itemsPerPage)
                     .fill(0)
                     .map((_, i) => (
                       <TableRow key={i}>
+                        <TableCell>
+                          <Skeleton className="h-5 w-5 rounded mx-auto" />
+                        </TableCell>
                         {columnVisibility.concat("actions").map((__, j) => (
                           <TableCell key={j}>
                             <Skeleton className="h-6 w-full" />
@@ -694,114 +1109,157 @@ export default function Shifts() {
                         ))}
                       </TableRow>
                     ))
-                ) : filteredSorted.length ? (
+                ) : currentPageData.length ? (
                   <AnimatePresence>
-                    {filteredSorted.map((s, index) => (
-                      <motion.tr
-                        key={s.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2, delay: index * 0.02 }}
-                        className="border-b transition-all hover:bg-muted/50"
-                      >
-                        {columnVisibility.includes("shiftName") && (
-                          <TableCell className="font-medium text-center">
-                            <div className="max-w-[200px] truncate mx-auto" title={s.shiftName}>
-                              {s.shiftName}
+                    {currentPageData.map((s, index) => {
+                      const isSelected = selectedShifts.has(s.id);
+                      return (
+                        <motion.tr
+                          key={s.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2, delay: index * 0.02 }}
+                          className={`border-b transition-all ${
+                            isSelected 
+                              ? 'bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/30' 
+                              : 'hover:bg-muted/50'
+                          }`}
+                        >
+                          {/* Checkbox Column */}
+                          <TableCell className="w-12">
+                            <div className="flex items-center justify-center">
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={(checked) => handleSelectShift(s.id, checked)}
+                                aria-label={`Select ${s.shiftName}`}
+                              />
                             </div>
                           </TableCell>
-                        )}
-                        {columnVisibility.includes("startTime") && (
-                          <TableCell className="text-center">
-                            <div className="space-y-1">
-                              <div className="font-mono text-sm">
-                                <TimeDisplayWithTooltip time={fmtClock(s.startTime)} type="start" />
+                          
+                          {columnVisibility.includes("shiftName") && (
+                            <TableCell className="font-medium text-center">
+                              <div className="max-w-[200px] truncate mx-auto" title={s.shiftName}>
+                                {s.shiftName}
                               </div>
-                              <div className="text-xs text-muted-foreground">
-                                {fmtClockWith12Hour(s.startTime)}
+                            </TableCell>
+                          )}
+                          {columnVisibility.includes("startTime") && (
+                            <TableCell className="text-center">
+                              <div className="space-y-1">
+                                <div className="font-mono text-sm">
+                                  <TimeDisplayWithTooltip time={fmtClock(s.startTime)} type="start" />
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {fmtClockWith12Hour(s.startTime)}
+                                </div>
                               </div>
-                            </div>
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("endTime") && (
-                          <TableCell className="text-center">
-                            <div className="space-y-1">
-                              <div className="font-mono text-sm">
-                                <TimeDisplayWithTooltip time={fmtClock(s.endTime)} type="end" />
+                            </TableCell>
+                          )}
+                          {columnVisibility.includes("endTime") && (
+                            <TableCell className="text-center">
+                              <div className="space-y-1">
+                                <div className="font-mono text-sm">
+                                  <TimeDisplayWithTooltip time={fmtClock(s.endTime)} type="end" />
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {fmtClockWith12Hour(s.endTime)}
+                                </div>
                               </div>
-                              <div className="text-xs text-muted-foreground">
-                                {fmtClockWith12Hour(s.endTime)}
+                            </TableCell>
+                          )}
+                          {columnVisibility.includes("totalHours") && (
+                            <TableCell className="text-center">
+                              <Badge variant="secondary" className="font-mono">
+                                <TimeDisplayWithTooltip time={`${totalHours(s.startTime, s.endTime)}h`} type="total" />
+                              </Badge>
+                            </TableCell>
+                          )}
+                          {columnVisibility.includes("timeZone") && (
+                            <TableCell className="text-center">
+                              {s.timeZone ? (
+                                <div className="flex items-center justify-center gap-1">
+                                  <Globe className="h-3 w-3 text-blue-600" />
+                                  <TooltipProvider delayDuration={200}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="text-xs font-mono cursor-help border-b border-dotted border-muted-foreground">
+                                          {getTimezoneAbbr(s.timeZone) || s.timeZone.split('/').pop()}
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <div className="text-xs">{s.timeZone}</div>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                </div>
+                              ) : (
+                                <Badge variant="destructive" className="text-xs">
+                                  Missing
+                                </Badge>
+                              )}
+                            </TableCell>
+                          )}
+                          {columnVisibility.includes("differentialMultiplier") && (
+                            <TableCell className="text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <Zap className="h-3 w-3 text-orange-500" />
+                                <TimeDisplayWithTooltip time={`${s.differentialMultiplier}x`} type="multiplier" />
                               </div>
-                            </div>
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("totalHours") && (
-                          <TableCell className="text-center">
-                            <Badge variant="secondary" className="font-mono">
-                              <TimeDisplayWithTooltip time={`${totalHours(s.startTime, s.endTime)}h`} type="total" />
-                            </Badge>
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("differentialMultiplier") && (
-                          <TableCell className="text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <Zap className="h-3 w-3 text-orange-500" />
-                              <TimeDisplayWithTooltip time={`${s.differentialMultiplier}x`} type="multiplier" />
-                            </div>
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("createdAt") && (
-                          <TableCell className="text-center">
-                            <DateTimeDisplayWithTooltip dateTime={s.createdAt} type="created" />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("updatedAt") && (
-                          <TableCell className="text-center">
-                            <DateTimeDisplayWithTooltip dateTime={s.updatedAt} type="updated" />
-                          </TableCell>
-                        )}
-                        <TableCell>
-                          <div className="flex justify-center gap-1">
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => openEdit(s)}
-                                    className="text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                                  >
-                                    <Edit3 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Edit shift template</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
+                            </TableCell>
+                          )}
+                          {columnVisibility.includes("createdAt") && (
+                            <TableCell className="text-center">
+                              <DateTimeDisplayWithTooltip dateTime={s.createdAt} type="created" />
+                            </TableCell>
+                          )}
+                          {columnVisibility.includes("updatedAt") && (
+                            <TableCell className="text-center">
+                              <DateTimeDisplayWithTooltip dateTime={s.updatedAt} type="updated" />
+                            </TableCell>
+                          )}
+                          <TableCell>
+                            <div className="flex justify-center gap-1">
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => openEdit(s)}
+                                      className="text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                                    >
+                                      <Edit3 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Edit shift template</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
 
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => openDelete(s)}
-                                    className="text-red-500 hover:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Delete shift template</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </TableCell>
-                      </motion.tr>
-                    ))}
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => openDelete(s)}
+                                      className="text-red-500 hover:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Delete shift template</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                          </TableCell>
+                        </motion.tr>
+                      );
+                    })}
                   </AnimatePresence>
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={columnVisibility.length + 1} className="h-32 text-center">
+                    <TableCell colSpan={columnVisibility.length + 2} className="h-32 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
                         <div className="w-16 h-16 bg-muted/30 rounded-full flex items-center justify-center mb-4">
                           <Clock className="h-8 w-8 text-orange-500/50" />
@@ -829,10 +1287,86 @@ export default function Shifts() {
               </TableBody>
             </Table>
           </div>
+
+          {/* Pagination Controls */}
+          {!loading && filteredSorted.length > 0 && (
+            <div className="border-t">
+              <PaginationControls />
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Create Dialog */}
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={showBulkDelete} onOpenChange={setShowBulkDelete}>
+        <DialogContent className="sm:max-w-lg border-2 border-red-200 dark:border-red-800/50">
+          <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              Delete Multiple Shift Templates
+            </DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. This will permanently delete {selectedShifts.size} shift template{selectedShifts.size > 1 ? 's' : ''}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Alert className="border-red-200 bg-red-50 dark:bg-red-950/20">
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <AlertDescription className="text-red-800 dark:text-red-200">
+              <span className="font-medium">Deleting {selectedShifts.size} shift template{selectedShifts.size > 1 ? 's' : ''}:</span>
+              <div className="mt-2 max-h-40 overflow-y-auto space-y-1">
+                {getSelectedShiftDetails().map((shift) => (
+                  <div key={shift.id} className="text-sm p-2 bg-red-100 dark:bg-red-900/30 rounded">
+                    <div className="font-medium">{shift.name}</div>
+                    <div className="text-xs text-red-700 dark:text-red-300">
+                      {shift.time} • {shift.duration} hours
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </AlertDescription>
+          </Alert>
+
+          {/* Sample JSON Payload Display */}
+          <div className="bg-gray-100 dark:bg-gray-900 p-3 rounded-md">
+            <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">API Payload:</p>
+            <pre className="text-xs overflow-x-auto">
+              <code>{JSON.stringify({ shiftIds: Array.from(selectedShifts) }, null, 2)}</code>
+            </pre>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowBulkDelete(false)}
+              className="border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={actionLoading}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              {actionLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete {selectedShifts.size} Template{selectedShifts.size > 1 ? 's' : ''}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Dialog - (keeping existing dialog code) */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="sm:max-w-md border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -845,6 +1379,8 @@ export default function Shifts() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            {!loadingTimezone && <TimezoneBadge />}
+
             <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
               <Info className="h-4 w-4 text-blue-600" />
               <AlertDescription className="text-blue-800 dark:text-blue-200">
@@ -887,7 +1423,7 @@ export default function Shifts() {
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
                         <div className="text-xs">
-                          When employees should begin their work shift
+                          When employees should begin their work shift (in {companyTimezone})
                         </div>
                       </TooltipContent>
                     </Tooltip>
@@ -899,6 +1435,9 @@ export default function Shifts() {
                   onChange={(e) => setCreateForm((p) => ({ ...p, startTime: e.target.value }))}
                   className="focus:border-orange-500 focus:ring-orange-500/20"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Enter time in your company timezone
+                </p>
               </div>
               <div className="space-y-2">
                 <Label className="flex items-center gap-1">
@@ -910,7 +1449,7 @@ export default function Shifts() {
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
                         <div className="text-xs">
-                          When employees should finish their work shift
+                          When employees should finish their work shift (in {companyTimezone})
                         </div>
                       </TooltipContent>
                     </Tooltip>
@@ -922,6 +1461,9 @@ export default function Shifts() {
                   onChange={(e) => setCreateForm((p) => ({ ...p, endTime: e.target.value }))}
                   className="focus:border-orange-500 focus:ring-orange-500/20"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Enter time in your company timezone
+                </p>
               </div>
             </div>
 
@@ -952,12 +1494,11 @@ export default function Shifts() {
               />
             </div>
 
-            {/* Preview */}
             {createForm.startTime && createForm.endTime && (
               <Alert className="border-green-200 bg-green-50 dark:bg-green-950/20">
                 <Timer className="h-4 w-4 text-green-600" />
                 <AlertDescription className="text-green-800 dark:text-green-200">
-                  <span className="font-medium">Preview:</span> This shift will be {totalHours(toUtcIso(createForm.startTime), toUtcIso(createForm.endTime))} hours long
+                  <span className="font-medium">Preview:</span> This shift will be {totalHours(toUtcIso(createForm.startTime), toUtcIso(createForm.endTime))} hours long in {companyTimezone}
                   {parseFloat(createForm.differentialMultiplier) !== 1.0 && ` with ${createForm.differentialMultiplier}x pay rate`}
                 </AlertDescription>
               </Alert>
@@ -989,7 +1530,7 @@ export default function Shifts() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Dialog */}
+      {/* Edit Dialog - (keeping existing) */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
         <DialogContent className="sm:max-w-md border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -1002,6 +1543,8 @@ export default function Shifts() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            {!loadingTimezone && <TimezoneBadge />}
+
             <div className="space-y-2">
               <Label>Shift Template Name</Label>
               <Input
@@ -1021,6 +1564,9 @@ export default function Shifts() {
                   onChange={(e) => setEditForm((p) => ({ ...p, startTime: e.target.value }))}
                   className="focus:border-orange-500 focus:ring-orange-500/20"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Time in {companyTimezone}
+                </p>
               </div>
               <div className="space-y-2">
                 <Label>End Time</Label>
@@ -1030,6 +1576,9 @@ export default function Shifts() {
                   onChange={(e) => setEditForm((p) => ({ ...p, endTime: e.target.value }))}
                   className="focus:border-orange-500 focus:ring-orange-500/20"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Time in {companyTimezone}
+                </p>
               </div>
             </div>
 
@@ -1046,12 +1595,11 @@ export default function Shifts() {
               />
             </div>
 
-            {/* Preview */}
             {editForm.startTime && editForm.endTime && (
               <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
                 <Timer className="h-4 w-4 text-blue-600" />
                 <AlertDescription className="text-blue-800 dark:text-blue-200">
-                  <span className="font-medium">Updated Duration:</span> {totalHours(toUtcIso(editForm.startTime), toUtcIso(editForm.endTime))} hours
+                  <span className="font-medium">Updated Duration:</span> {totalHours(toUtcIso(editForm.startTime), toUtcIso(editForm.endTime))} hours in {companyTimezone}
                   {parseFloat(editForm.differentialMultiplier) !== 1.0 && ` with ${editForm.differentialMultiplier}x pay rate`}
                 </AlertDescription>
               </Alert>
@@ -1083,7 +1631,7 @@ export default function Shifts() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Confirmation Dialog - (keeping existing) */}
       <Dialog open={showDelete} onOpenChange={setShowDelete}>
         <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
           <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />

@@ -1,716 +1,365 @@
-/* components/Dashboard/DashboardContent/TimeKeeping/Overtime.jsx */
+
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Clock,
-  Calendar,
-  Download,
-  Filter,
-  RefreshCw,
-  ChevronUp,
-  ChevronDown,
-  FileText,
-  ChevronsLeft,
-  ChevronsRight,
-  User,
-  CheckCircle,
+  CheckCircle2,
   XCircle,
-  Hourglass,
+  Eye,
+  FileText,
   TrendingUp,
-  ChevronRight,
+  AlertCircle,
+  User,
+  Calendar,
 } from "lucide-react";
-import { toast, Toaster } from "sonner";
-import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import DataTable from "@/components/common/DataTable";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import IconBtn from "@/components/common/IconBtn";
-import TableSkeleton from "@/components/common/TableSkeleton";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-const safeDate = (d) =>
-  d
-    ? new Date(d).toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      })
-    : "—";
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-const safeTime = (d) => (d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—");
-const safeDateTime = (d) => (d ? `${safeDate(d)} ${safeTime(d)}` : "—");
-
-const getStatusColor = (status) => {
-  switch (status?.toLowerCase()) {
-    case "pending":
-      return "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400";
-    case "approved":
-      return "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400";
-    case "rejected":
-      return "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400";
-    default:
-      return "bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-900/30 dark:text-gray-400";
-  }
+const statusConfig = {
+  pending: {
+    label: "Pending",
+    color: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+    icon: Clock,
+  },
+  approved: {
+    label: "Approved", 
+    color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+    icon: CheckCircle2,
+  },
+  rejected: {
+    label: "Rejected",
+    color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400", 
+    icon: XCircle,
+  },
 };
 
-const getStatusIcon = (status) => {
-  switch (status?.toLowerCase()) {
-    case "pending":
-      return <Hourglass className="h-3 w-3" />;
-    case "approved":
-      return <CheckCircle className="h-3 w-3" />;
-    case "rejected":
-      return <XCircle className="h-3 w-3" />;
-    default:
-      return <Clock className="h-3 w-3" />;
-  }
+const StatusBadge = ({ status }) => {
+  const config = statusConfig[status];
+  if (!config) return status;
+  
+  const Icon = config.icon;
+  return (
+    <Badge variant="secondary" className={`${config.color} border-0`}>
+      <Icon className="h-3 w-3 mr-1" />
+      {config.label}
+    </Badge>
+  );
 };
 
-export default function Overtime() {
+export default function EmployeeOvertimeRequests() {
   const { token, user } = useAuthStore();
-  const API_URL = process.env.NEXT_PUBLIC_API_URL;
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(false);
+  
+  // Dialog states
+  const [detailDialog, setDetailDialog] = useState({ open: false, request: null });
 
-  // Data states
-  const [overtimeRequests, setOvertimeRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  // Calculate stats
+  const stats = useMemo(() => {
+    const total = requests.length;
+    const pending = requests.filter(r => r.status === "pending").length;
+    const approved = requests.filter(r => r.status === "approved").length;
+    const rejected = requests.filter(r => r.status === "rejected").length;
+    const approvedHours = requests
+      .filter(r => r.status === "approved")
+      .reduce((sum, r) => sum + Number(r.requestedHours || 0), 0);
 
-  // Expandable row states
-  const [expandedRow, setExpandedRow] = useState(null);
+    return { total, pending, approved, rejected, approvedHours: approvedHours.toFixed(1) };
+  }, [requests]);
 
-  // Table states
-  const [filters, setFilters] = useState({
-    status: "all",
-    from: "",
-    to: "",
-  });
-  const [sortConfig, setSortConfig] = useState({
-    key: "createdAt",
-    direction: "descending",
-  });
+  // Status tabs for the table
+  const statusTabs = useMemo(() => [
+    { label: "All", value: "all", count: stats.total },
+    { label: "Pending", value: "pending", count: stats.pending },
+    { label: "Approved", value: "approved", count: stats.approved },
+    { label: "Rejected", value: "rejected", count: stats.rejected },
+  ], [requests, stats]);
 
-  // Pagination
-  const defaultRowsPerPage = 10;
-  const [rowsPerPage, setRowsPerPage] = useState(defaultRowsPerPage);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  // Table columns
+  const columns = [
+    {
+      key: "createdAt",
+      label: "Date Submitted",
+      render: (date) => (
+        <div className="text-sm">
+          <div className="font-medium">{new Date(date).toLocaleDateString()}</div>
+          <div className="text-xs text-muted-foreground">
+            {new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </div>
+        </div>
+      ),
+      sortable: true,
+    },
+    {
+      key: "requestedHours",
+      label: "Hours Requested",
+      render: (hours) => (
+        <div className="font-mono text-sm font-medium">
+          {Number(hours).toFixed(2)}h
+        </div>
+      ),
+      sortable: true,
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (status) => <StatusBadge status={status} />,
+      sortable: true,
+    },
+    {
+      key: "approver",
+      label: "Approver",
+      render: (_, row) => (
+        <div className="text-sm">
+          {row.approver?.email || "Not assigned"}
+        </div>
+      ),
+    },
+    {
+      key: "requesterReason",
+      label: "Reason",
+      render: (reason) => (
+        <div className="max-w-32 truncate text-sm text-muted-foreground">
+          {reason || "No reason provided"}
+        </div>
+      ),
+    },
+    {
+      key: "updatedAt",
+      label: "Last Updated",
+      render: (date) => (
+        <div className="text-sm text-muted-foreground">
+          {new Date(date).toLocaleDateString()}
+        </div>
+      ),
+      sortable: true,
+    },
+  ];
 
-  const fetchOvertimeRequests = useCallback(async () => {
-    if (!token) return;
-    try {
-      const res = await fetch(`${API_URL}/api/overtime/my`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const j = await res.json();
-      if (res.ok) {
-        setOvertimeRequests(j.data || []);
-      } else {
-        throw new Error(j.message || "Failed to fetch overtime requests");
-      }
-    } catch (err) {
-      console.error("Error fetching overtime requests:", err);
-      toast.message(err.message || "Failed to load overtime requests");
-      setOvertimeRequests([]); // Set empty array on error
-    }
-  }, [API_URL, token]);
+  // Table actions
+  const actions = [
+    {
+      label: "View Details",
+      icon: Eye,
+      onClick: (request) => setDetailDialog({ open: true, request }),
+    },
+  ];
 
-  useEffect(() => {
+  const fetchRequests = useCallback(async () => {
     if (!token) return;
     setLoading(true);
-    fetchOvertimeRequests().finally(() => setLoading(false));
-  }, [token, fetchOvertimeRequests]);
+    try {
+      const response = await fetch(`${API_URL}/api/overtime/my`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      
+      if (!response.ok) throw new Error(data.message || "Failed to fetch overtime requests");
+      
+      setRequests(data.data || []);
+    } catch (error) {
+      toast.error(error.message || "Failed to fetch overtime requests");
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
 
-  const refresh = () => {
-    setRefreshing(true);
-    fetchOvertimeRequests().finally(() => setRefreshing(false));
+  const getProjectedTime = (request) => {
+    if (!request.timeLog?.timeOut || !request.requestedHours) return null;
+    const originalOut = new Date(request.timeLog.timeOut);
+    const withOT = new Date(originalOut.getTime() + Number(request.requestedHours) * 3600000);
+    return withOT;
   };
 
-  // Statistics
-  const stats = useMemo(() => {
-    const total = overtimeRequests.length;
-    const pending = overtimeRequests.filter(r => r.status?.toLowerCase() === "pending").length;
-    const approved = overtimeRequests.filter(r => r.status?.toLowerCase() === "approved").length;
-    const rejected = overtimeRequests.filter(r => r.status?.toLowerCase() === "rejected").length;
-    const totalHours = overtimeRequests
-      .filter(r => r.status?.toLowerCase() === "approved")
-      .reduce((sum, r) => sum + (parseFloat(r.requestedHours) || 0), 0);
-    
-    return { total, pending, approved, rejected, totalHours };
-  }, [overtimeRequests]);
-
-  // Filtering and sorting
-  const filteredSorted = useMemo(() => {
-    let data = [...overtimeRequests];
-    
-    if (filters.status !== "all") {
-      data = data.filter(req => req.status?.toLowerCase() === filters.status);
-    }
-    if (filters.from) {
-      data = data.filter(req => req.createdAt?.slice(0, 10) >= filters.from);
-    }
-    if (filters.to) {
-      data = data.filter(req => req.createdAt?.slice(0, 10) <= filters.to);
-    }
-
-    data.sort((a, b) => {
-      let aVal, bVal;
-      switch (sortConfig.key) {
-        case "createdAt":
-          aVal = new Date(a.createdAt).getTime();
-          bVal = new Date(b.createdAt).getTime();
-          break;
-        case "requestedHours":
-          aVal = parseFloat(a.requestedHours) || 0;
-          bVal = parseFloat(b.requestedHours) || 0;
-          break;
-        case "status":
-          aVal = (a.status || "").toLowerCase();
-          bVal = (b.status || "").toLowerCase();
-          break;
-        default:
-          return 0;
-      }
-      
-      if (aVal < bVal) return sortConfig.direction === "ascending" ? -1 : 1;
-      if (aVal > bVal) return sortConfig.direction === "ascending" ? 1 : -1;
-      return 0;
-    });
-
-    return data;
-  }, [overtimeRequests, filters, sortConfig]);
+  const getTotalHours = (request) => {
+    if (!request.timeLog?.timeIn || !request.timeLog?.timeOut || !request.requestedHours) return null;
+    const projected = getProjectedTime(request);
+    if (!projected) return null;
+    const hours = (projected - new Date(request.timeLog.timeIn)) / 3600000;
+    return hours.toFixed(2);
+  };
 
   useEffect(() => {
-    const tp = Math.max(1, Math.ceil(filteredSorted.length / rowsPerPage));
-    setTotalPages(tp);
-    if (page > tp) setPage(tp);
-  }, [filteredSorted, rowsPerPage, page]);
-
-  const displayed = useMemo(() => {
-    const start = (page - 1) * rowsPerPage;
-    return filteredSorted.slice(start, start + rowsPerPage);
-  }, [filteredSorted, page, rowsPerPage]);
-
-  const requestSort = (key) => {
-    setSortConfig(prev => ({
-      key,
-      direction: prev.key === key && prev.direction === "ascending" ? "descending" : "ascending",
-    }));
-  };
-
-  const exportCSV = () => {
-    if (!filteredSorted.length) {
-      toast.message("No data to export");
-      return;
-    }
-    
-    setExporting(true);
-    const headers = ["Date Submitted", "TimeLog ID", "Requested Hours", "Status", "Approver", "Reason"].join(",");
-    const rows = filteredSorted.map(req => [
-      safeDateTime(req.createdAt),
-      req.timeLogId || "—",
-      req.requestedHours || "0",
-      req.status || "—",
-      req.approver?.profile?.firstName && req.approver?.profile?.lastName 
-        ? `${req.approver.profile.firstName} ${req.approver.profile.lastName}`
-        : req.approver?.email || "—",
-      `"${(req.requesterReason || "").replace(/"/g, '""')}"`
-    ].join(","));
-    
-    const csv = [headers, ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Overtime_Requests_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.message("CSV exported successfully");
-    setExporting(false);
-  };
-
-  const exportPDF = () => {
-    if (!filteredSorted.length) {
-      toast.message("No data to export");
-      return;
-    }
-
-    const company = user?.company?.name || "—";
-    const fullName = `${user?.profile?.firstName || ""} ${user?.profile?.lastName || ""}`.trim() || "—";
-    const email = user?.email || "—";
-
-    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-    doc.setFontSize(12);
-    doc.text(`Company: ${company}`, 14, 20);
-    doc.text(`Employee: ${fullName}`, 14, 28);
-    doc.text(`Email: ${email}`, 14, 36);
-    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 44);
-
-    const tableHead = [["Date Submitted", "TimeLog ID", "Hours", "Status", "Approver", "Reason"]];
-    const tableBody = filteredSorted.map(req => [
-      safeDateTime(req.createdAt),
-      req.timeLogId || "—",
-      req.requestedHours || "0",
-      req.status || "—",
-      req.approver?.profile?.firstName && req.approver?.profile?.lastName 
-        ? `${req.approver.profile.firstName} ${req.approver.profile.lastName}`
-        : req.approver?.email || "—",
-      (req.requesterReason || "").substring(0, 40) + (req.requesterReason?.length > 40 ? "..." : "")
-    ]);
-
-    autoTable(doc, {
-      head: tableHead,
-      body: tableBody,
-      startY: 52,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [255, 165, 0] },
-    });
-
-    doc.save(`Overtime_Requests_${new Date().toISOString().slice(0, 10)}.pdf`);
-    toast.message("PDF exported successfully");
-  };
-
-  const viewDetails = (requestId) => {
-    setExpandedRow(expandedRow === requestId ? null : requestId);
-  };
+    fetchRequests();
+  }, [fetchRequests]);
 
   return (
-    <div className="max-w-full mx-auto p-4 lg:px-4 px-1 space-y-8">
-      <Toaster position="top-center" />
-      
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight flex items-center gap-3">
-            <Clock className="h-8 w-8 text-orange-500" />
-            Overtime Requests
-          </h2>
-          <p className="text-muted-foreground mt-1">View and track your overtime request history</p>
-        </div>
-        <div className="flex gap-2">
-          <IconBtn icon={RefreshCw} tooltip="Refresh" spinning={refreshing} onClick={refresh} />
-          <IconBtn icon={Download} tooltip="Export CSV" spinning={exporting} onClick={exportCSV} />
-          <IconBtn icon={FileText} tooltip="Export PDF" onClick={exportPDF} />
+          <h1 className="text-2xl font-bold tracking-tight">Overtime Requests</h1>
+          <p className="text-muted-foreground">View and track your overtime request history</p>
         </div>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="border-2 dark:border-white/10">
-          <div className="h-1 w-full bg-blue-500" />
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Clock className="h-4 w-4 text-blue-500" />
-              Total Requests
-            </CardTitle>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Requests</CardTitle>
+              <FileText className="h-4 w-4 text-muted-foreground" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.total}</div>
           </CardContent>
         </Card>
 
-        <Card className="border-2 dark:border-white/10">
-          <div className="h-1 w-full bg-yellow-500" />
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Hourglass className="h-4 w-4 text-yellow-500" />
-              Pending
-            </CardTitle>
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Pending</CardTitle>
+              <Clock className="h-4 w-4 text-amber-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.pending}</div>
+            <div className="text-2xl font-bold text-amber-600">{stats.pending}</div>
           </CardContent>
         </Card>
 
-        <Card className="border-2 dark:border-white/10">
-          <div className="h-1 w-full bg-green-500" />
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-green-500" />
-              Approved
-            </CardTitle>
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Approved</CardTitle>
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.approved}</div>
+            <div className="text-2xl font-bold text-green-600">{stats.approved}</div>
           </CardContent>
         </Card>
 
-        <Card className="border-2 dark:border-white/10">
-          <div className="h-1 w-full bg-orange-500" />
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-orange-500" />
-              Approved Hours
-            </CardTitle>
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Approved Hours</CardTitle>
+              <TrendingUp className="h-4 w-4 text-orange-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalHours.toFixed(1)}</div>
+            <div className="text-2xl font-bold text-orange-600">{stats.approvedHours}</div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters */}
-      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5 text-orange-500" />
-            Filters
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-3 items-center">
-            <Select value={filters.status} onValueChange={(v) => setFilters(prev => ({ ...prev, status: v }))}>
-              <SelectTrigger className="w-[170px]">
-                <SelectValue placeholder="All status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
-            
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">From:</span>
-              <Input
-                type="date"
-                value={filters.from}
-                onChange={(e) => setFilters(prev => ({ ...prev, from: e.target.value }))}
-                className="h-8"
-              />
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <span className="text-sm">To:</span>
-              <Input
-                type="date"
-                value={filters.to}
-                onChange={(e) => setFilters(prev => ({ ...prev, to: e.target.value }))}
-                className="h-8"
-              />
-            </div>
+      {/* Main Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Clock className="h-5 w-5 text-orange-600" />
+            <CardTitle>Overtime Requests</CardTitle>
           </div>
+        </CardHeader>
+        <CardContent className="p-6">
+          <DataTable
+            data={requests}
+            columns={columns}
+            loading={loading}
+            onRefresh={fetchRequests}
+            actions={actions}
+            searchPlaceholder="Search by reason, status, or date..."
+            statusTabs={statusTabs}
+            onRowClick={(request) => setDetailDialog({ open: true, request })}
+            pageSize={10}
+          />
         </CardContent>
       </Card>
 
-      {/* Overtime Requests Table */}
-      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5 text-orange-500" />
-            Overtime Requests
-          </CardTitle>
-          <span className="text-sm text-muted-foreground">
-            {displayed.length} of {filteredSorted.length} requests
-          </span>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="rounded-md border overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12"></TableHead>
-                  <TableHead className="cursor-pointer" onClick={() => requestSort("createdAt")}>
-                    <div className="flex items-center">
-                      Date Submitted
-                      {sortConfig.key === "createdAt" && (
-                        sortConfig.direction === "ascending" ? 
-                        <ChevronUp className="h-4 w-4 ml-1" /> : 
-                        <ChevronDown className="h-4 w-4 ml-1" />
-                      )}
-                    </div>
-                  </TableHead>
-                  <TableHead className="cursor-pointer" onClick={() => requestSort("requestedHours")}>
-                    <div className="flex items-center">
-                      Hours Requested
-                      {sortConfig.key === "requestedHours" && (
-                        sortConfig.direction === "ascending" ? 
-                        <ChevronUp className="h-4 w-4 ml-1" /> : 
-                        <ChevronDown className="h-4 w-4 ml-1" />
-                      )}
-                    </div>
-                  </TableHead>
-                  <TableHead className="cursor-pointer" onClick={() => requestSort("status")}>
-                    <div className="flex items-center">
-                      Status
-                      {sortConfig.key === "status" && (
-                        sortConfig.direction === "ascending" ? 
-                        <ChevronUp className="h-4 w-4 ml-1" /> : 
-                        <ChevronDown className="h-4 w-4 ml-1" />
-                      )}
-                    </div>
-                  </TableHead>
-                  <TableHead>Approver</TableHead>
-                  <TableHead>Reason</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableSkeleton rows={6} cols={6} />
-                ) : displayed.length ? (
-                  <AnimatePresence>
-                    {displayed.map((request) => (
-                      <OvertimeRequestRow
-                        key={request.id}
-                        request={request}
-                        expanded={expandedRow === request.id}
-                        onToggleExpand={() => viewDetails(request.id)}
-                      />
-                    ))}
-                  </AnimatePresence>
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
-                      <div className="flex flex-col items-center justify-center text-muted-foreground">
-                        <Clock className="h-8 w-8 mb-2 opacity-50" />
-                        <p className="font-medium">No overtime requests found</p>
-                        <p className="text-sm">Overtime requests created from punch logs will appear here</p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
+      {/* Detail Dialog */}
+      <Dialog open={detailDialog.open} onOpenChange={(open) => !open && setDetailDialog({ open: false, request: null })}>
+        <DialogContent className="sm:max-w-lg">
+          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-orange-600" />
+              Overtime Request Details
+            </DialogTitle>
+          </DialogHeader>
 
-        {/* Pagination */}
-        {filteredSorted.length > defaultRowsPerPage && (
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-4">
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" className="flex gap-1" disabled={page === 1} onClick={() => setPage(1)}>
-                <ChevronsLeft className="h-4 w-4" />
-                First
-              </Button>
-              {[...Array(totalPages)].map((_, i) => {
-                const p = i + 1;
-                if (p === 1 || p === totalPages || Math.abs(p - page) <= 1)
-                  return (
-                    <Button key={p} size="sm" variant={p === page ? "default" : "outline"} onClick={() => setPage(p)}>
-                      {p}
-                    </Button>
-                  );
-                if ((p === page - 2 && p > 1) || (p === page + 2 && p < totalPages))
-                  return (
-                    <span key={p} className="px-1 text-muted-foreground">
-                      …
-                    </span>
-                  );
-                return null;
-              })}
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex gap-1"
-                disabled={page === totalPages}
-                onClick={() => setPage(totalPages)}
-              >
-                Last
-                <ChevronsRight className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="flex items-center gap-2">
-              {rowsPerPage < filteredSorted.length && (
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    const next = Math.min(rowsPerPage + defaultRowsPerPage, filteredSorted.length);
-                    setRowsPerPage(next);
-                  }}
-                >
-                  Load more
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-function OvertimeRequestRow({ request, expanded, onToggleExpand }) {
-  // Calculate projected clock-out time
-  const calculateProjectedClockOut = (originalClockOut, otHours) => {
-    if (!originalClockOut || !otHours) return null;
-    const otMinutes = parseFloat(otHours) * 60;
-    const originalTime = new Date(originalClockOut);
-    const projectedTime = new Date(originalTime.getTime() + (otMinutes * 60 * 1000));
-    return projectedTime;
-  };
-
-  const originalClockOut = request.timeLog?.timeOut;
-  const requestedHours = parseFloat(request.requestedHours) || 0;
-  const projectedClockOut = calculateProjectedClockOut(originalClockOut, requestedHours);
-  const originalDuration = request.timeLog?.timeIn && request.timeLog?.timeOut 
-    ? (new Date(request.timeLog.timeOut) - new Date(request.timeLog.timeIn)) / 3600000 
-    : 0;
-  const totalHours = originalDuration + requestedHours;
-
-  return (
-    <>
-      <motion.tr
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, height: 0 }}
-        transition={{ duration: 0.2 }}
-        className="border-b hover:bg-muted/50 cursor-pointer group"
-        onClick={onToggleExpand}
-      >
-        <TableCell className="w-12">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0"
-          >
-            <ChevronRight className={`h-4 w-4 transition-transform ${expanded ? "rotate-90" : ""}`} />
-          </Button>
-        </TableCell>
-        
-        <TableCell className="font-medium">
-          <div className="flex flex-col">
-            <span className="text-sm">{safeDateTime(request.createdAt)}</span>
-            <span className="text-xs text-muted-foreground font-mono">ID: {request.id}</span>
-          </div>
-        </TableCell>
-        
-        <TableCell className="text-sm font-medium">
-          {request.requestedHours || "0"} hrs
-        </TableCell>
-        
-        <TableCell>
-          <Badge className={`${getStatusColor(request.status)} flex items-center gap-1 w-fit`}>
-            {getStatusIcon(request.status)}
-            {request.status || "Unknown"}
-          </Badge>
-        </TableCell>
-        
-        <TableCell className="text-sm">
-          {request.approver?.profile?.firstName && request.approver?.profile?.lastName 
-            ? `${request.approver.profile.firstName} ${request.approver.profile.lastName}`
-            : request.approver?.email || "—"}
-        </TableCell>
-        
-        <TableCell className="text-sm max-w-[200px] truncate">
-          {request.requesterReason || "—"}
-        </TableCell>
-      </motion.tr>
-      
-      {expanded && (
-        <motion.tr
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="bg-muted/30"
-        >
-          <TableCell colSpan={6} className="p-6">
+          {detailDialog.request && (
             <div className="space-y-6">
-              {/* Projected Times Section */}
-              {originalClockOut && requestedHours > 0 && (
-                <div className="p-4 bg-muted/50 rounded-md border">
-                  <h4 className="font-medium mb-3 flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-orange-500" />
-                    Projected Times
-                  </h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Original Clock-out:</span>
-                      <span className="font-medium">{safeDateTime(originalClockOut)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">With {requestedHours}h OT:</span>
-                      <span className="font-medium text-orange-600">
-                        {projectedClockOut ? safeDateTime(projectedClockOut) : "—"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Total Hours:</span>
-                      <span className="font-medium">
-                        {totalHours.toFixed(2)}h
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-3">
-                  <h4 className="font-semibold text-sm flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-orange-500" />
-                    Request Details
-                  </h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Request ID:</span>
-                      <span className="font-mono text-xs">{request.id}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">TimeLog ID:</span>
-                      <span className="font-mono text-xs">{request.timeLogId || "—"}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Requested Hours:</span>
-                      <span className="font-medium">{request.requestedHours || "0"} hrs</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Late Hours:</span>
-                      <span className="font-medium">{request.lateHours || "0"} hrs</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <h4 className="font-semibold text-sm flex items-center gap-2">
-                    <User className="h-4 w-4 text-orange-500" />
-                    Approval Information
-                  </h4>
-                  <div className="space-y-2 text-sm">
-                    <div>
-                      <span className="text-muted-foreground block mb-1">Submitted:</span>
-                      <span className="text-xs">{safeDateTime(request.createdAt)}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block mb-1">Last Updated:</span>
-                      <span className="text-xs">{safeDateTime(request.updatedAt)}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block mb-1">Approver:</span>
-                      <span className="text-xs">
-                        {request.approver?.profile?.firstName && request.approver?.profile?.lastName 
-                          ? `${request.approver.profile.firstName} ${request.approver.profile.lastName}`
-                          : request.approver?.email || "Not assigned"}
-                      </span>
-                    </div>
-                    {request.approverComments && (
-                      <div>
-                        <span className="text-muted-foreground block mb-1">Approver Comments:</span>
-                        <div className="bg-muted p-2 rounded text-xs">{request.approverComments}</div>
-                      </div>
-                    )}
-                  </div>
+              {/* Status and Hours */}
+              <div className="flex items-center justify-between">
+                <StatusBadge status={detailDialog.request.status} />
+                <div className="text-right">
+                  <div className="text-2xl font-bold">{Number(detailDialog.request.requestedHours).toFixed(2)}h</div>
+                  <div className="text-sm text-muted-foreground">Overtime Hours</div>
                 </div>
               </div>
-              
-              {request.requesterReason && (
-                <div className="pt-4 border-t">
-                  <h4 className="font-semibold text-sm mb-2">Reason for Overtime</h4>
-                  <div className="bg-muted p-3 rounded text-sm">{request.requesterReason}</div>
+
+              {/* Request Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm text-muted-foreground">Request ID</div>
+                  <div className="font-mono text-xs">{detailDialog.request.id}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">TimeLog ID</div>
+                  <div className="font-mono text-xs">{detailDialog.request.timeLogId}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Submitted</div>
+                  <div className="font-medium">{new Date(detailDialog.request.createdAt).toLocaleDateString()} {new Date(detailDialog.request.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Last Updated</div>
+                  <div className="font-medium">{new Date(detailDialog.request.updatedAt).toLocaleDateString()} {new Date(detailDialog.request.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Approver</div>
+                  <div className="font-medium">{detailDialog.request.approver?.email || "Not assigned"}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Late Hours</div>
+                  <div className="font-medium">{detailDialog.request.lateHours ? Number(detailDialog.request.lateHours).toFixed(2) : "0.00"}h</div>
+                </div>
+              </div>
+
+              {/* Reason */}
+              {detailDialog.request.requesterReason && (
+                <div className="space-y-2">
+                  <div className="text-sm text-muted-foreground">Reason for Overtime</div>
+                  <div className="bg-muted p-3 rounded-md text-sm">
+                    {detailDialog.request.requesterReason}
+                  </div>
+                </div>
+              )}
+
+              {/* Approver Comments */}
+              {detailDialog.request.approverComments && (
+                <div className="space-y-2">
+                  <div className="text-sm text-muted-foreground">
+                    {detailDialog.request.status === "approved" ? "Approval" : "Rejection"} Comments
+                  </div>
+                  <div className={`p-3 rounded-md text-sm border ${
+                    detailDialog.request.status === "approved"
+                      ? "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800"
+                      : "bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800"
+                  }`}>
+                    {detailDialog.request.approverComments}
+                  </div>
                 </div>
               )}
             </div>
-          </TableCell>
-        </motion.tr>
-      )}
-    </>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setDetailDialog({ open: false, request: null })}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

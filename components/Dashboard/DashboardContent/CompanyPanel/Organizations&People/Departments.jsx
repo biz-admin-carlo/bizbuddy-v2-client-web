@@ -1,51 +1,52 @@
-// components/Dashboard/DashboardContent/CompanyPanel/Organizations&People/Departments.jsx
-/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Trash2, Edit3, Building, Users, AlertCircle, Download, RefreshCw, Filter, FileText, Plus } from "lucide-react";
+import { 
+  Trash2, Edit3, Building, Users, AlertCircle, Download, RefreshCw, 
+  Filter, FileText, Plus, Search, X, ChevronDown, Check, Briefcase,
+  Eye, MoreHorizontal, UserCheck, UserX, Award, Clock
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import useAuthStore from "@/store/useAuthStore";
-import IconBtn from "@/components/common/IconBtn";
-import ColumnSelector from "@/components/common/ColumnSelector";
-import MultiSelect from "@/components/common/MultiSelect";
+import DataTable from "@/components/common/DataTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { fmtMMDDYYYY_hhmma } from "@/lib/dateTimeFormatter";
+import TableSkeleton from "@/components/common/TableSkeleton";
 
 export default function Departments() {
   const { token } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
+  
   const [profileData, setProfileData] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
-  const supervisors = allUsers.filter((u) => u.role && u.role.toLowerCase() === "supervisor");
   const [userCounts, setUserCounts] = useState({});
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createDeptForm, setCreateDeptForm] = useState({ name: "", supervisorId: "" });
+  const [createDeptForm, setCreateDeptForm] = useState({ 
+    name: "", 
+    supervisorId: "", 
+    paidBreak: false 
+  });
   const [showEditModal, setShowEditModal] = useState(false);
   const [editDeptForm, setEditDeptForm] = useState({ id: "", name: "", supervisorId: "" });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -54,21 +55,10 @@ export default function Departments() {
   const [usersDeptName, setUsersDeptName] = useState("");
   const [supervisorUser, setSupervisorUser] = useState(null);
   const [deptMembers, setDeptMembers] = useState([]);
-  const [sortConfig] = useState({ key: "id", direction: "ascending" });
+  
   const [filters, setFilters] = useState({
-    deptIds: ["all"],
-    supervisorIds: ["all"],
+    supervisors: [],
   });
-  const toggleListFilter = (key, val) =>
-    setFilters((prev) => {
-      if (val === "all") return { ...prev, [key]: ["all"] };
-      let list = prev[key].filter((x) => x !== "all");
-      list = list.includes(val) ? list.filter((x) => x !== val) : [...list, val];
-      if (!list.length) list = ["all"];
-      return { ...prev, [key]: list };
-    });
-
-  const clearAllFilters = () => setFilters({ deptIds: ["all"], supervisorIds: ["all"] });
 
   const columnOptions = [
     { value: "id", label: "Department ID" },
@@ -80,7 +70,7 @@ export default function Departments() {
   ];
   const [columnVisibility, setColumnVisibility] = useState(columnOptions.map((o) => o.value));
 
-  const labelClass = "my-auto shrink-0 text-sm font-medium text-muted-foreground";
+  const supervisors = allUsers.filter((u) => u.role && u.role.toLowerCase() === "supervisor");
 
   useEffect(() => {
     if (!token) return;
@@ -88,9 +78,9 @@ export default function Departments() {
       .then((r) => r.json())
       .then((j) => {
         if (j?.data?.company?.id) setProfileData(j.data);
-        else toast.message("User profile or company not found.");
+        else toast.error("User profile or company not found.");
       })
-      .catch(() => toast.message("Failed to fetch profile."));
+      .catch(() => toast.error("Failed to fetch profile."));
   }, [token, API_URL]);
 
   useEffect(() => {
@@ -103,9 +93,9 @@ export default function Departments() {
       const res = await fetch(`${API_URL}/api/departments`, { headers: { Authorization: `Bearer ${token}` } });
       const j = await res.json();
       if (j?.data) setDepartments(j.data);
-      else toast.message(j.error || "Failed to fetch departments.");
+      else toast.error(j.error || "Failed to fetch departments.");
     } catch {
-      toast.message("Failed to fetch departments.");
+      toast.error("Failed to fetch departments.");
     }
     setLoading(false);
   };
@@ -115,16 +105,16 @@ export default function Departments() {
       const res = await fetch(`${API_URL}/api/employee?all=1`, { headers: { Authorization: `Bearer ${token}` } });
       const j = await res.json();
       if (j?.data) setAllUsers(j.data);
-      else toast.message("Failed to fetch users.");
+      else toast.error("Failed to fetch users.");
     } catch {
-      toast.message("Failed to fetch users.");
+      toast.error("Failed to fetch users.");
     }
   };
 
   const refreshData = async () => {
     setRefreshing(true);
     await Promise.all([fetchDepartments(), fetchAllUsers()]);
-    toast.message("Table refreshed");
+    toast.success("Departments refreshed");
     setRefreshing(false);
   };
 
@@ -143,124 +133,152 @@ export default function Departments() {
     setUserCounts(map);
   }, [departments, allUsers]);
 
+  const stats = useMemo(() => {
+    const total = departments.length;
+    const withSupervisor = departments.filter(d => d.supervisor).length;
+    const withoutSupervisor = total - withSupervisor;
+    const totalUsers = Object.values(userCounts).reduce((sum, count) => sum + count, 0);
+    return { total, withSupervisor, withoutSupervisor, totalUsers };
+  }, [departments, userCounts]);
+
   const processedDepartments = useMemo(() => {
     const withCounts = departments.map((d) => ({
       ...d,
       totalUsers: userCounts[d.id] ?? 0,
       supervisorName: d.supervisor ? `${d.supervisor.profile.firstName || ""} ${d.supervisor.profile.lastName || ""}`.trim() : "",
     }));
+    
     let filtered = [...withCounts];
-    if (!filters.deptIds.includes("all")) filtered = filtered.filter((d) => filters.deptIds.includes(d.id));
-    if (!filters.supervisorIds.includes("all"))
-      filtered = filtered.filter((d) => d.supervisor && filters.supervisorIds.includes(d.supervisor.id));
-    filtered.sort((a, b) => (a.id < b.id ? (sortConfig.direction === "ascending" ? -1 : 1) : 1));
+
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(d => 
+        d.name.toLowerCase().includes(query) ||
+        d.supervisorName.toLowerCase().includes(query) ||
+        d.id.toLowerCase().includes(query)
+      );
+    }
+
+    // Supervisor filter
+    if (filters.supervisors.length > 0) {
+      filtered = filtered.filter(d => d.supervisor && filters.supervisors.includes(d.supervisor.id));
+    }
+
+    filtered.sort((a, b) => (a.id < b.id ? -1 : 1));
     return filtered;
-  }, [departments, userCounts, filters, sortConfig]);
+  }, [departments, userCounts, filters, searchQuery]);
+
+  const clearAllFilters = () => {
+    setSearchQuery("");
+    setFilters({ supervisors: [] });
+  };
+
+  const hasActiveFilters = searchQuery || filters.supervisors.length > 0;
+
+  const companyName = profileData?.company?.name?.replace(/\s+/g, "_") || "Company";
 
   const buildCSV = (rows) => {
     const visibleCols = columnOptions.filter((c) => columnVisibility.includes(c.value));
     const header = visibleCols.map((c) => `"${c.label}"`);
     const cell = (r, key) => {
       switch (key) {
-        case "id":
-          return r.id;
-        case "name":
-          return r.name;
-        case "supervisor":
-          return r.supervisorName || "—";
-        case "userCount":
-          return r.totalUsers;
-        case "createdAt":
-          return fmtMMDDYYYY_hhmma(r.createdAt);
-        case "updatedAt":
-          return fmtMMDDYYYY_hhmma(r.updatedAt);
-        default:
-          return "";
+        case "id": return r.id;
+        case "name": return r.name;
+        case "supervisor": return r.supervisorName || "—";
+        case "userCount": return r.totalUsers;
+        case "createdAt": return fmtMMDDYYYY_hhmma(r.createdAt);
+        case "updatedAt": return fmtMMDDYYYY_hhmma(r.updatedAt);
+        default: return "";
       }
     };
-    const body = rows.map((r) => visibleCols.map((c) => `"${cell(r, c.value)}"`));
-    return [header, ...body].map((l) => l.join(",")).join("\r\n");
+    const csvRows = [header.join(",")];
+    rows.forEach((row) => {
+      const values = visibleCols.map((col) => `"${cell(row, col.value)}"`);
+      csvRows.push(values.join(","));
+    });
+    return csvRows.join("\n");
   };
 
-  const companyName = profileData?.company?.name?.replace(/\s+/g, "_") || "Company";
-
-  const exportCSV = () => {
-    const rows = processedDepartments;
-    if (!rows.length) return toast.message("No rows to export");
+  const downloadCSV = () => {
     setExporting(true);
     try {
-      const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-      const blob = new Blob([buildCSV(rows)], { type: "text/csv;charset=utf-8;" });
+      const csvContent = buildCSV(processedDepartments);
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Departments_${companyName}_${stamp}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.message("CSV exported");
-    } catch {
-      toast.message("Export failed");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `${companyName}_Departments_${new Date().toISOString().slice(0, 10)}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success("CSV exported successfully");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to export CSV");
     }
     setExporting(false);
   };
 
-  const exportPDF = () => {
-    if (!processedDepartments.length) return toast.message("No rows to export");
+  const downloadPDF = () => {
     setPdfExporting(true);
-    const visibleCols = columnOptions.filter((c) => columnVisibility.includes(c.value));
-    const tableHead = [visibleCols.map((c) => c.label)];
-    const cellVal = (r, k) => {
-      switch (k) {
-        case "id":
-          return r.id;
-        case "name":
-          return r.name;
-        case "supervisor":
-          return r.supervisorName || "—";
-        case "userCount":
-          return r.totalUsers;
-        case "createdAt":
-          return fmtMMDDYYYY_hhmma(r.createdAt);
-        case "updatedAt":
-          return fmtMMDDYYYY_hhmma(r.updatedAt);
-        default:
-          return "";
-      }
-    };
-    const tableBody = processedDepartments.map((r) => visibleCols.map((c) => cellVal(r, c.value)));
-    const doc = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
-    doc.setFontSize(12);
-    doc.text(`Company : ${companyName}`, 14, 20);
-    autoTable(doc, {
-      head: tableHead,
-      body: tableBody,
-      startY: 28,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [255, 165, 0] },
-    });
-    const stamp = new Date().toISOString().slice(0, 10);
-    doc.save(`Departments_${companyName}_${stamp}.pdf`);
-    toast.message("PDF exported");
+    try {
+      const doc = new jsPDF();
+      const visibleCols = columnOptions.filter((c) => columnVisibility.includes(c.value));
+      const headers = [visibleCols.map((c) => c.label)];
+      const rows = processedDepartments.map((row) => {
+        return visibleCols.map((col) => {
+          switch (col.value) {
+            case "id": return row.id;
+            case "name": return row.name;
+            case "supervisor": return row.supervisorName || "—";
+            case "userCount": return row.totalUsers;
+            case "createdAt": return fmtMMDDYYYY_hhmma(row.createdAt);
+            case "updatedAt": return fmtMMDDYYYY_hhmma(row.updatedAt);
+            default: return "";
+          }
+        });
+      });
+
+      autoTable(doc, {
+        head: headers,
+        body: rows,
+        startY: 30,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [255, 165, 0] },
+        margin: { top: 30 },
+      });
+
+      doc.setFontSize(16);
+      doc.text(`${companyName} Departments Report`, 14, 20);
+      doc.save(`${companyName}_Departments_${new Date().toISOString().slice(0, 10)}.pdf`);
+      toast.success("PDF exported successfully");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to export PDF");
+    }
     setPdfExporting(false);
   };
 
-  const openUsersModal = (dept) => {
-    setUsersDeptName(dept.name);
-    setSupervisorUser(dept.supervisor || null);
-    const members = allUsers.filter(
-      (u) => u.department && u.department.id === dept.id && (!dept.supervisor || u.id !== dept.supervisor.id)
-    );
-    setDeptMembers(members);
-    setShowUsersModal(true);
-  };
-
   const handleCreateDepartment = async () => {
+    if (!createDeptForm.name.trim()) {
+      toast.error("Department name is required.");
+      return;
+    }
+    
     setLoading(true);
+    
+    const payload = { 
+      name: createDeptForm.name,
+      paidBreak: createDeptForm.paidBreak 
+    };
+    
+    if (createDeptForm.supervisorId && createDeptForm.supervisorId !== "none") {
+      payload.supervisorId = createDeptForm.supervisorId;
+    }
+    
     try {
-      const payload = {
-        name: createDeptForm.name,
-        supervisorId: createDeptForm.supervisorId === "none" ? null : createDeptForm.supervisorId || null,
-      };
       const res = await fetch(`${API_URL}/api/departments/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -268,33 +286,36 @@ export default function Departments() {
       });
       const j = await res.json();
       if (res.ok) {
-        toast.message("Department created successfully");
+        toast.success("Department created successfully!");
         setShowCreateModal(false);
-        setCreateDeptForm({ name: "", supervisorId: "" });
-        refreshData();
-      } else toast.message(j.error || "Failed to create department");
+        setCreateDeptForm({ name: "", supervisorId: "", paidBreak: false }); // Reset including paidBreak
+        fetchDepartments();
+      } else {
+        toast.error(j.message || "Failed to create department.");
+      }
     } catch {
-      toast.message("Failed to create department");
+      toast.error("Failed to create department.");
     }
     setLoading(false);
   };
+  
 
-  const handleEditDepartment = (dept) => {
-    setEditDeptForm({
-      id: dept.id,
-      name: dept.name,
-      supervisorId: dept.supervisor ? dept.supervisor.id : "",
-    });
+  const openEditModal = (dept) => {
+    setEditDeptForm({ id: dept.id, name: dept.name, supervisorId: dept.supervisor?.id || "none" });
     setShowEditModal(true);
   };
 
   const handleSaveEdit = async () => {
+    if (!editDeptForm.name.trim()) {
+      toast.error("Department name is required.");
+      return;
+    }
     setLoading(true);
+    const payload = { name: editDeptForm.name };
+    if (editDeptForm.supervisorId && editDeptForm.supervisorId !== "none") {
+      payload.supervisorId = editDeptForm.supervisorId;
+    }
     try {
-      const payload = {
-        name: editDeptForm.name,
-        supervisorId: editDeptForm.supervisorId === "none" ? null : editDeptForm.supervisorId || null,
-      };
       const res = await fetch(`${API_URL}/api/departments/update/${editDeptForm.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -302,18 +323,20 @@ export default function Departments() {
       });
       const j = await res.json();
       if (res.ok) {
-        toast.message("Department updated successfully");
+        toast.success("Department updated successfully!");
         setShowEditModal(false);
-        refreshData();
-      } else toast.message(j.error || "Failed to update department");
+        fetchDepartments();
+      } else {
+        toast.error(j.message || "Failed to update department.");
+      }
     } catch {
-      toast.message("Failed to update department");
+      toast.error("Failed to update department.");
     }
     setLoading(false);
   };
 
-  const handleDeleteDepartment = (id) => {
-    setDepartmentToDelete(id);
+  const openDeleteModal = (dept) => {
+    setDepartmentToDelete(dept);
     setShowDeleteModal(true);
   };
 
@@ -321,434 +344,651 @@ export default function Departments() {
     if (!departmentToDelete) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/departments/delete/${departmentToDelete}`, {
+      const res = await fetch(`${API_URL}/api/departments/delete/${departmentToDelete.id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      const j = await res.json();
+      
       if (res.ok) {
-        toast.message("Department deleted successfully");
-        setDepartments((p) => p.filter((d) => d.id !== departmentToDelete));
-        fetchAllUsers();
-      } else toast.message(j.error || "Failed to delete department");
-    } catch {
-      toast.message("Failed to delete department");
+        toast.success("Department deleted successfully!");
+        setShowDeleteModal(false);
+        setDepartmentToDelete(null);
+        fetchDepartments();
+      } else {
+        const j = await res.json();
+        toast.error(j.message || "Failed to delete department.");
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+      toast.error("Failed to delete department.");
     }
     setLoading(false);
-    setShowDeleteModal(false);
-    setDepartmentToDelete(null);
   };
 
-  return (
-    <div className="max-w-full mx-auto p-4 lg:px-4 px-1 space-y-8">
-      <Toaster position="top-center" />
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
-        <div>
-          <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Building className="h-7 w-7 text-orange-500" />
-            Company Departments
-          </h2>
+  const openUsersModal = (dept) => {
+    setUsersDeptName(dept.name);
+    setSupervisorUser(dept.supervisor || null);
+    const members = allUsers.filter((u) => u.department && u.department.id === dept.id);
+    setDeptMembers(members);
+    setShowUsersModal(true);
+  };
+
+  const toggleSupervisorFilter = (supId) => {
+    setFilters(prev => ({
+      ...prev,
+      supervisors: prev.supervisors.includes(supId)
+        ? prev.supervisors.filter(id => id !== supId)
+        : [...prev.supervisors, supId]
+    }));
+  };
+
+  // DataTable columns
+  const columns = [
+    {
+      key: "name",
+      label: "Department",
+      render: (name, row) => (
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center">
+            <Building className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+          </div>
+          <div>
+            <div className="font-medium">{name}</div>
+            <div className="text-xs text-muted-foreground font-mono">{row.id}</div>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <IconBtn icon={RefreshCw} tooltip="Refresh table" spinning={refreshing} onClick={refreshData} />
-          <IconBtn
-            icon={Download}
-            tooltip="Export CSV"
-            spinning={exporting}
-            onClick={exportCSV}
-            disabled={exporting || !processedDepartments.length}
-          />
-          <IconBtn
-            icon={FileText}
-            tooltip="Export PDF"
-            spinning={pdfExporting}
-            onClick={exportPDF}
-            disabled={pdfExporting || !processedDepartments.length}
-          />
-          <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-            <DialogTrigger asChild>
-              <Badge className="bg-orange-500 hover:bg-orange-600 text-white cursor-pointer ml-auto">
-                <Plus />
-              </Badge>
-            </DialogTrigger>
-            <DialogContent className="border-2 dark:border-white/10">
-              <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
-                    <Plus className="h-5 w-5" />
-                  </div>
-                  Create New Department
-                </DialogTitle>
-                <DialogDescription>Add a new department to your organization</DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <label htmlFor="dept-name" className="text-right font-medium text-sm">
-                    Name
-                  </label>
+      ),
+      sortable: true,
+    },
+    {
+      key: "supervisor",
+      label: "Supervisor",
+      render: (_, row) => {
+        if (!row.supervisor) {
+          return (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <UserX className="h-4 w-4" />
+              <span>No supervisor</span>
+            </div>
+          );
+        }
+        const name = `${row.supervisor.profile?.firstName || ""} ${row.supervisor.profile?.lastName || ""}`.trim() || row.supervisor.username;
+        return (
+          <div className="flex items-center gap-2">
+            <UserCheck className="h-4 w-4 text-green-600" />
+            <span className="font-medium">{name}</span>
+          </div>
+        );
+      },
+    },
+    {
+      key: "userCount",
+      label: "Members",
+      render: (_, row) => (
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-blue-600" />
+          <Badge variant="secondary" className="font-medium">
+            {userCounts[row.id] || 0}
+          </Badge>
+        </div>
+      ),
+      sortable: true,
+    },
+    {
+      key: "createdAt",
+      label: "Created",
+      render: (date) => (
+        <div className="text-sm text-muted-foreground">
+          {new Date(date).toLocaleDateString()}
+        </div>
+      ),
+      sortable: true,
+    },
+    {
+      key: "updatedAt",
+      label: "Updated",
+      render: (date) => (
+        <div className="text-sm text-muted-foreground">
+          {new Date(date).toLocaleDateString()}
+        </div>
+      ),
+      sortable: true,
+    },
+  ].filter(col => columnVisibility.includes(col.key));
+
+  // DataTable actions
+  const actions = [
+    {
+      label: "View Members",
+      icon: Eye,
+      onClick: (department) => openUsersModal(department),
+    },
+    {
+      label: "Edit",
+      icon: Edit3,
+      onClick: (department) => openEditModal(department),
+      className: "text-orange-600 hover:text-orange-700",
+    },
+    {
+      label: "Delete",
+      icon: Trash2,
+      onClick: (department) => openDeleteModal(department),
+      className: "text-red-600 hover:text-red-700",
+    },
+  ];
+
+  return (
+    <TooltipProvider>
+      <div className="p-6 space-y-6 max-w-7xl mx-auto">
+        <Toaster position="top-center" />
+
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Company Departments</h1>
+            <p className="text-muted-foreground">Manage organizational structure and teams</p>
+          </div>
+          <Button
+            onClick={() => setShowCreateModal(true)}
+            className="bg-orange-500 hover:bg-orange-600 text-white"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            New Department
+          </Button>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Departments</CardTitle>
+                <Building className="h-4 w-4 text-blue-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-muted-foreground">With Supervisor</CardTitle>
+                <UserCheck className="h-4 w-4 text-green-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">{stats.withSupervisor}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Without Supervisor</CardTitle>
+                <UserX className="h-4 w-4 text-amber-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-amber-600">{stats.withoutSupervisor}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Members</CardTitle>
+                <Users className="h-4 w-4 text-purple-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-purple-600">{stats.totalUsers}</div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Advanced Controls */}
+        <Card className="bg-orange-50/50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800">
+          <CardContent className="p-4">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+              {/* Search */}
+              <div className="flex-1 max-w-md">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-orange-400" />
                   <Input
-                    id="dept-name"
-                    value={createDeptForm.name}
-                    onChange={(e) => setCreateDeptForm({ ...createDeptForm, name: e.target.value })}
-                    className="col-span-3"
-                    placeholder="Enter department name"
+                    placeholder="Search by department name, ID, or supervisor..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 bg-background/50 border-orange-200 focus:bg-background focus:border-orange-500 focus:ring-orange-500/20"
                   />
                 </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <label htmlFor="dept-supervisor" className="text-right font-medium text-sm">
-                    Supervisor
-                  </label>
-                  <Select
-                    value={createDeptForm.supervisorId}
-                    onValueChange={(v) => setCreateDeptForm({ ...createDeptForm, supervisorId: v })}
-                  >
-                    <SelectTrigger className="col-span-3">
-                      <SelectValue placeholder="Select a supervisor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No Supervisor</SelectItem>
-                      {supervisors.map((sup) => (
-                        <SelectItem key={sup.id} value={sup.id}>
-                          {sup.username}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowCreateModal(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleCreateDepartment}
-                  disabled={loading}
-                  className="bg-orange-500 hover:bg-orange-600 text-white"
-                >
-                  {loading ? "Creating…" : "Create Department"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
-      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-2 relative">
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5 text-orange-500" />
-            Table Controls
-          </CardTitle>
-          <span className="absolute top-2 right-4 text-sm text-muted-foreground">
-            {processedDepartments.length} of {departments.length}
-          </span>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-3 items-center">
-              <span className={labelClass}>Column:</span>
-              <ColumnSelector options={columnOptions} visible={columnVisibility} setVisible={setColumnVisibility} />
-            </div>
-            <div className="flex flex-wrap gap-3 items-center">
-              <span className={labelClass}>Filter:</span>
-              <MultiSelect
-                options={departments.map((d) => ({ value: d.id, label: d.name }))}
-                selected={filters.deptIds}
-                onChange={(v) => toggleListFilter("deptIds", v)}
-                allLabel="All departments"
-                width={200}
-              />
-              <MultiSelect
-                options={supervisors.map((s) => ({
-                  value: s.id,
-                  label: `${s.profile.firstName || ""} ${s.profile.lastName || ""}`.trim() || s.username,
-                }))}
-                selected={filters.supervisorIds}
-                onChange={(v) => toggleListFilter("supervisorIds", v)}
-                allLabel="All supervisors"
-                width={200}
-              />
-              {(!filters.deptIds.includes("all") || !filters.supervisorIds.includes("all")) && (
+
+              {/* Filter Controls */}
+              <div className="flex items-center gap-2">
+                {/* Supervisor Filter */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="border-orange-200 text-orange-600 hover:bg-orange-50">
+                      <Filter className="h-4 w-4 mr-2" />
+                      Supervisors
+                      {filters.supervisors.length > 0 && (
+                        <Badge variant="secondary" className="ml-2 bg-orange-100 text-orange-700">
+                          {filters.supervisors.length}
+                        </Badge>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64">
+                    <div className="space-y-2">
+                      <h4 className="font-medium">Filter by Supervisor</h4>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {supervisors.map((sup) => {
+                          const name = `${sup.profile?.firstName || ""} ${sup.profile?.lastName || ""}`.trim() || sup.username;
+                          return (
+                            <div key={sup.id} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={sup.id}
+                                checked={filters.supervisors.includes(sup.id)}
+                                onCheckedChange={() => toggleSupervisorFilter(sup.id)}
+                              />
+                              <label htmlFor={sup.id} className="text-sm cursor-pointer flex-1">
+                                {name}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* Column Visibility */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="border-orange-200 text-orange-600 hover:bg-orange-50">
+                      <Eye className="h-4 w-4 mr-2" />
+                      Columns
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-56">
+                    <div className="space-y-2">
+                      <h4 className="font-medium">Toggle Columns</h4>
+                      <div className="space-y-2">
+                        {columnOptions.map((col) => (
+                          <div key={col.value} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={col.value}
+                              checked={columnVisibility.includes(col.value)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setColumnVisibility([...columnVisibility, col.value]);
+                                } else {
+                                  setColumnVisibility(columnVisibility.filter(v => v !== col.value));
+                                }
+                              }}
+                            />
+                            <label htmlFor={col.value} className="text-sm cursor-pointer">
+                              {col.label}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* Export Options */}
                 <Button
                   variant="outline"
-                  size="sm"
-                  onClick={clearAllFilters}
-                  className="border-orange-500/30 text-orange-700 hover:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-400 dark:hover:bg-orange-500/20"
+                  onClick={downloadCSV}
+                  disabled={exporting}
+                  className="border-orange-200 text-orange-600 hover:bg-orange-50"
                 >
-                  Clear Filters
+                  <Download className="h-4 w-4 mr-2" />
+                  {exporting ? "Exporting..." : "CSV"}
                 </Button>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2">
-            <Building className="h-5 w-5 text-orange-500" />
-            Main Table
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {columnVisibility.includes("id") && <TableHead>Department ID</TableHead>}
-                  {columnVisibility.includes("name") && <TableHead>Department Name</TableHead>}
-                  {columnVisibility.includes("supervisor") && <TableHead>Supervisor</TableHead>}
-                  {columnVisibility.includes("userCount") && <TableHead>User Count</TableHead>}
-                  {columnVisibility.includes("createdAt") && <TableHead>Created At</TableHead>}
-                  {columnVisibility.includes("updatedAt") && <TableHead>Updated At</TableHead>}
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  [...Array(5)].map((_, i) => (
-                    <TableRow key={i}>
-                      {columnVisibility.map((__, j) => (
-                        <TableCell key={j}>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                      ))}
-                      <TableCell>
-                        <Skeleton className="h-6 w-full" />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : processedDepartments.length ? (
-                  <AnimatePresence>
-                    {processedDepartments.map((dept) => (
-                      <motion.tr
-                        key={dept.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="border-b transition-colors hover:bg-muted/50"
-                      >
-                        {columnVisibility.includes("id") && <TableCell className="text-xs">{dept.id}</TableCell>}
-                        {columnVisibility.includes("name") && (
-                          <TableCell className="text-nowrap capitalize text-xs">{dept.name}</TableCell>
-                        )}
-                        {columnVisibility.includes("supervisor") && (
-                          <TableCell className="text-nowrap text-xs">
-                            {dept.supervisorName || <span className="text-xs italic text-nowrap">No Supervisor Assigned</span>}
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("userCount") && (
-                          <TableCell>
-                            <Button variant="ghost" size="xs" onClick={() => openUsersModal(dept)}>
-                              <Badge className="bg-orange-500 hover:bg-orange-600 text-white">
-                                <Users className="h-3 w-3 mr-1" />
-                                {dept.totalUsers}
-                              </Badge>
-                            </Button>
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("createdAt") && (
-                          <TableCell className="text-nowrap text-xs">{fmtMMDDYYYY_hhmma(dept.createdAt)}</TableCell>
-                        )}
-                        {columnVisibility.includes("updatedAt") && (
-                          <TableCell className="text-nowrap text-xs">{fmtMMDDYYYY_hhmma(dept.updatedAt)}</TableCell>
-                        )}
-                        <TableCell>
-                          <div className="flex gap-1 justify-center">
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleEditDepartment(dept)}
-                                    className="text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20"
-                                  >
-                                    <Edit3 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Edit department</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleDeleteDepartment(dept.id)}
-                                    className="text-red-500 hover:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Delete department</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </TableCell>
-                      </motion.tr>
-                    ))}
-                  </AnimatePresence>
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={columnVisibility.length + 1} className="h-32 text-center">
-                      <div className="flex flex-col items-center justify-center text-muted-foreground">
-                        <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <Building className="h-8 w-8 text-orange-500/50" />
-                        </div>
-                        <p>No departments found matching your filters</p>
-                        {(!filters.deptIds.includes("all") || !filters.supervisorIds.includes("all")) && (
-                          <Button variant="link" onClick={clearAllFilters} className="text-orange-500 hover:text-orange-600 mt-2">
-                            Clear all filters
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
+
+                <Button
+                  variant="outline"
+                  onClick={downloadPDF}
+                  disabled={pdfExporting}
+                  className="border-orange-200 text-orange-600 hover:bg-orange-50"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  {pdfExporting ? "Exporting..." : "PDF"}
+                </Button>
+
+                {/* Clear Filters */}
+                {hasActiveFilters && (
+                  <Button
+                    variant="outline"
+                    onClick={clearAllFilters}
+                    className="border-red-200 text-red-600 hover:bg-red-50"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Clear
+                  </Button>
                 )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-      <Dialog open={showUsersModal} onOpenChange={setShowUsersModal}>
-        <DialogContent className="max-w-lg border-2 dark:border-white/10">
-          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-orange-500" />
-              Users in “{usersDeptName}”
-            </DialogTitle>
-          </DialogHeader>
-          {usersDeptName && (
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Main Table */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Building className="h-5 w-5 text-orange-600" />
+              <CardTitle>Departments</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="p-6">
+            <DataTable
+              data={processedDepartments}
+              columns={columns}
+              loading={loading}
+              onRefresh={refreshData}
+              actions={actions}
+              searchPlaceholder="Search departments..."
+              onRowClick={(department) => openUsersModal(department)}
+              pageSize={10}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Create Modal */}
+        <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+          <DialogContent className="border-2 dark:border-white/10">
+            <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <div className="p-2 rounded-full bg-orange-500/10 text-orange-500">
+                  <Plus className="h-5 w-5" />
+                </div>
+                Create New Department
+              </DialogTitle>
+              <DialogDescription>Add a new department to your organization</DialogDescription>
+            </DialogHeader>
+            
+            <div className="grid gap-4 py-4">
+              {/* Department Name */}
+              <div className="space-y-2">
+                <label htmlFor="create-name" className="text-sm font-medium">
+                  Department Name <span className="text-orange-500">*</span>
+                </label>
+                <Input
+                  id="create-name"
+                  value={createDeptForm.name}
+                  onChange={(e) => setCreateDeptForm({ ...createDeptForm, name: e.target.value })}
+                  placeholder="Enter department name"
+                />
+              </div>
+              
+              {/* Supervisor Selection */}
+              <div className="space-y-2">
+                <label htmlFor="create-supervisor" className="text-sm font-medium">
+                  Supervisor
+                </label>
+                <Select
+                  value={createDeptForm.supervisorId}
+                  onValueChange={(v) => setCreateDeptForm({ ...createDeptForm, supervisorId: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a supervisor (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Supervisor</SelectItem>
+                    {supervisors.map((sup) => {
+                      const name = `${sup.profile.firstName || ""} ${sup.profile.lastName || ""}`.trim() || sup.username;
+                      return (
+                        <SelectItem key={sup.id} value={sup.id}>
+                          {name}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Paid Break Lunch Policy */}
+              <div className="space-y-3 pt-2 border-t">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium flex items-center gap-2">
+                    <Award className="h-4 w-4 text-orange-500" />
+                    Lunch Break Policy
+                  </label>
+                  
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-orange-500" />
+                        <span className="text-sm font-medium">Paid Lunch Breaks</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Enable if employees in this department are paid during lunch breaks
+                      </p>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCreateDeptForm({ ...createDeptForm, paidBreak: !createDeptForm.paidBreak })}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
+                          createDeptForm.paidBreak ? 'bg-green-500' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            createDeptForm.paidBreak ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                      <span className={`text-sm font-medium ${
+                        createDeptForm.paidBreak ? 'text-green-600' : 'text-gray-600'
+                      }`}>
+                        {createDeptForm.paidBreak ? 'Paid' : 'Unpaid'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Help Information */}
+                <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-md p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                    <div className="space-y-1">
+                      <h4 className="text-xs font-medium text-blue-900 dark:text-blue-100">
+                        How Department Lunch Break Policy Works
+                      </h4>
+                      <ul className="text-xs text-blue-700 dark:text-blue-300 space-y-0.5">
+                        <li>• <strong>Paid Breaks:</strong> Employees in this department are paid during lunch breaks</li>
+                        <li>• <strong>Unpaid Breaks:</strong> Lunch time is deducted from employee pay calculations</li>
+                        <li>• Changes are applied immediately and affect future payroll calculations</li>
+                        <li>• Each department can have different lunch break policies</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setCreateDeptForm({ name: "", supervisorId: "", paidBreak: false }); // Reset form
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateDepartment}
+                disabled={loading}
+                className="bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                {loading ? "Creating…" : "Create Department"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Modal */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="border-2 dark:border-white/10">
+            <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <div className="p-2 rounded-full bg-orange-500/10 text-orange-500">
+                  <Edit3 className="h-5 w-5" />
+                </div>
+                Edit Department
+              </DialogTitle>
+              <DialogDescription>Update department information</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <label htmlFor="edit-name" className="text-sm font-medium">
+                  Department Name <span className="text-orange-500">*</span>
+                </label>
+                <Input
+                  id="edit-name"
+                  value={editDeptForm.name}
+                  onChange={(e) => setEditDeptForm({ ...editDeptForm, name: e.target.value })}
+                  placeholder="Enter department name"
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="edit-supervisor" className="text-sm font-medium">
+                  Supervisor
+                </label>
+                <Select
+                  value={editDeptForm.supervisorId}
+                  onValueChange={(v) => setEditDeptForm({ ...editDeptForm, supervisorId: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a supervisor (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Supervisor</SelectItem>
+                    {supervisors.map((sup) => {
+                      const name = `${sup.profile.firstName || ""} ${sup.profile.lastName || ""}`.trim() || sup.username;
+                      return (
+                        <SelectItem key={sup.id} value={sup.id}>
+                          {name}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowEditModal(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveEdit} disabled={loading} className="bg-orange-500 hover:bg-orange-600 text-white">
+                {loading ? "Saving…" : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Modal */}
+        <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+          <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
+            <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <div className="p-2 rounded-full bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400">
+                  <AlertCircle className="h-5 w-5" />
+                </div>
+                Delete Department
+              </DialogTitle>
+              <DialogDescription>Are you sure you want to delete this department? This action cannot be undone.</DialogDescription>
+            </DialogHeader>
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4 my-4">
+              <p className="text-sm text-red-600 dark:text-red-400">
+                Deleting a department will remove it from your organization structure. Any users assigned to this department may need to be reassigned.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmDeleteDepartment} disabled={loading}>
+                {loading ? "Deleting…" : "Delete Department"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Users Modal */}
+        <Dialog open={showUsersModal} onOpenChange={setShowUsersModal}>
+          <DialogContent className="max-w-2xl border-2 dark:border-white/10">
+            <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-orange-500" />
+                Users in "{usersDeptName}"
+              </DialogTitle>
+              <DialogDescription>
+                {supervisorUser ? "Supervisor and members" : "Department members"}
+              </DialogDescription>
+            </DialogHeader>
             <ScrollArea className="max-h-[60vh]">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Full Name</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {supervisorUser && (
-                    <TableRow>
+                    <TableRow className="bg-orange-50 dark:bg-orange-950/20">
                       <TableCell className="font-medium">
-                        Supervisor – {`${supervisorUser.profile.firstName || ""} ${supervisorUser.profile.lastName || ""}`.trim()}
+                        {`${supervisorUser.profile.firstName || ""} ${supervisorUser.profile.lastName || ""}`.trim()}
                       </TableCell>
                       <TableCell>{supervisorUser.email}</TableCell>
+                      <TableCell>
+                        <Badge className="bg-orange-500 text-white">Supervisor</Badge>
+                      </TableCell>
                     </TableRow>
                   )}
                   {deptMembers.map((u) => (
                     <TableRow key={u.id}>
                       <TableCell>{`${u.profile.firstName || ""} ${u.profile.lastName || ""}`.trim()}</TableCell>
                       <TableCell>{u.email}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize">{u.role}</Badge>
+                      </TableCell>
                     </TableRow>
                   ))}
                   {!supervisorUser && !deptMembers.length && (
                     <TableRow>
-                      <TableCell colSpan={2} className="text-center">
-                        No users in this department
+                      <TableCell colSpan={3} className="text-center h-32">
+                        <div className="flex flex-col items-center justify-center text-muted-foreground">
+                          <Users className="h-8 w-8 mb-2 opacity-50" />
+                          <p>No users in this department</p>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
             </ScrollArea>
-          )}
-        </DialogContent>
-      </Dialog>
-      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="border-2 dark:border-white/10">
-          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500 dark:bg-orange-500/20 dark:text-orange-500">
-                <Edit3 className="h-5 w-5" />
-              </div>
-              Edit Department
-            </DialogTitle>
-            <DialogDescription>Update department information</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="edit-name" className="text-right font-medium text-sm">
-                Name
-              </label>
-              <Input
-                id="edit-name"
-                value={editDeptForm.name}
-                onChange={(e) => setEditDeptForm({ ...editDeptForm, name: e.target.value })}
-                className="col-span-3"
-                placeholder="Enter department name"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="edit-supervisor" className="text-right font-medium text-sm">
-                Supervisor
-              </label>
-              <Select
-                value={editDeptForm.supervisorId}
-                onValueChange={(v) => setEditDeptForm({ ...editDeptForm, supervisorId: v })}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select a supervisor" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No Supervisor</SelectItem>
-                  {supervisors.map((sup) => (
-                    <SelectItem key={sup.id} value={sup.id}>
-                      {sup.username}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditModal(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveEdit} disabled={loading} className="bg-orange-500 hover:bg-orange-600 text-white">
-              {loading ? "Saving…" : "Save Changes"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
-        <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-800/50">
-          <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <div className="p-2 rounded-full bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400">
-                <AlertCircle className="h-5 w-5" />
-              </div>
-              Delete Department
-            </DialogTitle>
-            <DialogDescription>Are you sure you want to delete this department? This action cannot be undone.</DialogDescription>
-          </DialogHeader>
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4 my-4">
-            <p className="text-sm text-red-600 dark:text-red-400">
-              Deleting a department will remove it from your organization structure. Any users assigned to this department may
-              need to be reassigned.
-            </p>
-          </div>
-          <DialogFooter className="flex justify-between">
-            <Button
-              variant="outline"
-              onClick={() => setShowDeleteModal(false)}
-              className="border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800/50 dark:text-red-400 dark:hover:bg-red-900/20"
-            >
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDeleteDepartment} className="bg-red-500 hover:bg-red-600">
-              {loading ? "Deleting…" : "Delete Department"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+            <DialogFooter>
+              <Button onClick={() => setShowUsersModal(false)} className="bg-orange-500 hover:bg-orange-600 text-white">
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </TooltipProvider>
   );
 }

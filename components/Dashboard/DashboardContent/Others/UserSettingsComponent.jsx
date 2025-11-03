@@ -107,7 +107,7 @@ export default function UserSettingsComponent() {
 
       if (!res.ok) throw new Error(data.message || "Failed to update password");
 
-      toast.success("Password updated successfully! Redirecting to sign in...");
+      toast.success("Password updated successfully!");
 
       setTimeout(() => {
         logout();

@@ -38,6 +38,9 @@ const EmployeePanelItems = [
       { id: "employee/punch-logs", label: "Punch logs" },
       { id: "employee/schedule", label: "Schedule" },
       { id: "employee/overtime", label: "Overtime" },
+      // { id: "employee/contest-time-logs", label: "Contest Time Logs", hasPendingCount: true },
+      { id: "employee/contest-time-logs", label: "Contest Time Logs" },
+
     ],
   },
   {
@@ -70,7 +73,8 @@ const CompanyPanelItems = [
       { id: "company/punch-logs", label: "Employees Punch logs" },
       { id: "company/overtime-requests", label: "Employees Overtime Requests" },
       { id: "company/leave-requests", label: "Employees Leave Requests" },
-      { id: "company/contest-requests", label: "Employee Requests", hasPendingCount: true },
+      // { id: "company/contest-requests", label: "Employee Requests", hasPendingCount: true },
+      { id: "company/contest-requests", label: "Employee Requests" },
     ],
   },
   {
@@ -365,8 +369,6 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
   // Mock pending contest count - you can replace this with actual API call later
   const [pendingContestCount, setPendingContestCount] = useState(7);
   
-  console.log(profileData);
-
   useEffect(() => {
     if (!token) return;
     setLoading(true);

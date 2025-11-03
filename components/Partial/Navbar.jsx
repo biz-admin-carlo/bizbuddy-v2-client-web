@@ -29,7 +29,6 @@ const navLinks = [
   { href: "/contact", label: "Contact Us" },
 ];
 
-// Sample notification data - you can replace this with real data from your API
 const sampleNotifications = [
   {
     id: 1,
@@ -377,7 +376,7 @@ function NotificationButton() {
         )}
       </motion.button>
 
-      <AnimatePresence>
+      {/* <AnimatePresence>
         {isOpen && (
           <div ref={panelRef}>
             <NotificationPanel
@@ -389,7 +388,7 @@ function NotificationButton() {
             />
           </div>
         )}
-      </AnimatePresence>
+      </AnimatePresence> */}
     </div>
   );
 }

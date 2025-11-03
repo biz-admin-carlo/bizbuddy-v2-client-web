@@ -47,6 +47,7 @@ import ColumnSelector from "@/components/common/ColumnSelector";
 import TableSkeleton from "@/components/common/TableSkeleton";
 import ConfirmDeleteDialog from "@/components/common/ConfirmDeleteDialog";
 import FormDialog from "@/components/common/FormDialog";
+import OrangeLoadingSpinner from "@/components/common/Spinner";
 
 const MAX_DEV_CHARS = 15;
 const truncate = (s = "", L = MAX_DEV_CHARS) => (s.length > L ? s.slice(0, L) + "…" : s);
@@ -165,6 +166,8 @@ export default function PunchLogs() {
   const { token, user } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
   const [logs, setLogs] = useState([]);
+  const [smartLogs, setSmartLogs] = useState([]); 
+  const [viewMode, setViewMode] = useState("all");
   const [defaultHours, setDefaultHours] = useState(8);
   const [minLunchMins, setMinLunchMins] = useState(60);
   const [loading, setLoading] = useState(true);
@@ -177,10 +180,9 @@ export default function PunchLogs() {
   
   const [otDialogOpen, setOtDialogOpen] = useState(false);
   const [otForLog, setOtForLog] = useState(null);
-  const [otMaxHours, setOtMaxHours] = useState(0);
-  const [otHoursEdit, setOtHoursEdit] = useState("");
   const [otApprover, setOtApprover] = useState("");
   const [otReason, setOtReason] = useState("");
+  const [otHoursEdit, setOtHoursEdit] = useState("");
   const [otSubmitting, setOtSubmitting] = useState(false);
   
   const [contestDialogOpen, setContestDialogOpen] = useState(false);
@@ -226,6 +228,18 @@ export default function PunchLogs() {
     from: "",
     to: "",
   });
+
+  const isValidTimeFormat = (timeString) => {
+    if (!timeString) return false;
+    const regex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/;
+    return regex.test(timeString);
+  };
+  
+  const convertTimeToDecimal = (timeString) => {
+    if (!isValidTimeFormat(timeString)) return 0;
+    const [hours, minutes] = timeString.split(':').map(Number);
+    return hours + (minutes / 60);
+  };
   
   const toggleListFilter = (key, val) =>
     setFilters((prev) => {
@@ -267,6 +281,60 @@ export default function PunchLogs() {
     } catch {
       setDefaultHours(8);
       setMinLunchMins(60);
+    }
+  }, [API_URL, token]);
+
+  const fetchSmartDetectsOT = useCallback(async () => {
+    if (!token) return;
+    try {
+      setLoading(true);
+      toast.message("Loading smart overtime logs...");
+      const res = await fetch(`${API_URL}/api/overtime/smart-detect`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const j = await res.json();
+      
+      if (res.ok && Array.isArray(j.data)) {
+        // Transform smart-detect response to match log structure
+        const transformedLogs = j.data.map((detection) => ({
+          id: detection.timeLogId,
+          timeIn: detection.actualStart,
+          timeOut: detection.actualEnd,
+          duration: (detection.elapsedMins / 60).toFixed(2),
+          otHours: detection.overtimeHours.toString(),
+          otStatus: "Detected",
+          status: false, // Completed logs only
+          coffeeMins: "0.00",
+          lunchMins: "0.00",
+          _lunchNum: 0,
+          coffeeBreaks: [],
+          lunchBreak: null,
+          // Additional smart detection info
+          _smartDetection: {
+            type: detection.type,
+            scheduledStart: detection.scheduledStart,
+            scheduledEnd: detection.scheduledEnd,
+            detectedAt: detection.detectedAt,
+            employeeName: detection.employeeName,
+            department: detection.department,
+          },
+        }));
+        
+        setSmartLogs(transformedLogs);
+        
+        if (transformedLogs.length === 0) {
+          toast.success("No potential overtime detected in recent logs.");
+        } else {
+          toast.success(`${transformedLogs.length} OT log${transformedLogs.length > 1 ? "s" : ""} detected!`);
+        }
+      } else {
+        toast.error(j.message || "Failed to detect overtime");
+      }
+    } catch (err) {
+      console.error("fetchSmartDetectsOT:", err);
+      toast.error("Failed to run smart overtime detection");
+    } finally {
+      setLoading(false);
     }
   }, [API_URL, token]);
 
@@ -342,16 +410,21 @@ export default function PunchLogs() {
   const logsWithSchedule = useMemo(() => {
     const defaultShiftMins = defaultHours * 60;
     const unschedCap = Math.max(0, defaultShiftMins - minLunchMins);
-    return logs.map((log) => {
-      const coffeeMinsTotal = log.coffeeBreaks.reduce((m, b) => (b.start && b.end ? m + diffMins(b.start, b.end) : m), 0);
+    
+    // NEW: Use smartLogs when in smart view mode
+    const sourceData = viewMode === "smart" ? smartLogs : logs;
+    
+    return sourceData.map((log) => {
+      const coffeeMinsTotal = (log.coffeeBreaks || []).reduce((m, b) => (b.start && b.end ? m + diffMins(b.start, b.end) : m), 0);
       const excessCoffeeMins = Math.max(0, coffeeMinsTotal - 30);
       const grossMins = log.timeIn && log.timeOut ? diffMins(log.timeIn, log.timeOut) : 0;
-      const lunchMins = minLunchMins ? Math.max(log._lunchNum, minLunchMins) : log._lunchNum;
+      const lunchMins = minLunchMins ? Math.max(log._lunchNum || 0, minLunchMins) : (log._lunchNum || 0);
       const netMins = Math.max(0, grossMins - lunchMins - excessCoffeeMins);
       const inside = Math.min(netMins, unschedCap);
       const rawOtMins = Math.max(0, netMins - unschedCap);
       const fullDevIn = getDevice(log, "in");
       const fullDevOut = getDevice(log, "out");
+      
       return {
         ...log,
         isScheduled: false,
@@ -359,15 +432,15 @@ export default function PunchLogs() {
         locList,
         scheduleList: [],
         lateHours: "0.00",
-        otHours: rawOtMins === 0 ? "0.00" : toHour(rawOtMins),
-        otStatus: rawOtMins > 0 ? "No Approval" : "—",
+        otHours: log.otHours || (rawOtMins === 0 ? "0.00" : toHour(rawOtMins)),
+        otStatus: log.otStatus || (rawOtMins > 0 ? "No Approval" : "—"),
         periodHours: toHour(inside),
         fullDevIn,
         fullDevOut,
-        duration: rawDuration(log.timeIn, log.timeOut),
+        duration: log.duration || rawDuration(log.timeIn, log.timeOut),
       };
     });
-  }, [logs, defaultHours, minLunchMins, locList]);
+  }, [logs, smartLogs, viewMode, defaultHours, minLunchMins, locList]);
 
   const getSortableValue = (l, k) => {
     switch (k) {
@@ -442,52 +515,6 @@ export default function PunchLogs() {
       toast.message(err.message);
     }
     setDeleteLoading(false);
-  };
-
-  const submitOT = async () => {
-    const selectedLog = otForLog;
-    if (!selectedLog || !otApprover || !otHoursEdit || parseFloat(otHoursEdit) <= 0) {
-      toast.message("Please fill in all required fields");
-      return;
-    }
-    
-    setOtSubmitting(true);
-    try {
-      const projectedClockOut = calculateProjectedClockOut(selectedLog.timeOut, otHoursEdit);
-      
-      const res = await fetch(`${API_URL}/api/overtime/submit`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          timeLogId: selectedLog.id,
-          approverId: otApprover,
-          requesterReason: otReason,
-          requestedHours: Number(otHoursEdit),
-          lateHours: Number(selectedLog.lateHours === "—" ? 0 : selectedLog.lateHours),
-          originalClockOut: selectedLog.timeOut,
-          projectedClockOut: projectedClockOut?.toISOString(),
-          totalProjectedHours: parseFloat(selectedLog.duration) + parseFloat(otHoursEdit),
-        }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.message || "Request failed");
-      
-      toast.message("Overtime request submitted successfully");
-      
-      // Update the log status in the list
-      setLogs((prev) => prev.map((l) => (l.id === selectedLog.id ? { ...l, otStatus: "pending" } : l)));
-      
-      // Close dialog and reset state
-      setOtDialogOpen(false);
-      setIsStandaloneOT(false);
-      setOtForLog(null);
-    } catch (e) {
-      toast.message(e.message);
-    }
-    setOtSubmitting(false);
   };
 
   const calculateProjectedClockOut = (originalClockOut, otHours) => {
@@ -581,6 +608,13 @@ export default function PunchLogs() {
   const refresh = () => {
     setRefreshing(true);
     Promise.all([fetchLogs(), fetchCompanySettings(), fetchLocations()]).finally(() => setRefreshing(false));
+    
+    if (viewMode === "smart") {
+      promises.push(fetchSmartDetectsOT());
+    }
+    
+    Promise.all(promises).finally(() => setRefreshing(false));
+  
   };
 
   const buildCSV = (rows) => {
@@ -673,33 +707,30 @@ export default function PunchLogs() {
               <Link href="/dashboard/employee/punch">Punch</Link>
             </Button>
 
-            
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="icon"
-                  onClick={() => {
-                    if (filteredSorted.length > 0) {
-                      setIsStandaloneOT(true);
-                      setOtForLog(null);
-                      setOtMaxHours(0);
-                      setOtHoursEdit("");
-                      setOtApprover("");
-                      setOtReason("");
-                      setOtDialogOpen(true);
-                    } else {
-                      toast.message("No logs available for overtime request");
-                    }
-                  }}
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>New Overtime Request</TooltipContent>
-            </Tooltip>
-                  
-            
+            <div className="flex gap-1 border rounded-md p-1">
+              <Button
+                size="sm"
+                variant={viewMode === "all" ? "default" : "ghost"}
+                onClick={() => setViewMode("all")}
+                className="h-8"
+              >
+                All Logs
+              </Button>
+              <Button
+                size="sm"
+                variant={viewMode === "smart" ? "default" : "ghost"}
+                onClick={() => {
+                  setViewMode("smart");
+                  if (smartLogs.length === 0) {
+                    fetchSmartDetectsOT();
+                  }
+                }}
+                className="h-8"
+              >
+                Smart OT
+              </Button>
+            </div>
+   
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button 
@@ -915,9 +946,8 @@ export default function PunchLogs() {
                           onRequestOT={(l) => {
                             setIsStandaloneOT(false);
                             setOtForLog(l);
-                            setOtMaxHours(parseFloat(l.otHours) || 0);
-                            setOtHoursEdit(l.otHours === "0.00" ? "" : l.otHours);
                             setOtApprover("");
+                            setOtHoursEdit("");
                             setOtReason("");
                             setOtDialogOpen(true);
                           }}
@@ -1052,23 +1082,98 @@ export default function PunchLogs() {
             if (!open) {
               setIsStandaloneOT(false);
               setOtForLog(null);
+              setOtHoursEdit("");
+              setOtApprover("");
+              setOtReason("");
             }
           }}
           icon={Send}
           title="Request Overtime Approval"
           subtitle={
             otForLog && !isStandaloneOT 
-              ? `For ${safeDate(otForLog.timeIn)} (${otForLog.otHours} h OT)`
+              ? `For ${safeDate(otForLog.timeIn)}`
               : isStandaloneOT && otForLog
               ? `For ${safeDate(otForLog.timeIn)}`
               : "Select a punch log to request overtime"
           }
           loading={otSubmitting}
-          primaryLabel="Submit"
-          onSubmit={submitOT}
-          primaryDisabled={!otForLog || !otApprover || !otHoursEdit || parseFloat(otHoursEdit) <= 0}
+          primaryLabel="Submit Request"
+          loadingLabel={
+            <>
+              <span className="ml-2">Submitting...</span>
+            </>
+          }
+          onSubmit={async () => {
+            try {
+              setOtSubmitting(true);
+              
+              // Convert HH:MM to decimal hours for API
+              const decimalHours = convertTimeToDecimal(otHoursEdit);
+              
+              if (decimalHours <= 0) {
+                toast.error("Please enter valid overtime hours");
+                setOtSubmitting(false);
+                return;
+              }
+
+              const payload = {
+                timeLogId: otForLog.id,
+                approverId: otApprover,
+                requestedHours: decimalHours,
+                requesterReason: otReason || null
+              };
+
+              const response = await fetch(`${API_URL}/api/overtime/submit`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(payload)
+              });
+
+              const result = await response.json();
+
+              if (response.ok) {
+                toast.success(`Overtime request submitted successfully!`);
+                
+                // Close modal and reset form
+                setOtDialogOpen(false);
+                setOtForLog(null);
+                setOtHoursEdit("");
+                setOtApprover("");
+                setOtReason("");
+                setIsStandaloneOT(false);
+                
+                // Optionally refresh the punch logs
+                if (typeof fetchLogs === 'function') {
+                  fetchLogs();
+                }
+              } else {
+                // Handle specific error cases
+                if (result.message?.includes("already exists")) {
+                  toast.error("You have already submitted an overtime request for this time log");
+                  // Close modal since they can't submit another request
+                  setOtDialogOpen(false);
+                  setOtForLog(null);
+                  setOtHoursEdit("");
+                  setOtApprover("");
+                  setOtReason("");
+                  setIsStandaloneOT(false);
+                } else {
+                  toast.error(result.message || "Failed to submit overtime request");
+                }
+              }
+            } catch (error) {
+              console.error("Error submitting overtime request:", error);
+              toast.error("Failed to submit overtime request. Please try again.");
+            } finally {
+              setOtSubmitting(false);
+            }
+          }}
+          primaryDisabled={!otForLog || !otApprover || !otHoursEdit || !isValidTimeFormat(otHoursEdit)}
         >
-          <div className="space-y-6 text-sm"> {/* Changed from space-y-4 to space-y-6 for better spacing */}
+          <div className="space-y-6 text-sm">
             {/* Log selection for standalone requests */}
             {isStandaloneOT && (
               <div className="space-y-2">
@@ -1079,11 +1184,6 @@ export default function PunchLogs() {
                     const selectedLog = filteredSorted.find(log => log.id === logId);
                     if (selectedLog) {
                       setOtForLog(selectedLog);
-                      // Set max hours based on a reasonable limit (e.g., 12 hours total work day)
-                      const currentDuration = parseFloat(selectedLog.duration) || 0;
-                      const reasonableMaxOT = Math.max(0, 12 - currentDuration);
-                      setOtMaxHours(reasonableMaxOT);
-                      setOtHoursEdit("");
                       setOtApprover(""); // Reset approver when log changes
                       setOtReason(""); // Reset reason when log changes
                     }
@@ -1108,55 +1208,36 @@ export default function PunchLogs() {
               </div>
             )}
             
-            {/* OT Hours - Always show but disabled until log is selected */}
-            <div className="space-y-2">
-              <label className={`block font-medium ${!otForLog ? 'text-muted-foreground' : ''}`}>OT Hours</label>
+            {/* OT Hours input */}
+            <div className="space-y-3">
+              <label className="block font-medium">OT Hours *</label>
               <Input
-                type="number"
-                min="0"
-                step="0.25"
-                max={otMaxHours}
+                type="text"
                 value={otHoursEdit}
-                onChange={(e) => setOtHoursEdit(e.target.value)}
-                className="w-40" // Changed from w-32 to w-40 for better spacing
-                placeholder="0.00"
-                disabled={!otForLog}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Allow only numbers and colon, format as HH:MM
+                  const formatted = value.replace(/[^\d:]/g, '');
+                  const parts = formatted.split(':');
+                  if (parts.length <= 2 && parts[0].length <= 2 && (parts[1] || '').length <= 2) {
+                    setOtHoursEdit(formatted);
+                  }
+                }}
+                placeholder="HH:MM (e.g., 02:30)"
+                className={`w-full max-w-xs ${
+                  otHoursEdit && !isValidTimeFormat(otHoursEdit) 
+                    ? 'border-red-500 focus:border-red-500' 
+                    : ''
+                }`}
+                maxLength={5}
               />
-              {otForLog && !!otMaxHours && (
-                <p className="text-xs text-muted-foreground">Maximum recommended: {otMaxHours}h</p>
+              {otHoursEdit && !isValidTimeFormat(otHoursEdit) && (
+                <p className="text-xs text-red-500">Please enter valid time format (HH:MM)</p>
               )}
-              {!otForLog && (
-                <p className="text-xs text-muted-foreground">Select a punch log first</p>
-              )}
+              {!otHoursEdit || isValidTimeFormat(otHoursEdit) ? (
+                <p className="text-xs text-muted-foreground">Enter overtime hours in HH:MM format (e.g., 02:30 for 2 hours 30 minutes)</p>
+              ) : null}
             </div>
-
-            {/* Show projected clock-out time */}
-            {otForLog && otHoursEdit && parseFloat(otHoursEdit) > 0 && otForLog.timeOut && (
-              <div className="p-4 bg-muted/50 rounded-md border"> {/* Added more padding */}
-                <h4 className="font-medium mb-3 flex items-center gap-2"> {/* Increased margin */}
-                  <Clock className="h-4 w-4 text-orange-500" />
-                  Projected Times
-                </h4>
-                <div className="space-y-2 text-xs"> {/* Increased spacing */}
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Original Clock-out:</span>
-                    <span className="font-medium">{safeDateTime(otForLog.timeOut)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">With {otHoursEdit}h OT:</span>
-                    <span className="font-medium text-orange-600">
-                      {safeDateTime(calculateProjectedClockOut(otForLog.timeOut, otHoursEdit))}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Total Hours:</span>
-                    <span className="font-medium">
-                      {(parseFloat(otForLog.duration) + parseFloat(otHoursEdit)).toFixed(2)}h
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
             
             {/* Approver - Always show but disabled until log is selected */}
             <div className="space-y-2">

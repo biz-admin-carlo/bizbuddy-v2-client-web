@@ -1,1109 +1,485 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+// components/Dashboard/DepartmentHead/OvertimeRequests.jsx
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Clock,
-  Calendar,
-  ChevronDown,
-  ChevronUp,
-  RefreshCw,
-  Filter,
   CheckCircle2,
   XCircle,
-  Trash2,
-  Info,
-  AlertCircle,
-  FileText,
   Eye,
+  FileText,
   TrendingUp,
+  AlertCircle,
+  User,
+  Calendar,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
-
-import ColumnSelector from "@/components/common/ColumnSelector";
-import MultiSelect from "@/components/common/MultiSelect";
-import DeleteBtn from "@/components/common/DeleteBtn";
-import TableSkeleton from "@/components/common/TableSkeleton";
-
+import DataTable from "@/components/common/DataTable";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fmtMMDDYYYY_hhmma } from "@/lib/dateTimeFormatter";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-const statusClasses = {
-  pending: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
-  approved: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+const statusConfig = {
+  pending: {
+    label: "Pending",
+    color: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+    icon: Clock,
+  },
+  approved: {
+    label: "Approved", 
+    color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+    icon: CheckCircle2,
+  },
+  rejected: {
+    label: "Rejected",
+    color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400", 
+    icon: XCircle,
+  },
 };
 
-const statusIcons = {
-  pending: <Clock className="h-3 w-3 mr-1" />,
-  approved: <CheckCircle2 className="h-3 w-3 mr-1" />,
-  rejected: <XCircle className="h-3 w-3 mr-1" />,
+const StatusBadge = ({ status }) => {
+  const config = statusConfig[status];
+  if (!config) return status;
+  
+  const Icon = config.icon;
+  return (
+    <Badge variant="secondary" className={`${config.color} border-0`}>
+      <Icon className="h-3 w-3 mr-1" />
+      {config.label}
+    </Badge>
+  );
 };
 
-const fmt = (d) =>
-  d
-    ? new Date(d).toLocaleString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "—";
-
-const diffHours = (inTs, outTs) => {
-  if (!inTs || !outTs) return 0;
-  const ms = new Date(outTs) - new Date(inTs);
-  return +(ms / 3_600_000).toFixed(2);
-};
-
-export default function EmployeesOvertimeRequests() {
+export default function OvertimeRequests() {
   const { token, user } = useAuthStore();
-  const [rows, setRows] = useState([]);
+  const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [sortKey, setSortKey] = useState("requestedNewest");
-  const [dialogType, setDialogType] = useState(null);
-  const [selected, setSelected] = useState(null);
+  const [selectedRequests, setSelectedRequests] = useState([]);
+  
+  // Dialog states
+  const [actionDialog, setActionDialog] = useState({ open: false, type: null, request: null });
+  const [detailDialog, setDetailDialog] = useState({ open: false, request: null });
   const [comment, setComment] = useState("");
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [showDelete, setShowDelete] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  const [logOpen, setLogOpen] = useState(false);
-  const [logData, setLogData] = useState(null);
-  const [expandedRow, setExpandedRow] = useState(null);
 
-  const columnOptions = [
-    { value: "otId", label: "Overtime ID" },
-    { value: "requester", label: "Requester Email" },
-    { value: "timeLogId", label: "TimeLog ID" },
-    { value: "otHours", label: "OT (h)" },
-    { value: "lateHours", label: "Late (h)" },
-    { value: "reason", label: "Reason" },
-    { value: "status", label: "Status" },
-    { value: "createdAt", label: "Created At" },
-    { value: "updatedAt", label: "Updated At" },
-  ];
-  const [columnVisibility, setColumnVisibility] = useState(columnOptions.map((o) => o.value));
-
-  const [filters, setFilters] = useState({
-    otIds: ["all"],
-    reqs: ["all"],
-    tlIds: ["all"],
-    otVals: ["all"],
-    lateVals: ["all"],
-    reasons: ["all"],
-    statuses: ["all"],
-    dateFrom: "",
-    dateTo: "",
-  });
-
-  // Check if user can approve (admin, supervisor, superadmin)
-  const canApprove = useMemo(() => {
-    return ["admin", "supervisor", "superadmin"].includes(user?.role);
-  }, [user?.role]);
-
-  // Calculate statistics
+  // Calculate stats
   const stats = useMemo(() => {
-    const total = rows.length;
-    const pending = rows.filter((r) => r.status === "pending").length;
-    const approved = rows.filter((r) => r.status === "approved").length;
-    const approvedHours = rows
-      .filter((r) => r.status === "approved")
-      .reduce((sum, r) => {
-        const hours = r.requestedHours ?? r.timeLog?.otHours ?? 0;
-        return sum + Number(hours);
-      }, 0);
+    const total = requests.length;
+    const pending = requests.filter(r => r.status === "pending").length;
+    const approved = requests.filter(r => r.status === "approved").length;
+    const approvedHours = requests
+      .filter(r => r.status === "approved")
+      .reduce((sum, r) => sum + Number(r.requestedHours || 0), 0);
 
     return { total, pending, approved, approvedHours: approvedHours.toFixed(1) };
-  }, [rows]);
+  }, [requests]);
 
-  const toggleFilter = (key, val) =>
-    setFilters((prev) => {
-      if (val === "all") return { ...prev, [key]: ["all"] };
-      let list = prev[key].filter((v) => v !== "all");
-      list = list.includes(val) ? list.filter((v) => v !== val) : [...list, val];
-      return { ...prev, [key]: list.length ? list : ["all"] };
-    });
+  // Status tabs for the table
+  const statusTabs = useMemo(() => [
+    { label: "All", value: "all", count: stats.total },
+    { label: "Pending", value: "pending", count: stats.pending },
+    { label: "Approved", value: "approved", count: stats.approved },
+    { label: "Rejected", value: "rejected", count: requests.filter(r => r.status === "rejected").length },
+  ], [requests, stats]);
 
-  const fetchRows = useCallback(async () => {
+  // Table columns
+  const columns = [
+    {
+      key: "requester",
+      label: "Employee",
+      render: (_, row) => (
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center">
+            <User className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+          </div>
+          <div>
+            <div className="font-medium text-sm">
+              {row.requester?.profile?.firstName} {row.requester?.profile?.lastName}
+            </div>
+            <div className="text-xs text-muted-foreground">{row.requester?.email}</div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "requestedHours",
+      label: "OT Hours",
+      render: (hours) => (
+        <div className="font-mono text-sm">
+          {Number(hours).toFixed(2)}h
+        </div>
+      ),
+    },
+    {
+      key: "lateHours", 
+      label: "Late Hours",
+      render: (hours) => (
+        <div className="font-mono text-sm text-muted-foreground">
+          {hours ? Number(hours).toFixed(2) : "0.00"}h
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (status) => <StatusBadge status={status} />,
+      sortable: true,
+    },
+    {
+      key: "createdAt",
+      label: "Submitted",
+      render: (date) => (
+        <div className="text-sm">
+          <div>{new Date(date).toLocaleDateString()}</div>
+          <div className="text-xs text-muted-foreground">
+            {new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </div>
+        </div>
+      ),
+      sortable: true,
+    },
+    {
+      key: "requesterReason",
+      label: "Reason",
+      render: (reason) => (
+        <div className="max-w-32 truncate text-sm text-muted-foreground">
+          {reason || "No reason provided"}
+        </div>
+      ),
+    },
+  ];
+
+  // Table actions
+  const actions = [
+    {
+      label: "View Details",
+      icon: Eye,
+      onClick: (request) => setDetailDialog({ open: true, request }),
+    },
+    ...(user?.role && ["admin", "supervisor", "superadmin"].includes(user.role) ? [
+      {
+        label: "Approve",
+        icon: CheckCircle2,
+        onClick: (request) => {
+          if (request.status === "pending") {
+            setActionDialog({ open: true, type: "approve", request });
+          }
+        },
+        className: "text-green-600",
+      },
+      {
+        label: "Reject", 
+        icon: XCircle,
+        onClick: (request) => {
+          if (request.status === "pending") {
+            setActionDialog({ open: true, type: "reject", request });
+          }
+        },
+        className: "text-red-600",
+        separator: true,
+      },
+    ] : []),
+  ];
+
+  // Bulk actions
+  const bulkActions = user?.role && ["admin", "supervisor", "superadmin"].includes(user.role) ? [
+    {
+      label: "Approve Selected",
+      icon: CheckCircle2,
+      variant: "default",
+      onClick: (selectedIds) => {
+        const pendingSelected = requests.filter(r => 
+          selectedIds.includes(r.id) && r.status === "pending"
+        );
+        if (pendingSelected.length > 0) {
+          // Handle bulk approve
+        }
+      },
+    },
+    {
+      label: "Reject Selected",
+      icon: XCircle,
+      variant: "destructive", 
+      onClick: (selectedIds) => {
+        const pendingSelected = requests.filter(r => 
+          selectedIds.includes(r.id) && r.status === "pending"
+        );
+        if (pendingSelected.length > 0) {
+          // Handle bulk reject
+        }
+      },
+    },
+  ] : [];
+
+  const fetchRequests = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/overtime`, {
+      const response = await fetch(`${API_URL}/api/overtime`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const j = await res.json();
-      console.log(j);
-      if (!res.ok) throw new Error(j.message || "Failed to fetch overtime.");
-      setRows(
-        (j.data || []).map((o) => ({
-          ...o,
-          lateHours: o.lateHours ?? o.timeLog?.lateHours ?? null,
-        }))
-      );
-    } catch (e) {
-      toast.error(e.message || "Failed to fetch overtime requests");
+      const data = await response.json();
+      
+      if (!response.ok) throw new Error(data.message || "Failed to fetch overtime requests");
+      
+      setRequests(data.data || []);
+    } catch (error) {
+      toast.error(error.message || "Failed to fetch overtime requests");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [token]);
 
-  useEffect(() => {
-    fetchRows();
-  }, [fetchRows]);
-
-  const StatusBadge = ({ status }) => (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${statusClasses[status] || ""}`}>
-      {statusIcons[status]} {status}
-    </span>
-  );
-
-  const otVal = (r) =>
-    r.requestedHours != null
-      ? Number(r.requestedHours).toFixed(2)
-      : r.timeLog?.otHours ?? diffHours(r.timeLog?.timeIn, r.timeLog?.timeOut) ?? "—";
-
-  const lateVal = (r) => (r.lateHours != null ? Number(r.lateHours).toFixed(2) : r.timeLog?.lateHours ?? "—");
-
-  const getProjectedTime = (row) => {
-    if (!row.timeLog?.timeOut || !row.requestedHours) return null;
-    const originalOut = new Date(row.timeLog.timeOut);
-    const withOT = new Date(originalOut.getTime() + Number(row.requestedHours) * 3600000);
-    return withOT;
-  };
-
-  const getTotalHours = (row) => {
-    if (!row.timeLog?.timeIn || !row.timeLog?.timeOut || !row.requestedHours) return null;
-    const projected = getProjectedTime(row);
-    if (!projected) return null;
-    const hours = (projected - new Date(row.timeLog.timeIn)) / 3600000;
-    return hours.toFixed(2);
-  };
-
-  const otIdOpts = useMemo(() => [...new Set(rows.map((r) => r.id))].map((v) => ({ value: v, label: v })), [rows]);
-  const reqOpts = useMemo(
-    () => [...new Set(rows.map((r) => r.requester?.email || r.requester?.username || "—"))].map((v) => ({ value: v, label: v })),
-    [rows]
-  );
-  const tlIdOpts = useMemo(
-    () =>
-      [...new Set(rows.map((r) => r.timeLogId || "—"))].map((v) => ({
-        value: v,
-        label: v,
-      })),
-    [rows]
-  );
-  const otValOpts = useMemo(() => [...new Set(rows.map((r) => otVal(r)))].map((v) => ({ value: v, label: v })), [rows]);
-  const lateValOpts = useMemo(
-    () =>
-      [...new Set(rows.map((r) => lateVal(r)))].map((v) => ({
-        value: v,
-        label: v,
-      })),
-    [rows]
-  );
-  const reasonOpts = useMemo(
-    () =>
-      [...new Set(rows.map((r) => r.requesterReason || "—"))].map((v) => ({
-        value: v,
-        label: v,
-      })),
-    [rows]
-  );
-
-  const viewRows = useMemo(() => {
-    let list = [...rows];
-    const f = filters;
-
-    if (!f.otIds.includes("all")) list = list.filter((r) => f.otIds.includes(r.id));
-    if (!f.reqs.includes("all")) list = list.filter((r) => f.reqs.includes(r.requester?.email || r.requester?.username || "—"));
-    if (!f.tlIds.includes("all")) list = list.filter((r) => f.tlIds.includes(r.timeLogId || "—"));
-    if (!f.otVals.includes("all")) list = list.filter((r) => f.otVals.includes(otVal(r)));
-    if (!f.lateVals.includes("all")) list = list.filter((r) => f.lateVals.includes(lateVal(r)));
-    if (!f.reasons.includes("all")) list = list.filter((r) => f.reasons.includes(r.requesterReason || "—"));
-    if (!f.statuses.includes("all")) list = list.filter((r) => f.statuses.includes(r.status));
-
-    // Date range filtering
-    if (f.dateFrom) {
-      list = list.filter((r) => new Date(r.createdAt) >= new Date(f.dateFrom));
-    }
-    if (f.dateTo) {
-      const endDate = new Date(f.dateTo);
-      endDate.setHours(23, 59, 59, 999);
-      list = list.filter((r) => new Date(r.createdAt) <= endDate);
-    }
-
-    const cmpStr = (a, b) => a.localeCompare(b);
-    const cmpNum = (a, b) => a - b;
-    const dir = (asc) => (asc ? 1 : -1);
-
-    switch (sortKey) {
-      case "otIdAsc":
-        list.sort((a, b) => cmpStr(a.id, b.id) * dir(true));
-        break;
-      case "otIdDesc":
-        list.sort((a, b) => cmpStr(a.id, b.id) * dir(false));
-        break;
-      case "requesterAsc":
-        list.sort((a, b) => cmpStr(a.requester?.username || "", b.requester?.username || "") * dir(true));
-        break;
-      case "requesterDesc":
-        list.sort((a, b) => cmpStr(a.requester?.username || "", b.requester?.username || "") * dir(false));
-        break;
-      case "tlAsc":
-        list.sort((a, b) => cmpStr(a.timeLogId || "", b.timeLogId || "") * dir(true));
-        break;
-      case "tlDesc":
-        list.sort((a, b) => cmpStr(a.timeLogId || "", b.timeLogId || "") * dir(false));
-        break;
-      case "otAsc":
-        list.sort((a, b) => cmpNum(parseFloat(otVal(a)), parseFloat(otVal(b))) * dir(true));
-        break;
-      case "otDesc":
-        list.sort((a, b) => cmpNum(parseFloat(otVal(a)), parseFloat(otVal(b))) * dir(false));
-        break;
-      case "lateAsc":
-        list.sort((a, b) => cmpNum(parseFloat(lateVal(a)), parseFloat(lateVal(b))) * dir(true));
-        break;
-      case "lateDesc":
-        list.sort((a, b) => cmpNum(parseFloat(lateVal(a)), parseFloat(lateVal(b))) * dir(false));
-        break;
-      case "reasonAsc":
-        list.sort((a, b) => cmpStr(a.requesterReason || "", b.requesterReason || "") * dir(true));
-        break;
-      case "reasonDesc":
-        list.sort((a, b) => cmpStr(a.requesterReason || "", b.requesterReason || "") * dir(false));
-        break;
-      case "requestedOld":
-        list.sort((a, b) => (new Date(a.createdAt) - new Date(b.createdAt)) * dir(true));
-        break;
-      case "requestedNewest":
-        list.sort((a, b) => (new Date(a.createdAt) - new Date(b.createdAt)) * dir(false));
-        break;
-      case "statusAsc":
-        list.sort((a, b) => cmpStr(a.status, b.status) * dir(true));
-        break;
-      case "statusDesc":
-        list.sort((a, b) => cmpStr(a.status, b.status) * dir(false));
-        break;
-      case "createdOld":
-        list.sort((a, b) => (new Date(a.createdAt) - new Date(b.createdAt)) * dir(true));
-        break;
-      case "createdNewest":
-        list.sort((a, b) => (new Date(a.createdAt) - new Date(b.createdAt)) * dir(false));
-        break;
-      case "updatedOld":
-        list.sort((a, b) => (new Date(a.updatedAt) - new Date(b.updatedAt)) * dir(true));
-        break;
-      case "updatedNewest":
-        list.sort((a, b) => (new Date(a.updatedAt) - new Date(b.updatedAt)) * dir(false));
-        break;
-      default:
-        list.sort((a, b) => (new Date(a.createdAt) - new Date(b.createdAt)) * dir(false));
-    }
-    return list;
-  }, [rows, filters, sortKey]);
-
-  const openDialog = (type, row) => {
-    setDialogType(type);
-    setSelected(row);
-    setComment("");
-  };
-
-  const closeDialog = () => {
-    setDialogType(null);
-    setSelected(null);
-    setComment("");
-  };
-
-  const doAction = async (endpoint) => {
-    if (!selected) return;
+  const handleAction = async () => {
+    if (!actionDialog.request || !actionDialog.type) return;
+    
     setActionLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/overtime/${selected.id}/${endpoint}`, {
+      const response = await fetch(`${API_URL}/api/overtime/${actionDialog.request.id}/${actionDialog.type}`, {
         method: "PUT",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ approverComments: comment }),
       });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.message || "Operation failed.");
-      
-      // Enhanced success notification
-      toast.success(
-        `Overtime request ${endpoint === "approve" ? "approved" : "rejected"} successfully!`,
-        {
-          description: `Request ID: ${selected.id}`,
-        }
-      );
-      
-      fetchRows();
-      closeDialog();
-    } catch (e) {
-      // Enhanced error notification
-      toast.error(e.message || "Operation failed", {
-        description: "Please try again or contact support.",
-      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+
+      toast.success(`Request ${actionDialog.type}d successfully`);
+      setActionDialog({ open: false, type: null, request: null });
+      setComment("");
+      fetchRequests();
+    } catch (error) {
+      toast.error(error.message || `Failed to ${actionDialog.type} request`);
+    } finally {
+      setActionLoading(false);
     }
-    setActionLoading(false);
   };
 
-  const doDelete = async () => {
-    if (!selected) return;
-    setActionLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/api/overtime/${selected.id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.message || "Delete failed.");
-      toast.success("Overtime request deleted successfully");
-      setRows((p) => p.filter((row) => row.id !== selected.id));
-      setShowDelete(false);
-      setSelected(null);
-    } catch (e) {
-      toast.error(e.message || "Delete failed");
-    }
-    setActionLoading(false);
-  };
-
-  const FilterRow = ({ label, options, selKey }) => (
-    <MultiSelect
-      options={options}
-      selected={filters[selKey]}
-      onChange={(v) => toggleFilter(selKey, v)}
-      allLabel={`All ${label}`}
-      width={200}
-    />
-  );
+  useEffect(() => {
+    fetchRequests();
+  }, [fetchRequests]);
 
   return (
-    <div className="max-w-full mx-auto p-4 lg:px-10 px-2 space-y-8">
-      <Toaster position="top-center" richColors />
-      
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
-        <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
-          <Clock className="h-7 w-7 text-orange-500" />
-          Employee Overtime Requests
-        </h2>
-        <TooltipProvider delayDuration={300}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="icon" onClick={fetchRows} disabled={loading}>
-                <RefreshCw className={`h-4 w-4 ${loading && "animate-spin"}`} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Refresh overtime list</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-
+    <div className="space-y-6">
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="border-2 border-blue-500 shadow-md overflow-hidden dark:border-blue-500/50">
-          <div className="h-1 w-full bg-blue-500" />
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 mb-2">
-              <Clock className="h-5 w-5" />
-              <span className="text-sm font-medium">Total Requests</span>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Requests</CardTitle>
+              <FileText className="h-4 w-4 text-muted-foreground" />
             </div>
-            <p className="text-3xl font-bold">{stats.total}</p>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.total}</div>
           </CardContent>
         </Card>
 
-        <Card className="border-2 border-amber-500 shadow-md overflow-hidden dark:border-amber-500/50">
-          <div className="h-1 w-full bg-amber-500" />
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 mb-2">
-              <Clock className="h-5 w-5" />
-              <span className="text-sm font-medium">Pending</span>
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Pending</CardTitle>
+              <Clock className="h-4 w-4 text-amber-600" />
             </div>
-            <p className="text-3xl font-bold">{stats.pending}</p>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-amber-600">{stats.pending}</div>
           </CardContent>
         </Card>
 
-        <Card className="border-2 border-green-500 shadow-md overflow-hidden dark:border-green-500/50">
-          <div className="h-1 w-full bg-green-500" />
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-green-600 dark:text-green-400 mb-2">
-              <CheckCircle2 className="h-5 w-5" />
-              <span className="text-sm font-medium">Approved</span>
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Approved</CardTitle>
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
             </div>
-            <p className="text-3xl font-bold">{stats.approved}</p>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{stats.approved}</div>
           </CardContent>
         </Card>
 
-        <Card className="border-2 border-orange-500 shadow-md overflow-hidden dark:border-orange-500/50">
-          <div className="h-1 w-full bg-orange-500" />
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400 mb-2">
-              <TrendingUp className="h-5 w-5" />
-              <span className="text-sm font-medium">Approved Hours</span>
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Approved Hours</CardTitle>
+              <TrendingUp className="h-4 w-4 text-orange-600" />
             </div>
-            <p className="text-3xl font-bold">{stats.approvedHours}</p>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">{stats.approvedHours}</div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Table Controls */}
-      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2">
-            <div className="p-2 rounded-full bg-orange-500/10 text-orange-500">
-              <Filter className="h-5 w-5" />
-            </div>
-            Table Controls
-          </CardTitle>
+      {/* Main Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Clock className="h-5 w-5 text-orange-600" />
+            <CardTitle>Employee Overtime Requests</CardTitle>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-3 items-center">
-            <span className="text-sm font-medium text-muted-foreground">Column:</span>
-            <ColumnSelector options={columnOptions} visible={columnVisibility} setVisible={setColumnVisibility} />
-          </div>
-          <div className="flex flex-wrap gap-3 items-center">
-            <span className="text-sm font-medium text-muted-foreground">Filter:</span>
-            <FilterRow label="OT IDs" options={otIdOpts} selKey="otIds" />
-            <FilterRow label="requesters" options={reqOpts} selKey="reqs" />
-            <FilterRow label="time-logs" options={tlIdOpts} selKey="tlIds" />
-            <FilterRow label="OT hrs" options={otValOpts} selKey="otVals" />
-            <FilterRow label="late hrs" options={lateValOpts} selKey="lateVals" />
-            <FilterRow label="reasons" options={reasonOpts} selKey="reasons" />
-            <FilterRow
-              label="statuses"
-              options={[
-                { value: "pending", label: "Pending" },
-                { value: "approved", label: "Approved" },
-                { value: "rejected", label: "Rejected" },
-              ]}
-              selKey="statuses"
-            />
-          </div>
-          <div className="flex flex-wrap gap-3 items-center">
-            <span className="text-sm font-medium text-muted-foreground">Date Range:</span>
-            <input
-              type="date"
-              value={filters.dateFrom}
-              onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-              className="px-3 py-2 border rounded-lg text-sm bg-background"
-              placeholder="From"
-            />
-            <span className="text-sm text-muted-foreground">to</span>
-            <input
-              type="date"
-              value={filters.dateTo}
-              onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-              className="px-3 py-2 border rounded-lg text-sm bg-background"
-              placeholder="To"
-            />
-          </div>
+        <CardContent className="p-6">
+          <DataTable
+            data={requests}
+            columns={columns}
+            loading={loading}
+            onRefresh={fetchRequests}
+            actions={actions}
+            bulkActions={bulkActions}
+            searchPlaceholder="Search by employee, email, or reason..."
+            statusTabs={statusTabs}
+            selectable={bulkActions.length > 0}
+            selectedRows={selectedRequests}
+            onSelectionChange={setSelectedRequests}
+            onRowClick={(request) => setDetailDialog({ open: true, request })}
+          />
         </CardContent>
       </Card>
 
-      {/* Overtime Requests Table */}
-      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2">
-            <div className="p-2 rounded-full bg-orange-500/10 text-orange-500">
-              <Calendar className="h-5 w-5" />
-            </div>
-            Overtime Requests
-          </CardTitle>
-          <CardDescription>Review overtime approvals</CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-center w-12">Expand</TableHead>
-
-                  {columnVisibility.includes("otId") && (
-                    <TableHead
-                      className="cursor-pointer text-center whitespace-nowrap"
-                      onClick={() => setSortKey((p) => (p === "otIdAsc" ? "otIdDesc" : "otIdAsc"))}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        OT&nbsp;ID
-                        {sortKey === "otIdAsc" ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : sortKey === "otIdDesc" ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : null}
-                      </div>
-                    </TableHead>
-                  )}
-
-                  {columnVisibility.includes("requester") && (
-                    <TableHead
-                      className="cursor-pointer text-center whitespace-nowrap"
-                      onClick={() => setSortKey((p) => (p === "requesterAsc" ? "requesterDesc" : "requesterAsc"))}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        Requester Email
-                        {sortKey === "requesterAsc" ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : sortKey === "requesterDesc" ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : null}
-                      </div>
-                    </TableHead>
-                  )}
-
-                  {columnVisibility.includes("timeLogId") && (
-                    <TableHead
-                      className="cursor-pointer text-center whitespace-nowrap"
-                      onClick={() => setSortKey((p) => (p === "tlAsc" ? "tlDesc" : "tlAsc"))}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        TimeLog&nbsp;ID
-                        {sortKey === "tlAsc" ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : sortKey === "tlDesc" ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : null}
-                      </div>
-                    </TableHead>
-                  )}
-
-                  {columnVisibility.includes("otHours") && (
-                    <TableHead
-                      className="cursor-pointer text-center whitespace-nowrap"
-                      onClick={() => setSortKey((p) => (p === "otAsc" ? "otDesc" : "otAsc"))}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        OT&nbsp;(h)
-                        {sortKey === "otAsc" ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : sortKey === "otDesc" ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : null}
-                      </div>
-                    </TableHead>
-                  )}
-
-                  {columnVisibility.includes("lateHours") && (
-                    <TableHead
-                      className="cursor-pointer text-center whitespace-nowrap"
-                      onClick={() => setSortKey((p) => (p === "lateAsc" ? "lateDesc" : "lateAsc"))}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        Late&nbsp;(h)
-                        {sortKey === "lateAsc" ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : sortKey === "lateDesc" ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : null}
-                      </div>
-                    </TableHead>
-                  )}
-
-                  {columnVisibility.includes("reason") && (
-                    <TableHead
-                      className="cursor-pointer text-center whitespace-nowrap"
-                      onClick={() => setSortKey((p) => (p === "reasonAsc" ? "reasonDesc" : "reasonAsc"))}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        Reason
-                        {sortKey === "reasonAsc" ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : sortKey === "reasonDesc" ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : null}
-                      </div>
-                    </TableHead>
-                  )}
-
-                  {columnVisibility.includes("status") && (
-                    <TableHead
-                      className="cursor-pointer text-center whitespace-nowrap"
-                      onClick={() => setSortKey((p) => (p === "statusAsc" ? "statusDesc" : "statusAsc"))}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        Status
-                        {sortKey === "statusAsc" ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : sortKey === "statusDesc" ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : null}
-                      </div>
-                    </TableHead>
-                  )}
-
-                  {columnVisibility.includes("createdAt") && (
-                    <TableHead
-                      className="cursor-pointer text-center whitespace-nowrap"
-                      onClick={() => setSortKey((p) => (p === "createdNewest" ? "createdOld" : "createdNewest"))}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        Created&nbsp;At
-                        {sortKey === "createdNewest" ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : sortKey === "createdOld" ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : null}
-                      </div>
-                    </TableHead>
-                  )}
-
-                  {columnVisibility.includes("updatedAt") && (
-                    <TableHead
-                      className="cursor-pointer text-center whitespace-nowrap"
-                      onClick={() => setSortKey((p) => (p === "updatedNewest" ? "updatedOld" : "updatedNewest"))}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        Updated&nbsp;At
-                        {sortKey === "updatedNewest" ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : sortKey === "updatedOld" ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : null}
-                      </div>
-                    </TableHead>
-                  )}
-
-                  <TableHead className="text-center whitespace-nowrap">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-
-              <TableBody>
-                {loading ? (
-                  <TableSkeleton rows={5} cols={columnVisibility.length + 2} />
-                ) : viewRows.length ? (
-                  <AnimatePresence>
-                    {viewRows.map((r) => (
-                      <React.Fragment key={r.id}>
-                        <motion.tr
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="border-b hover:bg-muted/50"
-                        >
-                          <TableCell className="text-center">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setExpandedRow(expandedRow === r.id ? null : r.id)}
-                              className="h-6 w-6"
-                            >
-                              {expandedRow === r.id ? (
-                                <ChevronUp className="h-4 w-4" />
-                              ) : (
-                                <ChevronDown className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </TableCell>
-
-                          {columnVisibility.includes("otId") && (
-                            <TableCell className="text-center text-nowrap text-xs">{r.id}</TableCell>
-                          )}
-                          {columnVisibility.includes("requester") && (
-                            <TableCell className="text-center text-nowrap text-xs">
-                              {r.requester?.email || r.requester?.username || "—"}
-                            </TableCell>
-                          )}
-                          {columnVisibility.includes("timeLogId") && (
-                            <TableCell className="text-center text-nowrap text-xs">{r.timeLogId || "—"}</TableCell>
-                          )}
-                          {columnVisibility.includes("otHours") && (
-                            <TableCell className="text-center text-nowrap text-xs">{otVal(r)}</TableCell>
-                          )}
-                          {columnVisibility.includes("lateHours") && (
-                            <TableCell className="text-center text-nowrap text-xs">{lateVal(r)}</TableCell>
-                          )}
-                          {columnVisibility.includes("reason") && (
-                            <TableCell className="max-w-xs truncate text-xs">
-                              {r.requesterReason || <span className="italic text-muted-foreground text-xs">—</span>}
-                            </TableCell>
-                          )}
-                          {columnVisibility.includes("status") && (
-                            <TableCell className="text-center text-nowrap text-xs">
-                              <StatusBadge status={r.status} />
-                            </TableCell>
-                          )}
-                          {columnVisibility.includes("createdAt") && (
-                            <TableCell className="text-center text-nowrap text-xs">{fmtMMDDYYYY_hhmma(r.createdAt)}</TableCell>
-                          )}
-                          {columnVisibility.includes("updatedAt") && (
-                            <TableCell className="text-center text-nowrap text-xs">{fmtMMDDYYYY_hhmma(r.updatedAt)}</TableCell>
-                          )}
-
-                          <TableCell className="text-center whitespace-nowrap text-xs">
-                            <div className="flex justify-center gap-1">
-                              <TooltipProvider delayDuration={300}>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 text-sky-700 hover:bg-sky-500/10 dark:text-sky-400 dark:hover:bg-sky-500/20 text-xs"
-                                      onClick={() => {
-                                        setLogData(r.timeLog);
-                                        setLogOpen(true);
-                                      }}
-                                    >
-                                      <Eye className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>View Time Log</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-
-                              <TooltipProvider delayDuration={300}>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 text-orange-700 hover:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20 text-xs"
-                                      onClick={() => {
-                                        setSelected(r);
-                                        setDetailsOpen(true);
-                                      }}
-                                    >
-                                      <Info className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Overtime Details</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-
-                              {r.status === "pending" && canApprove && (
-                                <>
-                                  <TooltipProvider delayDuration={300}>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-8 w-8 text-green-700 hover:bg-green-500/10 dark:text-green-400 dark:hover:bg-green-500/20 text-xs"
-                                          onClick={() => openDialog("approve", r)}
-                                        >
-                                          <CheckCircle2 className="h-4 w-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Approve</TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-
-                                  <TooltipProvider delayDuration={300}>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-8 w-8 text-red-700 hover:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 text-xs"
-                                          onClick={() => openDialog("reject", r)}
-                                        >
-                                          <XCircle className="h-4 w-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Reject</TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                </>
-                              )}
-
-                              <TooltipProvider delayDuration={300}>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <DeleteBtn
-                                      onClick={() => {
-                                        setSelected(r);
-                                        setShowDelete(true);
-                                      }}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </DeleteBtn>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Delete</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </div>
-                          </TableCell>
-                        </motion.tr>
-
-                        {/* Expandable Details Row */}
-                        {expandedRow === r.id && (
-                          <motion.tr
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.2 }}
-                          >
-                            <TableCell colSpan={columnVisibility.length + 2}>
-                              <div className="p-6 bg-muted/30 space-y-4">
-                                {/* Projected Times */}
-                                {getProjectedTime(r) && (
-                                  <div className="bg-background rounded-lg p-4 border">
-                                    <h4 className="font-semibold mb-3 flex items-center gap-2">
-                                      <Clock className="h-4 w-4 text-orange-500" />
-                                      Projected Times
-                                    </h4>
-                                    <div className="space-y-2 text-sm">
-                                      <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Original Clock-out:</span>
-                                        <span>{fmtMMDDYYYY_hhmma(r.timeLog?.timeOut)}</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span className="text-muted-foreground">With {otVal(r)}h OT:</span>
-                                        <span className="text-orange-600 dark:text-orange-400 font-medium">
-                                          {fmtMMDDYYYY_hhmma(getProjectedTime(r))}
-                                        </span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Total Hours:</span>
-                                        <span className="font-bold">{getTotalHours(r)}h</span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Request & Approval Details */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  <div className="bg-background rounded-lg p-4 border">
-                                    <h4 className="font-semibold mb-3 flex items-center gap-2">
-                                      <FileText className="h-4 w-4 text-orange-500" />
-                                      Request Details
-                                    </h4>
-                                    <div className="space-y-2 text-sm">
-                                      <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Request ID:</span>
-                                        <span className="font-mono text-xs">{r.id}</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span className="text-muted-foreground">TimeLog ID:</span>
-                                        <span className="font-mono text-xs">{r.timeLogId}</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Requested Hours:</span>
-                                        <span className="font-bold">{otVal(r)} hrs</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Late Hours:</span>
-                                        <span>{lateVal(r)} hrs</span>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div className="bg-background rounded-lg p-4 border">
-                                    <h4 className="font-semibold mb-3 flex items-center gap-2">
-                                      <CheckCircle2 className="h-4 w-4 text-orange-500" />
-                                      Approval Information
-                                    </h4>
-                                    <div className="space-y-2 text-sm">
-                                      <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Submitted:</span>
-                                        <span>{fmtMMDDYYYY_hhmma(r.createdAt)}</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Last Updated:</span>
-                                        <span>{fmtMMDDYYYY_hhmma(r.updatedAt)}</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Approver:</span>
-                                        <span className="truncate max-w-[200px]">
-                                          {r.requester?.email || r.requester?.username || "—"}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Reason for Overtime */}
-                                {r.requesterReason && (
-                                  <div className="bg-background rounded-lg p-4 border text-center">
-                                    <h4 className="font-semibold mb-2">Reason for Overtime</h4>
-                                    <p className="text-sm p-3 bg-muted rounded">{r.requesterReason}</p>
-                                  </div>
-                                )}
-
-                                {/* Approver Comments */}
-                                {r.approverComments && (
-                                  <div
-                                    className={`rounded-lg p-4 ${
-                                      r.status === "approved"
-                                        ? "bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800"
-                                        : "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"
-                                    }`}
-                                  >
-                                    <h4 className="font-semibold mb-2">
-                                      {r.status === "approved" ? "Approval" : "Rejection"} Comments
-                                    </h4>
-                                    <p className="text-sm">{r.approverComments}</p>
-                                  </div>
-                                )}
-                              </div>
-                            </TableCell>
-                          </motion.tr>
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </AnimatePresence>
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={columnVisibility.length + 2} className="h-28 text-center text-xs">
-                      <div className="flex flex-col items-center justify-center text-muted-foreground">
-                        <div className="w-16 h-16 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 text-xs italic">
-                          <Calendar className="h-8 w-8 text-orange-500/50" />
-                        </div>
-                        <p className="italic text-xs">No overtime requests found.</p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Approve/Reject Dialog */}
-      <Dialog open={!!dialogType} onOpenChange={(o) => !o && closeDialog()}>
-        <DialogContent className="sm:max-w-md border-2 dark:border-white/10">
+      {/* Action Dialog */}
+      <Dialog open={actionDialog.open} onOpenChange={(open) => !open && setActionDialog({ open: false, type: null, request: null })}>
+        <DialogContent className="sm:max-w-md">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {dialogType === "approve" ? (
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
+              {actionDialog.type === "approve" ? (
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
               ) : (
-                <XCircle className="h-5 w-5 text-red-500" />
+                <XCircle className="h-5 w-5 text-red-600" />
               )}
-              {dialogType === "approve" ? "Approve" : "Reject"} Overtime
+              {actionDialog.type === "approve" ? "Approve" : "Reject"} Overtime Request
             </DialogTitle>
-            <DialogDescription>
-              {dialogType === "approve" ? "Add optional approval comments" : "Provide rejection reason (optional)"}
-            </DialogDescription>
           </DialogHeader>
 
-          {selected && (
-            <div className="border rounded-md p-3 bg-muted/50 text-sm space-y-1">
-              <p>
-                <strong>Overtime ID:</strong> {selected.id}
-              </p>
-              <p>
-                <strong>Punch log ID:</strong> {selected.timeLogId}
-              </p>
-              <p>
-                <strong>Requester Email:</strong> {selected.requester?.email || selected.requester?.username}
-              </p>
-              <p>
-                <strong>OT Hours:</strong> {otVal(selected)}
-              </p>
-              <p>
-                <strong>Late Hours:</strong> {lateVal(selected)}
-              </p>
-              {selected.requesterReason && (
-                <p>
-                  <strong>Reason:</strong> {selected.requesterReason}
-                </p>
-              )}
+          {actionDialog.request && (
+            <div className="space-y-4">
+              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Employee:</span>
+                  <span className="font-medium">{actionDialog.request.requester?.email}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">OT Hours:</span>
+                  <span className="font-medium">{Number(actionDialog.request.requestedHours).toFixed(2)}h</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Requested:</span>
+                  <span className="font-medium">{new Date(actionDialog.request.createdAt).toLocaleDateString()}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Comments {actionDialog.type === "reject" && <span className="text-red-500">*</span>}
+                </label>
+                <Textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder={`Add ${actionDialog.type === "approve" ? "approval" : "rejection"} comments...`}
+                  className="min-h-[80px]"
+                />
+              </div>
             </div>
           )}
 
-          <Textarea
-            placeholder={dialogType === "approve" ? "Approval comments (optional)" : "Rejection reason (optional)"}
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-          />
-
-          <DialogFooter className="pt-4 gap-2">
-            <Button variant="outline" onClick={closeDialog}>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setActionDialog({ open: false, type: null, request: null })}>
               Cancel
             </Button>
             <Button
-              disabled={actionLoading}
-              onClick={() => doAction(dialogType)}
+              onClick={handleAction}
+              disabled={actionLoading || (actionDialog.type === "reject" && !comment.trim())}
               className={
-                dialogType === "approve" ? "bg-green-500 hover:bg-green-600 text-white" : "bg-red-500 hover:bg-red-600 text-white"
+                actionDialog.type === "approve"
+                  ? "bg-green-600 hover:bg-green-700"
+                  : "bg-red-600 hover:bg-red-700"
               }
             >
-              {actionLoading
-                ? dialogType === "approve"
-                  ? "Approving…"
-                  : "Rejecting…"
-                : dialogType === "approve"
-                ? "Approve"
-                : "Reject"}
+              {actionLoading ? (
+                actionDialog.type === "approve" ? "Approving..." : "Rejecting..."
+              ) : (
+                actionDialog.type === "approve" ? "Approve" : "Reject"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Details Dialog */}
-      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="sm:max-w-md border-2 dark:border-white/10">
+      {/* Detail Dialog */}
+      <Dialog open={detailDialog.open} onOpenChange={(open) => !open && setDetailDialog({ open: false, request: null })}>
+        <DialogContent className="sm:max-w-lg">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-orange-500" /> Overtime Details
+              <FileText className="h-5 w-5 text-orange-600" />
+              Overtime Request Details
             </DialogTitle>
           </DialogHeader>
 
-          {selected && (
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                <h3 className="font-medium text-lg">{otVal(selected)} OT Hours</h3>
-                <p className="text-sm">
-                  <strong>Late Hours:&nbsp;</strong>
-                  {lateVal(selected)}
-                </p>
-                <StatusBadge status={selected.status} />
+          {detailDialog.request && (
+            <div className="space-y-6">
+              {/* Status and Hours */}
+              <div className="flex items-center justify-between">
+                <StatusBadge status={detailDialog.request.status} />
+                <div className="text-right">
+                  <div className="text-2xl font-bold">{Number(detailDialog.request.requestedHours).toFixed(2)}h</div>
+                  <div className="text-sm text-muted-foreground">Overtime Hours</div>
+                </div>
               </div>
 
+              {/* Employee Info */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-muted-foreground">Overtime ID</p>
-                  <p className="font-mono text-xs">{selected.id}</p>
+                  <div className="text-sm text-muted-foreground">Employee</div>
+                  <div className="font-medium">{detailDialog.request.requester?.email}</div>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Punch log ID</p>
-                  <p className="font-mono text-xs">{selected.timeLogId}</p>
+                  <div className="text-sm text-muted-foreground">Late Hours</div>
+                  <div className="font-medium">{detailDialog.request.lateHours ? Number(detailDialog.request.lateHours).toFixed(2) : "0.00"}h</div>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Requester Email</p>
-                  <p className="font-medium">{selected.requester?.email || selected.requester?.username}</p>
+                  <div className="text-sm text-muted-foreground">Submitted</div>
+                  <div className="font-medium">{fmtMMDDYYYY_hhmma(detailDialog.request.createdAt)}</div>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Requested At</p>
-                  <p className="font-medium">{fmtMMDDYYYY_hhmma(selected.createdAt)}</p>
+                  <div className="text-sm text-muted-foreground">TimeLog ID</div>
+                  <div className="font-mono text-xs">{detailDialog.request.timeLogId}</div>
                 </div>
               </div>
 
-              {selected.requesterReason && (
-                <div className="space-y-1 pt-2 border-t border-black/10 dark:border-white/10">
-                  <p className="text-sm text-muted-foreground">Reason</p>
-                  <div className="bg-muted p-3 rounded-md">{selected.requesterReason}</div>
+              {/* Reason */}
+              {detailDialog.request.requesterReason && (
+                <div className="space-y-2">
+                  <div className="text-sm text-muted-foreground">Reason for Overtime</div>
+                  <div className="bg-muted p-3 rounded-md text-sm">
+                    {detailDialog.request.requesterReason}
+                  </div>
                 </div>
               )}
 
-              {selected.approverComments && (
-                <div className="space-y-1 pt-2 border-t border-black/10 dark:border-white/10">
-                  <p className="text-sm text-muted-foreground">
-                    {selected.status === "approved" ? "Approval" : "Rejection"} Comments
-                  </p>
-                  <div
-                    className={`p-3 rounded-md ${
-                      selected.status === "approved"
-                        ? "bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800/30"
-                        : "bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/30"
-                    }`}
-                  >
-                    {selected.approverComments}
+              {/* Approver Comments */}
+              {detailDialog.request.approverComments && (
+                <div className="space-y-2">
+                  <div className="text-sm text-muted-foreground">
+                    {detailDialog.request.status === "approved" ? "Approval" : "Rejection"} Comments
+                  </div>
+                  <div className={`p-3 rounded-md text-sm border ${
+                    detailDialog.request.status === "approved"
+                      ? "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800"
+                      : "bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800"
+                  }`}>
+                    {detailDialog.request.approverComments}
                   </div>
                 </div>
               )}
@@ -1111,122 +487,8 @@ export default function EmployeesOvertimeRequests() {
           )}
 
           <DialogFooter>
-            <Button onClick={() => setDetailsOpen(false)} className="bg-orange-500 hover:bg-orange-600 text-white">
+            <Button onClick={() => setDetailDialog({ open: false, request: null })}>
               Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Time Log Dialog */}
-      <Dialog open={logOpen} onOpenChange={setLogOpen}>
-        <DialogContent className="sm:max-w-lg border-2 dark:border-white/10">
-          <div className="h-1 w-full bg-sky-500 -mt-6 mb-4" />
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Eye className="h-5 w-5 text-sky-500" /> Time Log Details
-            </DialogTitle>
-          </DialogHeader>
-
-          {logData ? (
-            <div className="space-y-4 text-sm">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-muted-foreground">Time In</p>
-                  <p className="font-medium">{fmtMMDDYYYY_hhmma(logData.timeIn)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Time Out</p>
-                  <p className="font-medium">{fmtMMDDYYYY_hhmma(logData.timeOut)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Status</p>
-                  <p className="font-medium">{logData.status ? "Active" : "Completed"}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Raw Hours</p>
-                  <p className="font-medium">{diffHours(logData.timeIn, logData.timeOut)}</p>
-                </div>
-              </div>
-
-              {Array.isArray(logData.coffeeBreaks) && logData.coffeeBreaks.length > 0 && (
-                <div className="space-y-1 pt-2 border-t border-black/10 dark:border-white/10">
-                  <p className="text-muted-foreground">Coffee Breaks</p>
-                  <ul className="list-disc ml-4">
-                    {logData.coffeeBreaks.map((b, idx) => (
-                      <li key={idx}>
-                        {fmt(b.start)} – {b.end ? fmt(b.end) : "ongoing"}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {logData.lunchBreak && (
-                <div className="space-y-1 pt-2 border-t border-black/10 dark:border-white/10">
-                  <p className="text-muted-foreground">Lunch Break</p>
-                  <p className="font-medium">
-                    {fmt(logData.lunchBreak.start)} – {logData.lunchBreak.end ? fmt(logData.lunchBreak.end) : "ongoing"}
-                  </p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-center text-muted-foreground">No data</p>
-          )}
-
-          <DialogFooter>
-            <Button onClick={() => setLogOpen(false)} className="bg-sky-500 hover:bg-sky-600 text-white">
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Dialog */}
-      <Dialog open={showDelete} onOpenChange={setShowDelete}>
-        <DialogContent className="sm:max-w-md border-2 border-red-200 dark:border-red-900/40">
-          <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-red-500" /> Delete Overtime Request
-            </DialogTitle>
-            <DialogDescription>This action cannot be undone.</DialogDescription>
-          </DialogHeader>
-
-          {selected && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4 my-4 space-y-1 text-sm">
-              <p>
-                <strong>Overtime ID:</strong> {selected.id}
-              </p>
-              <p>
-                <strong>Punch log ID:</strong> {selected.timeLogId}
-              </p>
-              <p>
-                <strong>Requester Email:</strong> {selected.requester?.email || selected.requester?.username}
-              </p>
-              <p>
-                <strong>OT Hours:</strong> {otVal(selected)}
-              </p>
-              <p>
-                <strong>Late Hours:</strong> {lateVal(selected)}
-              </p>
-              <p>
-                <strong>Status:</strong> <span className="capitalize">{selected.status}</span>
-              </p>
-            </div>
-          )}
-
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowDelete(false)}
-              className="border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800/50 dark:text-red-400 dark:hover:bg-red-900/20"
-            >
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={doDelete} disabled={actionLoading} className="bg-red-500 hover:bg-red-600">
-              {actionLoading ? "Deleting…" : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>
