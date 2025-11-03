@@ -25,7 +25,7 @@ const EmployeePanelItems = [
     children: [
       {
         id: "employee/personal-employment-identifications",
-        label: "Personal & Employment Identification",
+        label: "Personal Identification",
       },
       { id: "employee/employment-details", label: "Employment Details" },
     ],
@@ -37,13 +37,16 @@ const EmployeePanelItems = [
       { id: "employee/punch", label: "Punch" },
       { id: "employee/punch-logs", label: "Punch logs" },
       { id: "employee/schedule", label: "Schedule" },
+      { id: "employee/overtime", label: "Overtime" },
+      // { id: "employee/contest-time-logs", label: "Contest Time Logs", hasPendingCount: true },
+      { id: "employee/contest-time-logs", label: "Contest Time Logs" },
+
     ],
   },
   {
     id: "leaves",
     label: "Leaves",
     children: [
-      { id: "employee/leave-request", label: "Leave Request" },
       { id: "employee/leave-logs", label: "Leave Logs" },
     ],
   },
@@ -66,11 +69,13 @@ const CompanyPanelItems = [
   },
   {
     id: "punch-logs",
-    label: "Punch logs & Overtimes & Leaves",
+    label: "Requests & Logs",
     children: [
       { id: "company/punch-logs", label: "Employees Punch logs" },
       { id: "company/overtime-requests", label: "Employees Overtime Requests" },
       { id: "company/leave-requests", label: "Employees Leave Requests" },
+      // { id: "company/contest-requests", label: "Employee Requests", hasPendingCount: true },
+      { id: "company/contest-requests", label: "Employee Requests" },
     ],
   },
   {
@@ -91,8 +96,8 @@ const CompanyPanelItems = [
     label: "Settings",
     children: [
       { id: "company/profile", label: "Profile" },
-      { id: "company/subscription", label: "Subscription" },
       { id: "company/configurations", label: "Configurations" },
+      { id: "company/subscription", label: "Subscription" },
       { id: "company/deletion", label: "Deletion" },
     ],
   },
@@ -108,8 +113,11 @@ const ReferralPanelItems = [
 
 const FREE_ALLOWED = new Set([
   "employee/punch",
+  "employee/overtime",
   "employee/punch-logs",
+  "employee/contest-requests",
   "company/punch-logs",
+  "company/contest-requests",
   "company/deletion",
   "company/profile",
   "company/subscription",
@@ -189,7 +197,10 @@ function SidebarSkeleton() {
   );
 }
 
-function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle }) {
+function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle, pendingContestCount = 0 }) {
+  // Check if any child in this item has pending count
+  const hasChildWithPendingCount = item.children.some(child => child.hasPendingCount);
+  
   return (
     <li className="mb-1 sm:mb-2 w-full">
       <div className="w-full">
@@ -200,7 +211,7 @@ function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle 
           className="flex w-full items-center gap-2
                      rounded-lg sm:rounded-xl border border-neutral-200 bg-white
                      px-3 sm:px-4 lg:px-5 sm:py-1 lg:py-2
-                     text-xs sm:text-sm  shadow-sm transition-all duration-200
+                     text-xs sm:text-sm shadow-sm transition-all duration-200
                      hover:border-orange-200 hover:bg-gradient-to-r hover:from-orange-50 hover:to-orange-50
                      dark:border-neutral-700 dark:bg-neutral-900 dark:hover:border-orange-700
                      dark:hover:from-orange-900 dark:hover:to-orange-900
@@ -208,9 +219,16 @@ function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle 
         >
           <span className="text-neutral-700 dark:text-neutral-200 leading-tight flex-none truncate pr-2">{item.label}</span>
 
-          <motion.div animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.2 }} className="flex-shrink-0 ml-auto">
-            <ChevronDown className="h-4 w-4 sm:h-5 sm:w-5 text-neutral-500" />
-          </motion.div>
+          <div className="flex items-center gap-2 ml-auto">
+            {hasChildWithPendingCount && pendingContestCount > 0 && (
+              <Badge className="bg-red-500 hover:bg-red-600 text-white text-[10px] px-1.5 py-0.5 min-w-[20px] h-5 flex items-center justify-center rounded-full">
+                {pendingContestCount}
+              </Badge>
+            )}
+            <motion.div animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.2 }} className="flex-shrink-0">
+              <ChevronDown className="h-4 w-4 sm:h-5 sm:w-5 text-neutral-500" />
+            </motion.div>
+          </div>
         </motion.button>
       </div>
 
@@ -263,17 +281,28 @@ function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle 
                       {c.label}
                     </span>
 
-                    {c.locked && c.requiredPlan && (
-                      <Badge
-                        variant="outline"
-                        className="ml-2 flex items-center gap-1 bg-amber-50 text-xs text-amber-700
-                                   dark:bg-amber-950 dark:text-amber-300 border-amber-200 dark:border-amber-800
-                                   px-2 py-0.5 flex-shrink-0 whitespace-nowrap"
-                      >
-                        <span>{c.requiredPlan}</span>
-                        <Lock className="h-3 w-3" />
-                      </Badge>
-                    )}
+                    <div className="flex items-center gap-2 ml-auto">
+                      {c.hasPendingCount && pendingContestCount > 0 && (
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                          <Badge className="bg-red-500 hover:bg-red-600 text-white text-[10px] px-1.5 py-0.5 min-w-[18px] h-4 flex items-center justify-center rounded-full">
+                            {pendingContestCount}
+                          </Badge>
+                        </div>
+                      )}
+                      
+                      {c.locked && c.requiredPlan && (
+                        <Badge
+                          variant="outline"
+                          className="flex items-center gap-1 bg-amber-50 text-xs text-amber-700
+                                     dark:bg-amber-950 dark:text-amber-300 border-amber-200 dark:border-amber-800
+                                     px-2 py-0.5 flex-shrink-0 whitespace-nowrap"
+                        >
+                          <span>{c.requiredPlan}</span>
+                          <Lock className="h-3 w-3" />
+                        </Badge>
+                      )}
+                    </div>
                   </Link>
                 </motion.li>
               );
@@ -337,7 +366,10 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
   const [openDropdown, setOpenDropdown] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
-
+  
+  // Mock pending contest count - you can replace this with actual API call later
+  const [pendingContestCount, setPendingContestCount] = useState(7);
+  
   useEffect(() => {
     if (!token) return;
     setLoading(true);
@@ -454,6 +486,7 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
                           onNavigate={navigate}
                           expanded={openDropdown === g.id}
                           onToggle={toggle}
+                          pendingContestCount={pendingContestCount}
                         />
                       </motion.div>
                     ))}
@@ -480,6 +513,7 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
                             onNavigate={navigate}
                             expanded={openDropdown === g.id}
                             onToggle={toggle}
+                            pendingContestCount={pendingContestCount}
                           />
                         </motion.div>
                       ))}
@@ -507,6 +541,7 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
                             onNavigate={navigate}
                             expanded={openDropdown === g.id}
                             onToggle={toggle}
+                            pendingContestCount={pendingContestCount}
                           />
                         </motion.div>
                       ))}
@@ -533,6 +568,7 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
                           onNavigate={navigate}
                           expanded={openDropdown === g.id}
                           onToggle={toggle}
+                          pendingContestCount={pendingContestCount}
                         />
                       </motion.div>
                     ))}

@@ -2,12 +2,21 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion } from "framer-motion";
-import { Bell, BellDot } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  Bell, 
+  BellDot, 
+  X, 
+  Check, 
+  Info, 
+  AlertCircle, 
+  CheckCircle, 
+  Clock 
+} from "lucide-react";
 import { ThemeToggle } from "../Theme/ThemeToggle";
 import useAuthStore from "@/store/useAuthStore";
 import UserMenu from "./Navbar/UserMenu";
@@ -18,6 +27,41 @@ const navLinks = [
   { href: "/pricing", label: "Pricing" },
   { href: "/faq", label: "FAQ" },
   { href: "/contact", label: "Contact Us" },
+];
+
+const sampleNotifications = [
+  {
+    id: 1,
+    type: "success",
+    title: "Payment Successful",
+    message: "Your subscription has been renewed for another month.",
+    timestamp: "2 minutes ago",
+    read: false,
+  },
+  {
+    id: 2,
+    type: "info",
+    title: "New Feature Available",
+    message: "Check out our new analytics dashboard with enhanced reporting features.",
+    timestamp: "1 hour ago",
+    read: false,
+  },
+  {
+    id: 3,
+    type: "warning",
+    title: "Maintenance Scheduled",
+    message: "System maintenance scheduled for tonight from 2:00 AM to 4:00 AM EST.",
+    timestamp: "3 hours ago",
+    read: true,
+  },
+  {
+    id: 4,
+    type: "info",
+    title: "Profile Updated",
+    message: "Your profile information has been successfully updated.",
+    timestamp: "1 day ago",
+    read: true,
+  },
 ];
 
 function DesktopNavLinks({ pathname }) {
@@ -65,27 +109,287 @@ function SignInButton() {
   );
 }
 
-function NotificationButton() {
-  const [hasNotifications] = useState(true);
+function NotificationItem({ notification, onMarkAsRead, onRemove }) {
+  const getIcon = () => {
+    switch (notification.type) {
+      case "success":
+        return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case "warning":
+        return <AlertCircle className="w-4 h-4 text-yellow-500" />;
+      case "info":
+      default:
+        return <Info className="w-4 h-4 text-blue-500" />;
+    }
+  };
 
   return (
-    <motion.button
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
-      className="relative p-2 rounded-xl text-neutral-600 dark:text-neutral-400 
-                 hover:text-orange-600 dark:hover:text-orange-400 
-                 hover:bg-orange-50 dark:hover:bg-orange-950 
-                 transition-all duration-200"
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: -100 }}
+      className={`p-4 border-b border-neutral-200 dark:border-neutral-700 last:border-b-0 
+                  hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors duration-200
+                  ${!notification.read ? 'bg-orange-50/50 dark:bg-orange-950/20' : ''}`}
     >
-      {hasNotifications ? <BellDot className="w-5 h-5" /> : <Bell className="w-5 h-5" />}
-      {hasNotifications && (
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-neutral-900"
-        />
+      <div className="flex items-start space-x-3">
+        <div className="flex-shrink-0 mt-1">
+          {getIcon()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-1">
+            <h4 className={`text-sm font-medium ${
+              !notification.read 
+                ? 'text-neutral-900 dark:text-neutral-100' 
+                : 'text-neutral-700 dark:text-neutral-300'
+            }`}>
+              {notification.title}
+            </h4>
+            {!notification.read && (
+              <div className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0" />
+            )}
+          </div>
+          <p className={`text-sm ${
+            !notification.read 
+              ? 'text-neutral-600 dark:text-neutral-400' 
+              : 'text-neutral-500 dark:text-neutral-500'
+          }`}>
+            {notification.message}
+          </p>
+          <div className="flex items-center justify-between mt-2">
+            <span className="text-xs text-neutral-400 dark:text-neutral-500 flex items-center">
+              <Clock className="w-3 h-3 mr-1" />
+              {notification.timestamp}
+            </span>
+            <div className="flex items-center space-x-1">
+              {!notification.read && (
+                <button
+                  onClick={() => onMarkAsRead(notification.id)}
+                  className="p-1 rounded text-orange-600 hover:text-orange-700 
+                           hover:bg-orange-100 dark:hover:bg-orange-900 transition-colors"
+                  title="Mark as read"
+                >
+                  <Check className="w-3 h-3" />
+                </button>
+              )}
+              <button
+                onClick={() => onRemove(notification.id)}
+                className="p-1 rounded text-neutral-400 hover:text-red-500 
+                         hover:bg-red-100 dark:hover:bg-red-900 transition-colors"
+                title="Remove notification"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function NotificationPanel({ notifications, onMarkAsRead, onRemove, onMarkAllAsRead, onClose }) {
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -10, scale: 0.95 }}
+      transition={{ duration: 0.2 }}
+      className="absolute right-0 mt-2 w-96 max-w-sm bg-white dark:bg-neutral-900 
+                 rounded-xl shadow-xl border border-neutral-200 dark:border-neutral-700 
+                 overflow-hidden z-50"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700">
+        <div>
+          <h3 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+            Notifications
+          </h3>
+          {unreadCount > 0 && (
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+              {unreadCount} new notification{unreadCount > 1 ? 's' : ''}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center space-x-2">
+          {unreadCount > 0 && (
+            <button
+              onClick={onMarkAllAsRead}
+              className="text-xs px-3 py-1 bg-orange-100 dark:bg-orange-900 
+                       text-orange-700 dark:text-orange-300 rounded-full
+                       hover:bg-orange-200 dark:hover:bg-orange-800 transition-colors"
+            >
+              Mark all read
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="p-1 rounded-full text-neutral-400 hover:text-neutral-600 
+                     hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Notifications List */}
+      <div className="max-h-96 overflow-y-auto">
+        <AnimatePresence>
+          {notifications.length > 0 ? (
+            notifications.map((notification) => (
+              <NotificationItem
+                key={notification.id}
+                notification={notification}
+                onMarkAsRead={onMarkAsRead}
+                onRemove={onRemove}
+              />
+            ))
+          ) : (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="p-8 text-center"
+            >
+              <Bell className="w-12 h-12 text-neutral-300 dark:text-neutral-600 mx-auto mb-3" />
+              <p className="text-neutral-500 dark:text-neutral-400">
+                No notifications yet
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Footer */}
+      {notifications.length > 0 && (
+        <div className="p-3 border-t border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
+          <Link
+            href="/notifications"
+            onClick={onClose}
+            className="block w-full text-center text-sm text-orange-600 dark:text-orange-400 
+                     hover:text-orange-700 dark:hover:text-orange-300 transition-colors"
+          >
+            View all notifications
+          </Link>
+        </div>
       )}
-    </motion.button>
+    </motion.div>
+  );
+}
+
+function NotificationButton() {
+  const [notifications, setNotifications] = useState(sampleNotifications);
+  const [isOpen, setIsOpen] = useState(false);
+  const buttonRef = useRef(null);
+  const panelRef = useRef(null);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+  const hasNotifications = unreadCount > 0;
+
+  // Close panel when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (
+        panelRef.current && 
+        !panelRef.current.contains(event.target) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(event.target)
+      ) {
+        setIsOpen(false);
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isOpen]);
+
+  // Close panel when pressing Escape
+  useEffect(() => {
+    function handleEscape(event) {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
+    }
+  }, [isOpen]);
+
+  const handleToggle = () => {
+    setIsOpen(!isOpen);
+  };
+
+  const handleMarkAsRead = (id) => {
+    setNotifications(prev => 
+      prev.map(notification => 
+        notification.id === id 
+          ? { ...notification, read: true }
+          : notification
+      )
+    );
+  };
+
+  const handleRemove = (id) => {
+    setNotifications(prev => prev.filter(notification => notification.id !== id));
+  };
+
+  const handleMarkAllAsRead = () => {
+    setNotifications(prev => 
+      prev.map(notification => ({ ...notification, read: true }))
+    );
+  };
+
+  const handleClose = () => {
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <motion.button
+        ref={buttonRef}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={handleToggle}
+        className={`relative p-2 rounded-xl transition-all duration-200 ${
+          isOpen
+            ? 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950'
+            : 'text-neutral-600 dark:text-neutral-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950'
+        }`}
+      >
+        {hasNotifications ? <BellDot className="w-5 h-5" /> : <Bell className="w-5 h-5" />}
+        {hasNotifications && (
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-red-500 
+                     rounded-full border-2 border-white dark:border-neutral-900
+                     flex items-center justify-center"
+          >
+            <span className="text-xs font-medium text-white leading-none">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          </motion.div>
+        )}
+      </motion.button>
+
+      {/* <AnimatePresence>
+        {isOpen && (
+          <div ref={panelRef}>
+            <NotificationPanel
+              notifications={notifications}
+              onMarkAsRead={handleMarkAsRead}
+              onRemove={handleRemove}
+              onMarkAllAsRead={handleMarkAllAsRead}
+              onClose={handleClose}
+            />
+          </div>
+        )}
+      </AnimatePresence> */}
+    </div>
   );
 }
 

@@ -1,4 +1,4 @@
-// components/Dashboard/DepartmentHead/OvertimeRequests.jsx
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
@@ -18,10 +18,8 @@ import useAuthStore from "@/store/useAuthStore";
 import DataTable from "@/components/common/DataTable";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { fmtMMDDYYYY_hhmma } from "@/lib/dateTimeFormatter";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -56,28 +54,25 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-export default function OvertimeRequests() {
+export default function EmployeeOvertimeRequests() {
   const { token, user } = useAuthStore();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedRequests, setSelectedRequests] = useState([]);
   
   // Dialog states
-  const [actionDialog, setActionDialog] = useState({ open: false, type: null, request: null });
   const [detailDialog, setDetailDialog] = useState({ open: false, request: null });
-  const [comment, setComment] = useState("");
-  const [actionLoading, setActionLoading] = useState(false);
 
   // Calculate stats
   const stats = useMemo(() => {
     const total = requests.length;
     const pending = requests.filter(r => r.status === "pending").length;
     const approved = requests.filter(r => r.status === "approved").length;
+    const rejected = requests.filter(r => r.status === "rejected").length;
     const approvedHours = requests
       .filter(r => r.status === "approved")
       .reduce((sum, r) => sum + Number(r.requestedHours || 0), 0);
 
-    return { total, pending, approved, approvedHours: approvedHours.toFixed(1) };
+    return { total, pending, approved, rejected, approvedHours: approvedHours.toFixed(1) };
   }, [requests]);
 
   // Status tabs for the table
@@ -85,45 +80,33 @@ export default function OvertimeRequests() {
     { label: "All", value: "all", count: stats.total },
     { label: "Pending", value: "pending", count: stats.pending },
     { label: "Approved", value: "approved", count: stats.approved },
-    { label: "Rejected", value: "rejected", count: requests.filter(r => r.status === "rejected").length },
+    { label: "Rejected", value: "rejected", count: stats.rejected },
   ], [requests, stats]);
 
   // Table columns
   const columns = [
     {
-      key: "requester",
-      label: "Employee",
-      render: (_, row) => (
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center">
-            <User className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-          </div>
-          <div>
-            <div className="font-medium text-sm">
-              {row.requester?.profile?.firstName} {row.requester?.profile?.lastName}
-            </div>
-            <div className="text-xs text-muted-foreground">{row.requester?.email}</div>
+      key: "createdAt",
+      label: "Date Submitted",
+      render: (date) => (
+        <div className="text-sm">
+          <div className="font-medium">{new Date(date).toLocaleDateString()}</div>
+          <div className="text-xs text-muted-foreground">
+            {new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </div>
         </div>
       ),
+      sortable: true,
     },
     {
       key: "requestedHours",
-      label: "OT Hours",
+      label: "Hours Requested",
       render: (hours) => (
-        <div className="font-mono text-sm">
+        <div className="font-mono text-sm font-medium">
           {Number(hours).toFixed(2)}h
         </div>
       ),
-    },
-    {
-      key: "lateHours", 
-      label: "Late Hours",
-      render: (hours) => (
-        <div className="font-mono text-sm text-muted-foreground">
-          {hours ? Number(hours).toFixed(2) : "0.00"}h
-        </div>
-      ),
+      sortable: true,
     },
     {
       key: "status",
@@ -132,17 +115,13 @@ export default function OvertimeRequests() {
       sortable: true,
     },
     {
-      key: "createdAt",
-      label: "Submitted",
-      render: (date) => (
+      key: "approver",
+      label: "Approver",
+      render: (_, row) => (
         <div className="text-sm">
-          <div>{new Date(date).toLocaleDateString()}</div>
-          <div className="text-xs text-muted-foreground">
-            {new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </div>
+          {row.approver?.email || "Not assigned"}
         </div>
       ),
-      sortable: true,
     },
     {
       key: "requesterReason",
@@ -153,6 +132,16 @@ export default function OvertimeRequests() {
         </div>
       ),
     },
+    {
+      key: "updatedAt",
+      label: "Last Updated",
+      render: (date) => (
+        <div className="text-sm text-muted-foreground">
+          {new Date(date).toLocaleDateString()}
+        </div>
+      ),
+      sortable: true,
+    },
   ];
 
   // Table actions
@@ -162,66 +151,13 @@ export default function OvertimeRequests() {
       icon: Eye,
       onClick: (request) => setDetailDialog({ open: true, request }),
     },
-    ...(user?.role && ["admin", "supervisor", "superadmin"].includes(user.role) ? [
-      {
-        label: "Approve",
-        icon: CheckCircle2,
-        onClick: (request) => {
-          if (request.status === "pending") {
-            setActionDialog({ open: true, type: "approve", request });
-          }
-        },
-        className: "text-green-600",
-      },
-      {
-        label: "Reject", 
-        icon: XCircle,
-        onClick: (request) => {
-          if (request.status === "pending") {
-            setActionDialog({ open: true, type: "reject", request });
-          }
-        },
-        className: "text-red-600",
-        separator: true,
-      },
-    ] : []),
   ];
-
-  // Bulk actions
-  const bulkActions = user?.role && ["admin", "supervisor", "superadmin"].includes(user.role) ? [
-    {
-      label: "Approve Selected",
-      icon: CheckCircle2,
-      variant: "default",
-      onClick: (selectedIds) => {
-        const pendingSelected = requests.filter(r => 
-          selectedIds.includes(r.id) && r.status === "pending"
-        );
-        if (pendingSelected.length > 0) {
-          // Handle bulk approve
-        }
-      },
-    },
-    {
-      label: "Reject Selected",
-      icon: XCircle,
-      variant: "destructive", 
-      onClick: (selectedIds) => {
-        const pendingSelected = requests.filter(r => 
-          selectedIds.includes(r.id) && r.status === "pending"
-        );
-        if (pendingSelected.length > 0) {
-          // Handle bulk reject
-        }
-      },
-    },
-  ] : [];
 
   const fetchRequests = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/overtime`, {
+      const response = await fetch(`${API_URL}/api/overtime/my`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
@@ -236,32 +172,19 @@ export default function OvertimeRequests() {
     }
   }, [token]);
 
-  const handleAction = async () => {
-    if (!actionDialog.request || !actionDialog.type) return;
-    
-    setActionLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/api/overtime/${actionDialog.request.id}/${actionDialog.type}`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ approverComments: comment }),
-      });
+  const getProjectedTime = (request) => {
+    if (!request.timeLog?.timeOut || !request.requestedHours) return null;
+    const originalOut = new Date(request.timeLog.timeOut);
+    const withOT = new Date(originalOut.getTime() + Number(request.requestedHours) * 3600000);
+    return withOT;
+  };
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message);
-
-      toast.success(`Request ${actionDialog.type}d successfully`);
-      setActionDialog({ open: false, type: null, request: null });
-      setComment("");
-      fetchRequests();
-    } catch (error) {
-      toast.error(error.message || `Failed to ${actionDialog.type} request`);
-    } finally {
-      setActionLoading(false);
-    }
+  const getTotalHours = (request) => {
+    if (!request.timeLog?.timeIn || !request.timeLog?.timeOut || !request.requestedHours) return null;
+    const projected = getProjectedTime(request);
+    if (!projected) return null;
+    const hours = (projected - new Date(request.timeLog.timeIn)) / 3600000;
+    return hours.toFixed(2);
   };
 
   useEffect(() => {
@@ -269,7 +192,15 @@ export default function OvertimeRequests() {
   }, [fetchRequests]);
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Overtime Requests</h1>
+          <p className="text-muted-foreground">View and track your overtime request history</p>
+        </div>
+      </div>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
@@ -326,7 +257,7 @@ export default function OvertimeRequests() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-orange-600" />
-            <CardTitle>Employee Overtime Requests</CardTitle>
+            <CardTitle>Overtime Requests</CardTitle>
           </div>
         </CardHeader>
         <CardContent className="p-6">
@@ -336,85 +267,13 @@ export default function OvertimeRequests() {
             loading={loading}
             onRefresh={fetchRequests}
             actions={actions}
-            bulkActions={bulkActions}
-            searchPlaceholder="Search by employee, email, or reason..."
+            searchPlaceholder="Search by reason, status, or date..."
             statusTabs={statusTabs}
-            selectable={bulkActions.length > 0}
-            selectedRows={selectedRequests}
-            onSelectionChange={setSelectedRequests}
             onRowClick={(request) => setDetailDialog({ open: true, request })}
+            pageSize={10}
           />
         </CardContent>
       </Card>
-
-      {/* Action Dialog */}
-      <Dialog open={actionDialog.open} onOpenChange={(open) => !open && setActionDialog({ open: false, type: null, request: null })}>
-        <DialogContent className="sm:max-w-md">
-          <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {actionDialog.type === "approve" ? (
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
-              ) : (
-                <XCircle className="h-5 w-5 text-red-600" />
-              )}
-              {actionDialog.type === "approve" ? "Approve" : "Reject"} Overtime Request
-            </DialogTitle>
-          </DialogHeader>
-
-          {actionDialog.request && (
-            <div className="space-y-4">
-              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Employee:</span>
-                  <span className="font-medium">{actionDialog.request.requester?.email}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">OT Hours:</span>
-                  <span className="font-medium">{Number(actionDialog.request.requestedHours).toFixed(2)}h</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Requested:</span>
-                  <span className="font-medium">{new Date(actionDialog.request.createdAt).toLocaleDateString()}</span>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  Comments {actionDialog.type === "reject" && <span className="text-red-500">*</span>}
-                </label>
-                <Textarea
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder={`Add ${actionDialog.type === "approve" ? "approval" : "rejection"} comments...`}
-                  className="min-h-[80px]"
-                />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setActionDialog({ open: false, type: null, request: null })}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleAction}
-              disabled={actionLoading || (actionDialog.type === "reject" && !comment.trim())}
-              className={
-                actionDialog.type === "approve"
-                  ? "bg-green-600 hover:bg-green-700"
-                  : "bg-red-600 hover:bg-red-700"
-              }
-            >
-              {actionLoading ? (
-                actionDialog.type === "approve" ? "Approving..." : "Rejecting..."
-              ) : (
-                actionDialog.type === "approve" ? "Approve" : "Reject"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Detail Dialog */}
       <Dialog open={detailDialog.open} onOpenChange={(open) => !open && setDetailDialog({ open: false, request: null })}>
@@ -438,23 +297,31 @@ export default function OvertimeRequests() {
                 </div>
               </div>
 
-              {/* Employee Info */}
+              {/* Request Info */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <div className="text-sm text-muted-foreground">Employee</div>
-                  <div className="font-medium">{detailDialog.request.requester?.email}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Late Hours</div>
-                  <div className="font-medium">{detailDialog.request.lateHours ? Number(detailDialog.request.lateHours).toFixed(2) : "0.00"}h</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Submitted</div>
-                  <div className="font-medium">{fmtMMDDYYYY_hhmma(detailDialog.request.createdAt)}</div>
+                  <div className="text-sm text-muted-foreground">Request ID</div>
+                  <div className="font-mono text-xs">{detailDialog.request.id}</div>
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">TimeLog ID</div>
                   <div className="font-mono text-xs">{detailDialog.request.timeLogId}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Submitted</div>
+                  <div className="font-medium">{new Date(detailDialog.request.createdAt).toLocaleDateString()} {new Date(detailDialog.request.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Last Updated</div>
+                  <div className="font-medium">{new Date(detailDialog.request.updatedAt).toLocaleDateString()} {new Date(detailDialog.request.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Approver</div>
+                  <div className="font-medium">{detailDialog.request.approver?.email || "Not assigned"}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Late Hours</div>
+                  <div className="font-medium">{detailDialog.request.lateHours ? Number(detailDialog.request.lateHours).toFixed(2) : "0.00"}h</div>
                 </div>
               </div>
 

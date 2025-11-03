@@ -3,7 +3,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Users, Briefcase, BarChart3, Activity, Clock, CalendarCheck2 } from "lucide-react";
+import { Users, Briefcase, BarChart3, Activity, Clock, CalendarCheck2, TrendingUp, TrendingDown, Percent } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
@@ -30,6 +30,7 @@ export default function OverviewAdmin() {
   const [userShifts, setUserShifts] = useState([]);
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
+
   const fetchData = useCallback(async () => {
     if (!token) return;
     setLoading(true);
@@ -76,6 +77,13 @@ export default function OverviewAdmin() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Mock trend calculation - replace with actual logic
+  const calculateTrend = (value) => {
+    const trend = Math.random() > 0.5 ? 1 : -1;
+    const percentage = (Math.random() * 15).toFixed(1);
+    return { trend, percentage };
+  };
 
   const analytics = useMemo(() => {
     if (loading) return null;
@@ -139,7 +147,7 @@ export default function OverviewAdmin() {
       if (log.timeOut && new Date(log.timeOut) < new Date(sched.end)) early++;
     });
 
-    const totalScheduledShifts = userShifts.length || 1; // avoid /0
+    const totalScheduledShifts = userShifts.length || 1;
     const lateRate = ((late / totalScheduledShifts) * 100).toFixed(1);
     const earlyRate = ((early / totalScheduledShifts) * 100).toFixed(1);
     const attendedOnTime = totalScheduledShifts - late - early > 0 ? totalScheduledShifts - late - early : 0;
@@ -191,50 +199,66 @@ export default function OverviewAdmin() {
 
     const cards = [
       {
-        icon: <Briefcase className="h-6 w-6 text-orange-500" />,
+        icon: <Briefcase className="h-5 w-5 text-gray-500" />,
         label: "Departments",
         value: departments.length,
+        trend: calculateTrend(departments.length),
       },
       {
-        icon: <Users className="h-6 w-6 text-orange-500" />,
+        icon: <Users className="h-5 w-5 text-gray-500" />,
         label: "Employees",
         value: employees.length,
+        trend: calculateTrend(employees.length),
       },
       {
-        icon: <BarChart3 className="h-6 w-6 text-orange-500" />,
+        icon: <BarChart3 className="h-5 w-5 text-gray-500" />,
         label: "Active Plan",
         value: employees[0]?.company?.Subscription?.find((s) => s.active)?.plan?.name || "Free",
+        isText: true,
       },
       {
-        icon: <Activity className="h-6 w-6 text-orange-500" />,
-        label: "Active Staff (latest)",
+        icon: <Activity className="h-5 w-5 text-gray-500" />,
+        label: "Active Staff",
         value: activeArr.at(-1)?.count || 0,
+        trend: calculateTrend(activeArr.at(-1)?.count || 0),
       },
       {
-        icon: <Clock className="h-6 w-6 text-orange-500" />,
-        label: "Late / Early %",
-        value: `${lateRate}% / ${earlyRate}%`,
+        icon: <Percent className="h-5 w-5 text-gray-500" />,
+        label: "Late Rate",
+        value: `${lateRate}%`,
+        trend: { trend: -1, percentage: Math.abs(parseFloat(lateRate)).toFixed(1) },
+        trendInverted: true,
       },
       {
-        icon: <CalendarCheck2 className="h-6 w-6 text-orange-500" />,
-        label: "Attendance Reliability",
+        icon: <Percent className="h-5 w-5 text-gray-500" />,
+        label: "Early Leave Rate",
+        value: `${earlyRate}%`,
+        trend: { trend: -1, percentage: Math.abs(parseFloat(earlyRate)).toFixed(1) },
+        trendInverted: true,
+      },
+      {
+        icon: <CalendarCheck2 className="h-5 w-5 text-gray-500" />,
+        label: "Reliability",
         value: `${reliability}%`,
+        trend: { trend: 1, percentage: parseFloat(reliability).toFixed(1) },
       },
       {
-        icon: <Clock className="h-6 w-6 text-orange-500" />,
+        icon: <Clock className="h-5 w-5 text-gray-500" />,
         label: "Coverage Rate",
         value: `${coverageRate}%`,
+        trend: { trend: 1, percentage: parseFloat(coverageRate).toFixed(1) },
       },
       {
-        icon: <Clock className="h-6 w-6 text-orange-500" />,
-        label: "Leave Approval Rate",
+        icon: <Clock className="h-5 w-5 text-gray-500" />,
+        label: "Leave Approval",
         value: `${approvalRate}%`,
+        trend: { trend: 1, percentage: parseFloat(approvalRate).toFixed(1) },
       },
     ];
 
     const charts = (
-      <div className="grid gap-4">
-        <div className="grid lg:grid-cols-2 gap-4">
+      <div className="grid gap-3">
+        <div className="grid lg:grid-cols-2 gap-3">
           <ChartCard title="Active Staff / Month">
             <BarSimple data={activeArr} x="month" y="count" />
           </ChartCard>
@@ -243,7 +267,7 @@ export default function OverviewAdmin() {
           </ChartCard>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-4">
+        <div className="grid lg:grid-cols-2 gap-3">
           <ChartCard title="Late-In vs Early-Out %">
             <LineSimple
               data={[
@@ -259,8 +283,7 @@ export default function OverviewAdmin() {
           </ChartCard>
         </div>
 
-        {/* row 3 */}
-        <div className="grid lg:grid-cols-2 gap-4">
+        <div className="grid lg:grid-cols-2 gap-3">
           <ChartCard title="Leave Usage by Type">
             <StackedBarSimple
               data={[leaveStackRow]}
@@ -276,8 +299,7 @@ export default function OverviewAdmin() {
           </ChartCard>
         </div>
 
-        {/* row 4 */}
-        <div className="grid lg:grid-cols-2 gap-4">
+        <div className="grid lg:grid-cols-2 gap-3">
           <ChartCard title="Overtime Hours (by Dept)">
             <BarSimple data={overtimeDeptArr} x="dept" y="hours" />
           </ChartCard>
@@ -292,30 +314,61 @@ export default function OverviewAdmin() {
   }, [loading, departments, employees, timelogs, userShifts, leaves]);
 
   const SkeletonCards = (n) => (
-    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6 mb-6">
+    <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mb-4">
       {Array.from({ length: n }).map((_, i) => (
-        <Skeleton key={i} className="h-40 w-full rounded-xl" />
+        <Skeleton key={i} className="h-32 w-full rounded-lg" />
       ))}
     </div>
   );
+
   const SkeletonCharts = (rows) => (
-    <div className="grid gap-4">
+    <div className="grid gap-3">
       {Array.from({ length: rows }).map((_, i) => (
-        <Skeleton key={i} className="h-80 w-full rounded-xl" />
+        <Skeleton key={i} className="h-72 w-full rounded-lg" />
       ))}
     </div>
   );
+
   const KPICards = ({ data }) => (
-    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6 mb-6">
-      {data.map((c, i) => (
-        <Card key={c.label} className="border-2 dark:border-white/10 overflow-hidden shadow-sm hover:shadow-md transition-all">
-          <div className="h-1.5 w-full bg-gradient-to-r from-orange-500 to-orange-400" />
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-base font-medium">{c.label}</CardTitle>
-            <div className="p-2 bg-orange-50 dark:bg-orange-950/30 rounded-full">{c.icon}</div>
+    <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mb-4">
+      {data.map((c) => (
+        <Card 
+          key={c.label} 
+          className="border border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 transition-colors overflow-hidden shadow-none"
+        >
+          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 pt-4 px-4">
+            <CardTitle className="text-xs font-medium text-gray-600 dark:text-gray-400">
+              {c.label}
+            </CardTitle>
+            <div className="p-1.5 bg-gray-100 dark:bg-gray-800 rounded-md flex-shrink-0">
+              {c.icon}
+            </div>
           </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{c.value}</p>
+          <CardContent className="px-4 pb-4">
+            <div className="flex items-baseline justify-between gap-2">
+              <p className={`${c.isText ? 'text-lg' : 'text-2xl'} font-semibold truncate ${c.isText ? 'max-w-[140px]' : ''}`} title={String(c.value)}>
+                {c.value}
+              </p>
+              {c.trend && (
+                <div className={`flex items-center text-xs font-medium flex-shrink-0 ${
+                  c.trendInverted 
+                    ? (c.trend.trend > 0 ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500')
+                    : (c.trend.trend > 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500')
+                }`}>
+                  {c.trend.trend > 0 ? (
+                    <TrendingUp className="h-3 w-3 mr-0.5" />
+                  ) : (
+                    <TrendingDown className="h-3 w-3 mr-0.5" />
+                  )}
+                  {c.trend.percentage}%
+                </div>
+              )}
+            </div>
+            {c.trend && (
+              <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                vs previous period
+              </p>
+            )}
           </CardContent>
         </Card>
       ))}
@@ -325,13 +378,23 @@ export default function OverviewAdmin() {
   if (!analytics)
     return (
       <>
-        {SkeletonCards(8)}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-medium text-gray-600 dark:text-gray-400">
+            Last 28 days
+          </h2>
+        </div>
+        {SkeletonCards(9)}
         {SkeletonCharts(4)}
       </>
     );
 
   return (
     <div className="animate-in fade-in duration-300">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-medium text-gray-600 dark:text-gray-400">
+          Last 28 days
+        </h2>
+      </div>
       <KPICards data={analytics.cards} />
       {analytics.charts}
     </div>

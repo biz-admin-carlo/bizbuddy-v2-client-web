@@ -15,6 +15,8 @@ export default function FormDialog({
   onSubmit,
   children,
   primaryLabel = "Save",
+  loadingLabel = "Saving…",
+  primaryDisabled = false,
 }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -38,8 +40,12 @@ export default function FormDialog({
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={onSubmit} disabled={loading} className="bg-orange-500 text-white">
-            {loading ? "Saving…" : primaryLabel}
+          <Button 
+            onClick={onSubmit} 
+            disabled={loading || primaryDisabled} 
+            className="bg-orange-500 text-white hover:bg-orange-600"
+          >
+            {loading ? loadingLabel : primaryLabel}
           </Button>
         </DialogFooter>
       </DialogContent>
