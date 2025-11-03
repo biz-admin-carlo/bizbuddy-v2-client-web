@@ -139,7 +139,6 @@ export default function EmployeeAccountDeletion() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await response.json();
-      console.log(json);
       if (response.ok) {
         setRequests(json.data || []);
       } else {
