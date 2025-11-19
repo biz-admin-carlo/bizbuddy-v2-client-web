@@ -20,7 +20,7 @@ export default function RootLayout({ children }) {
           <VersionCheck />
           <NavBar />
           <main className="pt-16">{children}</main>
-          {/* <BizChat clientId="socckVI7VnKfbO5Jf6f6" /> */}
+          <BizChat clientId="socckVI7VnKfbO5Jf6f6" />
         </ThemeProvider>
       </body>
     </html>
