@@ -752,6 +752,25 @@ export default function PunchLogs() {
 
             <Tooltip>
               <TooltipTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={() => {
+                    if (filteredSorted.length > 0) {
+                      setContestDialogOpen(true);
+                    } else {
+                      toast.message("No logs available to contest");
+                    }
+                  }}
+                >
+                  <ClockPlus className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Request Punch</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
                 <Button variant="outline" size="icon" onClick={refresh} disabled={refreshing}>
                   <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
                 </Button>
