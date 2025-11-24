@@ -24,6 +24,7 @@ import {
   ChevronRight,
   MoreHorizontal,
   Trash2,
+  AlarmClockPlus,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -203,12 +204,26 @@ export default function PunchLogs() {
 
   const [isStandaloneOT, setIsStandaloneOT] = useState(false);
   const [supervisors, setSupervisors] = useState([]);
+
+  const [myRequests, setMyRequests] = useState([]);
+  const [requestsExpanded, setRequestsExpanded] = useState(true);
+  const [loadingRequests, setLoadingRequests] = useState(false);
   
   const defaultRowsPerPage = 10;
   const [rowsPerPage, setRowsPerPage] = useState(defaultRowsPerPage);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [locList, setLocList] = useState([]);
+
+  const [requestPunchLogsDialog, setRequestPunchLogsDialog] = useState(false);
+  const [requestPunchDate, setRequestPunchDate] = useState("");
+  const [requestClockIn, setRequestClockIn] = useState("");
+  const [requestClockOut, setRequestClockOut] = useState("");
+  const [requestApproverId, setRequestApproverId] = useState("");
+  const [requestReason, setRequestReason] = useState("");
+  const [requestDescription, setRequestDescription] = useState("");
+  const [requestSubmitting, setRequestSubmitting] = useState(false);
+  const [requestErrors, setRequestErrors] = useState({});
   
   // Simplified default columns - only show essentials
   const columnOptions = [
@@ -338,6 +353,28 @@ export default function PunchLogs() {
     }
   }, [API_URL, token]);
 
+  const fetchMyRequests = useCallback(async () => {
+    if (!token) return;
+    setLoadingRequests(true);
+    try {
+      const res = await fetch(`${API_URL}/api/request-punch-log/my-requests?limit=10&status=PENDING`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const j = await res.json();
+      if (res.ok) {
+        const requests = j.data?.requests || [];
+        setMyRequests(requests);
+        // Auto-expand if there are pending requests
+        const hasPending = requests.some(r => r.status === "PENDING");
+        setRequestsExpanded(hasPending);
+      }
+    } catch (err) {
+      console.error("Error fetching my requests:", err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  }, [token, API_URL]);
+
   const fetchLogs = async () => {
     setLoading(true);
     try {
@@ -405,6 +442,7 @@ export default function PunchLogs() {
     fetchApprovers();
     fetchLocations();
     fetchSupervisors();
+    fetchMyRequests();
   }, [token, fetchApprovers, fetchCompanySettings, fetchLocations]);
 
   const logsWithSchedule = useMemo(() => {
@@ -752,6 +790,20 @@ export default function PunchLogs() {
 
             <Tooltip>
               <TooltipTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={() => setRequestPunchLogsDialog(true)
+                  }
+                >
+                  <AlarmClockPlus className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Request Punch Logs</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
                 <Button variant="outline" size="icon" onClick={refresh} disabled={refreshing}>
                   <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
                 </Button>
@@ -890,6 +942,156 @@ export default function PunchLogs() {
             </div>
           </CardContent>
         </Card>
+
+        {myRequests.length > 0 && (
+          <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
+            <div className="h-1 w-full bg-orange-500" />
+            <CardHeader 
+              className="pb-4 cursor-pointer hover:bg-muted/50 transition-colors"
+              onClick={() => setRequestsExpanded(!requestsExpanded)}
+            >
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <AlarmClockPlus className="h-5 w-5 text-orange-500" />
+                  My Punch Log Requests
+                  {myRequests.filter(r => r.status === "PENDING").length > 0 && (
+                    <span className="ml-2 bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                      {myRequests.filter(r => r.status === "PENDING").length} Pending
+                    </span>
+                  )}
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    {myRequests.length} total
+                  </span>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                    {requestsExpanded ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            
+            <AnimatePresence>
+              {requestsExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <CardContent className="pb-4">
+                    {loadingRequests ? (
+                      <div className="flex items-center justify-center py-8">
+                        <OrangeLoadingSpinner />
+                        <span className="ml-2 text-muted-foreground">Loading requests...</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {myRequests.map((req) => (
+                          <div
+                            key={req.id}
+                            className="p-4 border rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="flex justify-between items-start mb-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Calendar className="h-4 w-4 text-orange-500" />
+                                  <span className="font-semibold">
+                                    {new Date(req.requestedDate).toLocaleDateString('en-US', {
+                                      weekday: 'short',
+                                      year: 'numeric',
+                                      month: 'short',
+                                      day: 'numeric'
+                                    })}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                  <Clock className="h-3 w-3" />
+                                  <span>
+                                    {safeTime(req.requestedClockIn)} - {safeTime(req.requestedClockOut)}
+                                  </span>
+                                  <span className="font-medium">
+                                    ({req.estimatedNetHours?.toFixed(2) || '0.00'}h)
+                                  </span>
+                                </div>
+                              </div>
+                              <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                                req.status === 'PENDING' 
+                                  ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                  : req.status === 'APPROVED'
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                  : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                              }`}>
+                                {req.status === 'PENDING' && '🟡 '}
+                                {req.status === 'APPROVED' && '✅ '}
+                                {req.status === 'REJECTED' && '❌ '}
+                                {req.status}
+                              </span>
+                            </div>
+                            
+                            <div className="space-y-2 text-sm">
+                              <div className="flex items-start gap-2">
+                                <AlertTriangle className="h-3 w-3 text-orange-500 mt-0.5 flex-shrink-0" />
+                                <div>
+                                  <span className="font-medium">Reason: </span>
+                                  <span className="text-muted-foreground capitalize">
+                                    {req.reason?.replace(/_/g, ' ') || 'Not specified'}
+                                  </span>
+                                </div>
+                              </div>
+                              
+                              {req.description && (
+                                <div className="flex items-start gap-2">
+                                  <FileText className="h-3 w-3 text-orange-500 mt-0.5 flex-shrink-0" />
+                                  <p className="text-muted-foreground text-xs line-clamp-2">
+                                    {req.description}
+                                  </p>
+                                </div>
+                              )}
+                              
+                              <div className="flex items-center gap-2 pt-2 border-t">
+                                <User className="h-3 w-3 text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground">
+                                  Approver: {req.approver?.profile 
+                                    ? `${req.approver.profile.firstName} ${req.approver.profile.lastName}`
+                                    : req.approver?.email || 'Not assigned'
+                                  }
+                                </span>
+                                <span className="text-xs text-muted-foreground ml-auto">
+                                  Submitted {new Date(req.submittedAt).toLocaleDateString()}
+                                </span>
+                              </div>
+                              
+                              {req.status === 'APPROVED' && req.approvedAt && (
+                                <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  <span>
+                                    Approved on {new Date(req.approvedAt).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              )}
+                              
+                              {req.status === 'REJECTED' && req.rejectionReason && (
+                                <div className="flex items-start gap-2 text-xs text-red-600 dark:text-red-400">
+                                  <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                  <span>{req.rejectionReason}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </Card>
+        )}
         
         <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
           <div className="h-1 w-full bg-orange-500" />
@@ -1290,6 +1492,443 @@ export default function PunchLogs() {
             </div>
           </div>
         </FormDialog>
+
+        <Dialog open={requestPunchLogsDialog} onOpenChange={setRequestPunchLogsDialog}>
+          <DialogContent className="sm:max-w-lg border-2 dark:border-white/30 max-h-[90vh] overflow-y-auto">
+            <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlarmClockPlus className="h-5 w-5 text-orange-600" />
+                Request Punch Log Entry
+              </DialogTitle>
+              <p className="text-sm text-muted-foreground">
+                Submit a request to create a punch log for a day when you were unable to clock in/out.
+              </p>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {/* Date Selection */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-orange-500" />
+                  Date <span className="text-orange-500">*</span>
+                </label>
+                <Input
+                  type="date"
+                  value={requestPunchDate}
+                  max={new Date().toISOString().split('T')[0]} // Can't request future dates
+                  onChange={(e) => {
+                    const selectedDate = e.target.value;
+                    setRequestPunchDate(selectedDate);
+                    setRequestErrors((prev) => ({ ...prev, date: undefined }));
+                    
+                    // Check if log already exists for this date
+                    const existingLog = logs.find(log => 
+                      log.timeIn?.slice(0, 10) === selectedDate
+                    );
+                    
+                    if (existingLog) {
+                      setRequestErrors((prev) => ({ 
+                        ...prev, 
+                        date: "A punch log already exists for this date" 
+                      }));
+                    }
+                    
+                    // Auto-populate times with default shift if available
+                    if (selectedDate && defaultHours) {
+                      // Set default 9 AM - 5 PM (or based on defaultHours)
+                      setRequestClockIn(`${selectedDate}T09:00`);
+                      const endHour = 9 + defaultHours;
+                      setRequestClockOut(`${selectedDate}T${endHour.toString().padStart(2, '0')}:00`);
+                    }
+                  }}
+                  className={requestErrors.date ? "border-red-500" : ""}
+                />
+                {requestErrors.date && (
+                  <p className="text-red-500 text-xs flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {requestErrors.date}
+                  </p>
+                )}
+                {requestPunchDate && !requestErrors.date && (
+                  <p className="text-xs text-muted-foreground">
+                    Requesting punch log for {new Date(requestPunchDate).toLocaleDateString('en-US', { 
+                      weekday: 'long', 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}
+                  </p>
+                )}
+              </div>
+
+              {/* Clock In/Out Times */}
+              {requestPunchDate && !requestErrors.date && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium flex items-center gap-1">
+                        <Clock className="h-4 w-4 text-green-500" />
+                        Clock In <span className="text-orange-500">*</span>
+                      </label>
+                      <Input
+                        type="datetime-local"
+                        value={requestClockIn}
+                        max={requestClockOut || undefined}
+                        onChange={(e) => {
+                          setRequestClockIn(e.target.value);
+                          setRequestErrors((prev) => ({ ...prev, clockIn: undefined }));
+                          
+                          // Validate clock-in is before clock-out
+                          if (requestClockOut && e.target.value >= requestClockOut) {
+                            setRequestErrors((prev) => ({ 
+                              ...prev, 
+                              clockIn: "Clock in must be before clock out" 
+                            }));
+                          }
+                        }}
+                        className={requestErrors.clockIn ? "border-red-500" : ""}
+                      />
+                      {requestErrors.clockIn && (
+                        <p className="text-red-500 text-xs flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {requestErrors.clockIn}
+                        </p>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium flex items-center gap-1">
+                        <Clock className="h-4 w-4 text-red-500" />
+                        Clock Out <span className="text-orange-500">*</span>
+                      </label>
+                      <Input
+                        type="datetime-local"
+                        value={requestClockOut}
+                        min={requestClockIn || undefined}
+                        onChange={(e) => {
+                          setRequestClockOut(e.target.value);
+                          setRequestErrors((prev) => ({ ...prev, clockOut: undefined }));
+                          
+                          // Validate clock-out is after clock-in
+                          if (requestClockIn && e.target.value <= requestClockIn) {
+                            setRequestErrors((prev) => ({ 
+                              ...prev, 
+                              clockOut: "Clock out must be after clock in" 
+                            }));
+                          }
+                        }}
+                        className={requestErrors.clockOut ? "border-red-500" : ""}
+                      />
+                      {requestErrors.clockOut && (
+                        <p className="text-red-500 text-xs flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {requestErrors.clockOut}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Duration Preview */}
+                  {requestClockIn && requestClockOut && !requestErrors.clockIn && !requestErrors.clockOut && (
+                    <div className="p-3 bg-muted rounded-md border">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Estimated Duration:</span>
+                        <span className="font-semibold">
+                          {(() => {
+                            const minutes = diffMins(requestClockIn, requestClockOut);
+                            const hours = (minutes / 60).toFixed(2);
+                            return `${hours}h (${Math.floor(minutes / 60)}h ${minutes % 60}m)`;
+                          })()}
+                        </span>
+                      </div>
+                      {minLunchMins > 0 && (
+                        <div className="flex items-center justify-between text-sm mt-1">
+                          <span className="text-muted-foreground">Less Minimum Lunch:</span>
+                          <span className="text-xs">-{toHour(minLunchMins)}h</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between text-sm mt-2 pt-2 border-t">
+                        <span className="text-muted-foreground font-medium">Net Work Hours:</span>
+                        <span className="font-bold text-orange-600">
+                          {(() => {
+                            const minutes = diffMins(requestClockIn, requestClockOut);
+                            const netMinutes = Math.max(0, minutes - minLunchMins);
+                            return toHour(netMinutes);
+                          })()}h
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Approver Selection */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      <User className="h-4 w-4 text-orange-500" />
+                      Approver <span className="text-orange-500">*</span>
+                    </label>
+                    <Select
+                      value={requestApproverId}
+                      onValueChange={(v) => {
+                        setRequestApproverId(v);
+                        setRequestErrors((prev) => ({ ...prev, approverId: undefined }));
+                      }}
+                    >
+                      <SelectTrigger className={requestErrors.approverId ? "border-red-500" : ""}>
+                        <SelectValue placeholder="Select approver" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        {supervisors.length > 0 ? (
+                          <>
+                            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50">
+                              Your Supervisors
+                            </div>
+                            {supervisors.map((s) => (
+                              <SelectItem key={s.id} value={s.id}>
+                                <div className="flex items-center gap-2">
+                                  <User className="h-3 w-3" />
+                                  <span>{s.name}</span>
+                                  {s.department && (
+                                    <span className="text-xs text-muted-foreground">
+                                      ({s.department})
+                                    </span>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
+                            {approvers.length > 0 && (
+                              <>
+                                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 mt-1">
+                                  Other Approvers
+                                </div>
+                                {approvers.map((a) => (
+                                  <SelectItem key={a.id} value={a.id}>
+                                    <div className="flex items-center gap-2">
+                                      <User className="h-3 w-3" />
+                                      <span>{a.name || a.email}</span>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50">
+                              Available Approvers
+                            </div>
+                            {approvers.map((a) => (
+                              <SelectItem key={a.id} value={a.id}>
+                                <div className="flex items-center gap-2">
+                                  <User className="h-3 w-3" />
+                                  <span>{a.name || a.email}</span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {requestErrors.approverId && (
+                      <p className="text-red-500 text-xs flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        {requestErrors.approverId}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Reason Selection */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-orange-500" />
+                      Reason <span className="text-orange-500">*</span>
+                    </label>
+                    <Select
+                      value={requestReason}
+                      onValueChange={(v) => {
+                        setRequestReason(v);
+                        setRequestErrors((prev) => ({ ...prev, reason: undefined }));
+                      }}
+                    >
+                      <SelectTrigger className={requestErrors.reason ? "border-red-500" : ""}>
+                        <SelectValue placeholder="Select reason for missing punch" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="forgot_to_clock">Forgot to Clock In/Out</SelectItem>
+                        <SelectItem value="system_malfunction">System/Device Malfunction</SelectItem>
+                        <SelectItem value="network_issues">Network Connectivity Issues</SelectItem>
+                        <SelectItem value="emergency">Emergency Situation</SelectItem>
+                        <SelectItem value="remote_work">Working Remotely Without Access</SelectItem>
+                        <SelectItem value="power_outage">Power Outage</SelectItem>
+                        <SelectItem value="meeting_offsite">Off-site Meeting/Event</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {requestErrors.reason && (
+                      <p className="text-red-500 text-xs flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        {requestErrors.reason}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Detailed Explanation */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-orange-500" />
+                      Detailed Explanation <span className="text-orange-500">*</span>
+                    </label>
+                    <Textarea
+                      value={requestDescription}
+                      onChange={(e) => {
+                        setRequestDescription(e.target.value);
+                        setRequestErrors((prev) => ({ ...prev, description: undefined }));
+                      }}
+                      placeholder="Please provide a detailed explanation of why you need this punch log entry created. Include any relevant context or circumstances..."
+                      className={`min-h-[100px] resize-none ${requestErrors.description ? "border-red-500" : ""}`}
+                      maxLength={500}
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>{requestDescription.length}/500 characters</span>
+                      {requestErrors.description && (
+                        <span className="text-red-500 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {requestErrors.description}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            
+            <DialogFooter className="gap-2 mt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRequestPunchLogsDialog(false);
+                  // Reset form
+                  setRequestPunchDate("");
+                  setRequestClockIn("");
+                  setRequestClockOut("");
+                  setRequestApproverId("");
+                  setRequestReason("");
+                  setRequestDescription("");
+                  setRequestErrors({});
+                }}
+                disabled={requestSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={async () => {
+                  // Validation
+                  const errors = {};
+                  
+                  if (!requestPunchDate) {
+                    errors.date = "Please select a date";
+                  }
+                  
+                  if (!requestClockIn) {
+                    errors.clockIn = "Please provide clock-in time";
+                  }
+                  
+                  if (!requestClockOut) {
+                    errors.clockOut = "Please provide clock-out time";
+                  }
+                  
+                  if (requestClockIn && requestClockOut && requestClockIn >= requestClockOut) {
+                    errors.clockIn = "Clock in must be before clock out";
+                  }
+                  
+                  if (!requestApproverId) {
+                    errors.approverId = "Please select an approver";
+                  }
+                  
+                  if (!requestReason) {
+                    errors.reason = "Please select a reason";
+                  }
+                  
+                  if (!requestDescription.trim()) {
+                    errors.description = "Please provide a detailed explanation";
+                  } else if (requestDescription.trim().length < 20) {
+                    errors.description = "Please provide a more detailed explanation (at least 20 characters)";
+                  }
+                  
+                  setRequestErrors(errors);
+                  
+                  if (Object.keys(errors).length > 0) {
+                    toast.error("Please fill in all required fields");
+                    return;
+                  }
+                  
+                  // If validation passes, prepare for API call
+                  setRequestSubmitting(true);
+                  
+                  try {
+                    const payload = {
+                      requestedDate: requestPunchDate,
+                      requestedClockIn: requestClockIn,
+                      requestedClockOut: requestClockOut,
+                      approverId: requestApproverId,
+                      reason: requestReason,
+                      description: requestDescription,
+                      estimatedDuration: diffMins(requestClockIn, requestClockOut),
+                      estimatedNetHours: parseFloat(toHour(Math.max(0, diffMins(requestClockIn, requestClockOut) - minLunchMins))),
+                    };
+                    
+                    // ACTUAL API CALL
+                    const response = await fetch(`${API_URL}/api/request-punch-log/submit`, {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                      },
+                      body: JSON.stringify(payload),
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                      toast.success("Punch log request submitted successfully!");
+                      
+                      // Close dialog and reset
+                      setRequestPunchLogsDialog(false);
+                      setRequestPunchDate("");
+                      setRequestClockIn("");
+                      setRequestClockOut("");
+                      setRequestApproverId("");
+                      setRequestReason("");
+                      setRequestDescription("");
+                      setRequestErrors({});
+                      
+                      // Refresh requests list
+                      fetchMyRequests();
+                    } else {
+                      toast.error(result.message || "Failed to submit request");
+                    }
+                  } catch (error) {
+                    console.error("Error submitting punch log request:", error);
+                    toast.error("Failed to submit request. Please try again.");
+                  } finally {
+                    setRequestSubmitting(false);
+                  }
+                }}
+                disabled={requestSubmitting || !requestPunchDate || requestErrors.date}
+                className="bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                {requestSubmitting ? (
+                  <>
+                    <OrangeLoadingSpinner />
+                    <span className="ml-2">Submitting...</span>
+                  </>
+                ) : (
+                  "Submit Request"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         
         <Dialog open={contestDialogOpen} onOpenChange={setContestDialogOpen}>
           <DialogContent className="sm:max-w-lg border-2 dark:border-white/30">
