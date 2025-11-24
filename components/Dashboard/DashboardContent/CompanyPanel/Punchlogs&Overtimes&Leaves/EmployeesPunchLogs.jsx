@@ -27,6 +27,11 @@ import {
   Users,
   Building,
   MapPinIcon,
+  AlarmClockPlus, 
+  ChevronDown, 
+  ChevronUp,
+  User,
+  AlertTriangle
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
@@ -47,6 +52,7 @@ import IconBtn from "@/components/common/IconBtn";
 import MultiSelect from "@/components/common/MultiSelect";
 import ColumnSelector from "@/components/common/ColumnSelector";
 import TableSkeleton from "@/components/common/TableSkeleton";
+import { Textarea } from "@/components/ui/textarea";
 
 const MAX_DEV_CHARS = 12;
 const truncate = (s = "", L = MAX_DEV_CHARS) => (s.length > L ? s.slice(0, L) + "…" : s);
@@ -323,6 +329,16 @@ export default function EmployeesPunchLogs() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalRows, setTotalRows] = useState(0);
   const [rowsLoaded, setRowsLoaded] = useState(0);
+
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [requestsExpanded, setRequestsExpanded] = useState(true);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [requestStatusFilter, setRequestStatusFilter] = useState("PENDING");
+  const [approvingRequest, setApprovingRequest] = useState(null);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectingRequest, setRejectingRequest] = useState(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+
   const resetFilters = {
     search: "",
     employeeIds: ["all"],
@@ -440,6 +456,88 @@ export default function EmployeesPunchLogs() {
       toast.error("Initialization failed");
     }
   }, [API_URL, token]);
+
+  const handleApproveRequest = async (requestId) => {
+    setApprovingRequest(requestId);
+    try {
+      const res = await fetch(`${API_URL}/api/request-punch-log/approve/${requestId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const j = await res.json();
+      
+      if (!res.ok) throw new Error(j.message || "Approval failed");
+      
+      toast.success("Punch log request approved and time log created!");
+      
+      // Refresh both requests and time logs
+      await Promise.all([
+        fetchPendingRequests(),
+        fetchTimelogs({ pageParam: page, append: false })
+      ]);
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setApprovingRequest(null);
+    }
+  };
+  
+  const handleRejectRequest = async () => {
+    if (!rejectingRequest || !rejectionReason.trim()) {
+      toast.error("Please provide a reason for rejection");
+      return;
+    }
+    
+    try {
+      const res = await fetch(`${API_URL}/api/request-punch-log/reject/${rejectingRequest.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ rejectionReason }),
+      });
+      const j = await res.json();
+      
+      if (!res.ok) throw new Error(j.message || "Rejection failed");
+      
+      toast.success("Punch log request rejected");
+      
+      // Close dialog and refresh
+      setRejectDialogOpen(false);
+      setRejectingRequest(null);
+      setRejectionReason("");
+      await fetchPendingRequests();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const fetchPendingRequests = useCallback(async () => {
+    if (!token) return;
+    setLoadingRequests(true);
+    try {
+      const res = await fetch(`${API_URL}/api/request-punch-log/all-requests`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const j = await res.json();
+      if (res.ok) {
+        const requests = j.data || [];
+        setPendingRequests(requests);
+        
+        // Auto-expand if there are pending requests
+        const hasPending = requests.some(r => r.status === "PENDING");
+        setRequestsExpanded(hasPending);
+      }
+    } catch (err) {
+      console.error("Error fetching pending requests:", err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  }, [token, API_URL]);
 
   const fetchTimelogs = useCallback(
     async ({ pageParam = 1, append = false } = {}) => {
@@ -564,8 +662,11 @@ export default function EmployeesPunchLogs() {
   );
 
   useEffect(() => {
-    if (token) bootstrap();
-  }, [token]);
+    if (token) {
+      bootstrap();
+      fetchPendingRequests();
+    }
+  }, [token, bootstrap, fetchPendingRequests]);
 
   useEffect(() => {
     if (!token) return;
@@ -1485,6 +1586,303 @@ export default function EmployeesPunchLogs() {
         </CardContent>
       </Card>
 
+      {/* Pending Punch Log Requests Section */}
+      {pendingRequests.length > 0 && (  
+        <Card className="border-2 shadow-md overflow-hidden dark:border-white/10 border-orange-200">
+          <div className="h-1 w-full bg-orange-500" />
+          <CardHeader 
+            className="pb-4 cursor-pointer hover:bg-muted/50 transition-colors"
+            onClick={() => setRequestsExpanded(!requestsExpanded)}
+          >
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <div className="p-2 rounded-full bg-orange-500/10 text-orange-500">
+                  <AlarmClockPlus className="h-4 w-4" />
+                </div>
+                Punch Log Requests Pending Approval
+                {pendingRequests.filter(r => r.status === "PENDING").length > 0 && (
+                  <Badge className="ml-2 bg-red-500 hover:bg-red-600 text-white">
+                    {pendingRequests.filter(r => r.status === "PENDING").length} Pending
+                  </Badge>
+                )}
+              </CardTitle>
+              <div className="flex items-center gap-3">
+                {/* Status Filter */}
+                <Select value={requestStatusFilter} onValueChange={setRequestStatusFilter}>
+                  <SelectTrigger className="w-[140px] h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PENDING">Pending Only</SelectItem>
+                    <SelectItem value="ALL">All Requests</SelectItem>
+                    <SelectItem value="APPROVED">Approved</SelectItem>
+                    <SelectItem value="REJECTED">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-8 w-8 p-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fetchPendingRequests();
+                  }}
+                >
+                  <RefreshCw className={`h-4 w-4 ${loadingRequests ? 'animate-spin' : ''}`} />
+                </Button>
+                
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                  {requestsExpanded ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          
+          <AnimatePresence>
+            {requestsExpanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <CardContent className="pb-4">
+                  {loadingRequests ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="text-center">
+                        <RefreshCw className="h-8 w-8 animate-spin text-orange-500 mx-auto mb-2" />
+                        <p className="text-muted-foreground text-sm">Loading requests...</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {pendingRequests
+                        .filter(r => requestStatusFilter === "ALL" || r.status === requestStatusFilter)
+                        .map((req) => {
+                          const isApproving = approvingRequest === req.id;
+                          const submittedDaysAgo = Math.floor((Date.now() - new Date(req.submittedAt)) / (1000 * 60 * 60 * 24));
+                          const isUrgent = submittedDaysAgo >= 3 && req.status === "PENDING";
+                          
+                          return (
+                            <motion.div
+                              key={req.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className={`p-4 border-2 rounded-lg transition-all hover:shadow-md ${
+                                req.status === 'PENDING' 
+                                  ? 'bg-orange-50/50 dark:bg-orange-950/10 border-orange-200 dark:border-orange-900' 
+                                  : req.status === 'APPROVED'
+                                  ? 'bg-green-50/50 dark:bg-green-950/10 border-green-200 dark:border-green-900'
+                                  : 'bg-red-50/50 dark:bg-red-950/10 border-red-200 dark:border-red-900'
+                              }`}
+                            >
+                              <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                                {/* Employee & Request Info */}
+                                <div className="flex-1 space-y-3">
+                                  {/* Employee Header */}
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <div className="p-2 rounded-full bg-orange-500/10">
+                                        <User className="h-5 w-5 text-orange-600" />
+                                      </div>
+                                      <div>
+                                        <div className="font-semibold text-base">{req.userDisplayName}</div>
+                                        <div className="text-xs text-muted-foreground">
+                                          Request ID: {req.id.slice(0, 8)}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Status Badge */}
+                                    <div className="flex items-center gap-2">
+                                      {isUrgent && (
+                                        <Badge variant="destructive" className="animate-pulse">
+                                          🔥 {submittedDaysAgo}d ago
+                                        </Badge>
+                                      )}
+                                      <Badge className={
+                                        req.status === 'PENDING' 
+                                          ? 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                          : req.status === 'APPROVED'
+                                          ? 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-400'
+                                          : 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-400'
+                                      }>
+                                        {req.status === 'PENDING' && '🟡 '}
+                                        {req.status === 'APPROVED' && '✅ '}
+                                        {req.status === 'REJECTED' && '❌ '}
+                                        {req.status}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Request Details Grid */}
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                    <div className="space-y-1">
+                                      <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                        <Calendar className="h-3 w-3" />
+                                        Date
+                                      </div>
+                                      <div className="font-medium">
+                                        {new Date(req.requestedDate).toLocaleDateString('en-US', {
+                                          month: 'short',
+                                          day: 'numeric',
+                                          year: 'numeric'
+                                        })}
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="space-y-1">
+                                      <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                        <Clock className="h-3 w-3" />
+                                        Time In
+                                      </div>
+                                      <div className="font-medium font-mono text-xs">
+                                        {safeTime(req.requestedClockIn)}
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="space-y-1">
+                                      <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                        <Clock className="h-3 w-3" />
+                                        Time Out
+                                      </div>
+                                      <div className="font-medium font-mono text-xs">
+                                        {safeTime(req.requestedClockOut)}
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="space-y-1">
+                                      <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                        <Timer className="h-3 w-3" />
+                                        Duration
+                                      </div>
+                                      <div className="font-semibold text-orange-600">
+                                        {req.estimatedNetHours?.toFixed(2) || '0.00'}h
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Reason & Description */}
+                                  <div className="space-y-2 pt-2 border-t">
+                                    <div className="flex items-start gap-2">
+                                      <AlertTriangle className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                                      <div className="flex-1">
+                                        <span className="text-xs font-medium text-muted-foreground">Reason: </span>
+                                        <span className="text-sm font-medium capitalize">
+                                          {req.reason?.replace(/_/g, ' ') || 'Not specified'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    
+                                    {req.description && (
+                                      <div className="flex items-start gap-2">
+                                        <FileText className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                                        <p className="text-xs text-muted-foreground flex-1 line-clamp-2">
+                                          {req.description}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Footer Info */}
+                                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+                                    <div className="flex items-center gap-4">
+                                      <span>Submitted: {new Date(req.submittedAt).toLocaleDateString()}</span>
+                                      <span>Approver: {req.approverDisplayName || 'Not assigned'}</span>
+                                    </div>
+                                    {req.status === 'APPROVED' && req.approvedAt && (
+                                      <span className="text-green-600 dark:text-green-400 font-medium">
+                                        ✓ Approved {new Date(req.approvedAt).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                    {req.status === 'REJECTED' && (
+                                      <span className="text-red-600 dark:text-red-400 font-medium">
+                                        ✗ Rejected
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                {/* Action Buttons */}
+                                {req.status === 'PENDING' && (
+                                  <div className="flex md:flex-col gap-2 md:min-w-[140px]">
+                                    <TooltipProvider delayDuration={200}>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            size="sm"
+                                            className="bg-green-600 hover:bg-green-700 text-white flex-1 md:flex-none"
+                                            onClick={() => handleApproveRequest(req.id)}
+                                            disabled={isApproving}
+                                          >
+                                            {isApproving ? (
+                                              <>
+                                                <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                                                Approving...
+                                              </>
+                                            ) : (
+                                              <>
+                                                <CheckCircle className="h-3 w-3 mr-1" />
+                                                Approve
+                                              </>
+                                            )}
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          Approve request and create time log entry
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                    
+                                    <TooltipProvider delayDuration={200}>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            size="sm"
+                                            variant="destructive"
+                                            className="flex-1 md:flex-none"
+                                            onClick={() => {
+                                              setRejectingRequest(req);
+                                              setRejectDialogOpen(true);
+                                            }}
+                                          >
+                                            <XCircle className="h-3 w-3 mr-1" />
+                                            Reject
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          Reject this request with reason
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {/* Rejection Reason Display */}
+                              {req.status === 'REJECTED' && req.rejectionReason && (
+                                <div className="mt-3 p-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded text-xs">
+                                  <span className="font-medium text-red-800 dark:text-red-400">Rejection Reason: </span>
+                                  <span className="text-red-700 dark:text-red-300">{req.rejectionReason}</span>
+                                </div>
+                              )}
+                            </motion.div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </CardContent>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </Card>
+      )}
+
       {/* Main Table Card */}
       <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
         <div className="h-1 w-full bg-orange-500" />
@@ -1836,6 +2234,60 @@ export default function EmployeesPunchLogs() {
         onOpenChange={setSchedDialogOpen} 
         scheduleList={scheduleList} 
       />
+
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent className="sm:max-w-md border-2 dark:border-white/10">
+          <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-red-600" />
+              Reject Punch Log Request
+            </DialogTitle>
+          </DialogHeader>
+          {rejectingRequest && (
+            <div className="space-y-4">
+              <div className="p-3 bg-muted rounded-lg space-y-2 text-sm">
+                <div><span className="font-medium">Employee:</span> {rejectingRequest.userDisplayName}</div>
+                <div><span className="font-medium">Date:</span> {safeDate(rejectingRequest.requestedDate)}</div>
+                <div><span className="font-medium">Time:</span> {safeTime(rejectingRequest.requestedClockIn)} - {safeTime(rejectingRequest.requestedClockOut)}</div>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Reason for Rejection *</label>
+                <Textarea
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="Please provide a clear reason for rejecting this request..."
+                  className="min-h-[100px] resize-none"
+                  maxLength={500}
+                />
+                <div className="text-xs text-muted-foreground text-right">
+                  {rejectionReason.length}/500 characters
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRejectDialogOpen(false);
+                setRejectingRequest(null);
+                setRejectionReason("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleRejectRequest}
+              disabled={!rejectionReason.trim()}
+            >
+              Confirm Rejection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={otDialogOpen} onOpenChange={setOtDialogOpen}>
         <DialogContent className="sm:max-w-md border-2 dark:border-white/10">

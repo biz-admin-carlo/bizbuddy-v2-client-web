@@ -30,15 +30,46 @@ const navLinks = [
 ];
 
 const getInitialNotifications = () => {
-  const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION || '2.3.0';
+  const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION || '2.3.1';
+  
+  const getRelativeTime = (dateString) => {
+    const targetDate = new Date(dateString);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    targetDate.setHours(0, 0, 0, 0);
+    
+    const daysAgo = Math.floor((today - targetDate) / (1000 * 60 * 60 * 24));
+    
+    if (daysAgo === 0) return "Today";
+    if (daysAgo === 1) return "Yesterday";
+    if (daysAgo < 7) return `${daysAgo} days ago`;
+    if (daysAgo < 30) {
+      const weeks = Math.floor(daysAgo / 7);
+      return weeks === 1 ? "1 week ago" : `${weeks} weeks ago`;
+    }
+    if (daysAgo < 365) {
+      const months = Math.floor(daysAgo / 30);
+      return months === 1 ? "1 month ago" : `${months} months ago`;
+    }
+    const years = Math.floor(daysAgo / 365);
+    return years === 1 ? "1 year ago" : `${years} years ago`;
+  };
   
   return [
     {
       id: 1,
+      type: "success",
+      title: "🎉 New Feature: Request Punch Logs",
+      message: `Employees can now request retroactive punch log entries if they forgot to clock in/out! Simply go to your Punch Logs page and click "Request Punch Logs" to submit a request. Supervisors and admins will be notified and can approve/reject requests directly from the Employee Punch Logs page. All requests are tracked with reasons and require approval before creating time log entries.`,
+      timestamp: getRelativeTime('2025-11-24'),
+      read: false,
+    },
+    {
+      id: 2,
       type: "info",
       title: "BizBuddy Application Updated",
-      message: `We've updated BizBuddy to v${currentVersion}! We've made improvements to enhance your experience. If you notice any differences or issues with features, please let us know through our contact page.`,
-      timestamp: "Just now",
+      message: `We've made improvements to the time tracking system and added new approval workflows. If you notice any differences or issues with features, please let us know through our contact page.`,
+      timestamp: getRelativeTime('2025-11-04'),
       read: false,
     },
   ];
