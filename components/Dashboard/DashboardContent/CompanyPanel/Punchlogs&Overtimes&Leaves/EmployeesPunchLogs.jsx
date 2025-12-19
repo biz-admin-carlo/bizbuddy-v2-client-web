@@ -11,6 +11,7 @@ import {
   FileText,
   Calendar,
   Info,
+  Globe,
   MapPin,
   ChevronsLeft,
   ChevronsRight,
@@ -56,16 +57,39 @@ import { Textarea } from "@/components/ui/textarea";
 
 const MAX_DEV_CHARS = 12;
 const truncate = (s = "", L = MAX_DEV_CHARS) => (s.length > L ? s.slice(0, L) + "…" : s);
-const safeDate = (d) =>
+const safeDate = (d, timezone = "UTC") =>
   d
-    ? new Date(d).toLocaleDateString(undefined, {
+    ? new Date(d).toLocaleDateString('en-US', {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
+        timeZone: timezone
       })
     : "—";
-const safeTime = (d) => (d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—");
-const safeDateTime = (d) => (d ? `${safeDate(d)} ${safeTime(d)}` : "—");
+const safeTime = (d, timezone = "UTC") => 
+  d ? new Date(d).toLocaleTimeString('en-US', { 
+    hour: "2-digit", 
+    minute: "2-digit",
+    hour12: true,
+    timeZone: timezone
+  }) : "—";
+const safeDateTime = (d, timezone = "UTC") => {
+  if (!d) return "—";
+  
+  return new Date(d).toLocaleString('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: timezone
+  });
+};
+const getTimezoneName = (tz) => {
+  const parts = tz.split('/');
+  return parts[parts.length - 1].replace(/_/g, ' ');
+};
 const diffMins = (a, b) => (new Date(b) - new Date(a)) / 60000;
 const toHour = (m) => (m / 60).toFixed(2);
 const coffeeMinutes = (arr = []) => toHour(arr.reduce((m, b) => (b.start && b.end ? m + diffMins(b.start, b.end) : m), 0));
@@ -308,6 +332,10 @@ const TimeDisplayWithTooltip = ({ time, type, className = "" }) => {
 
 export default function EmployeesPunchLogs() {
   const { token } = useAuthStore();
+  const [userTimezone, setUserTimezone] = useState(
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+  );
+  const [companyTimezone, setCompanyTimezone] = useState("UTC");
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
   const [timelogs, setTimelogs] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -383,7 +411,7 @@ export default function EmployeesPunchLogs() {
     { value: "employee", label: "Employee", essential: true, group: "basic" },
     { value: "dateTimeIn", label: "Time In", essential: true, group: "basic" },
     { value: "dateTimeOut", label: "Time Out", essential: true, group: "basic" },
-    { value: "duration", label: "Duration", essential: true, group: "basic" },
+    { value: "duration", label: "Duration", essential: false, group: "basic" },
     { value: "status", label: "Status", essential: true, group: "basic" },
     { value: "schedule", label: "Scheduled", essential: false, group: "schedule" },
     { value: "period", label: "Period Hours", essential: false, group: "schedule" },
@@ -427,6 +455,10 @@ export default function EmployeesPunchLogs() {
         setDefaultHours(cJ.data?.defaultShiftHours ?? 8);
         const raw = cJ.data?.minimumLunchMinutes;
         setMinLunchMins(raw === null ? 0 : raw ?? 60);
+        
+        const ctz = cJ.data?.timezone || cJ.data?.companyTimezone || "America/Los_Angeles";
+        setCompanyTimezone(ctz);
+        console.log("Company timezone:", ctz);
       }
       if (pJ?.data?.company?.name) setCompanyName(pJ.data.company.name.replace(/\s+/g, "_"));
       if (pJ?.data) {
@@ -436,6 +468,13 @@ export default function EmployeesPunchLogs() {
         setCurrentUserRole(user.role || "");
         const name = user.fullName || `${profObj.firstName ?? ""} ${profObj.lastName ?? ""}`.trim() || user.email || "";
         setCurrentUserName(name);
+        
+        const utz = user.timezone || 
+                     pJ.data?.timezone ||
+                     Intl.DateTimeFormat().resolvedOptions().timeZone || 
+                     "UTC";
+        setUserTimezone(utz);
+        console.log("User timezone:", utz);
       }
       if (eJ?.data) setEmployees(eJ.data);
       if (dJ?.data) setDepartments(dJ.data);
@@ -628,7 +667,6 @@ export default function EmployeesPunchLogs() {
           return {
             ...t,
             timeOut: adjTimeOut,
-            employeeName: t.email,
             isScheduled,
             scheduleList: matchedTemplates,
             duration: toHour(grossMins),
@@ -1174,6 +1212,52 @@ export default function EmployeesPunchLogs() {
     );
   };
 
+  const DualTimeDisplay = ({ datetime, userTz, companyTz }) => {
+    if (!datetime) return <span className="text-muted-foreground text-xs">—</span>;
+    
+    const userTime = safeTime(datetime, userTz);
+    const companyTime = safeTime(datetime, companyTz);
+    const userDate = safeDate(datetime, userTz);
+    const companyDate = safeDate(datetime, companyTz);
+    
+    const userTzName = getTimezoneName(userTz);
+    const companyTzName = getTimezoneName(companyTz);
+    
+    // If same timezone, show once
+    if (userTz === companyTz) {
+      return (
+        <div className="text-xs">
+          <div className="font-mono font-semibold">{userDate}</div>
+          <div className="font-mono">{userTime}</div>
+        </div>
+      );
+    }
+    
+    // Show both timezones
+    return (
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="text-xs cursor-help">
+              <div className="font-mono font-semibold text-primary">
+                {userDate} {userTime}
+              </div>
+              <div className="font-mono text-muted-foreground text-[10px]">
+                ({companyDate} {companyTime})
+              </div>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="text-xs">
+            <div className="space-y-1">
+              <div><strong>Your time ({userTzName}):</strong> {userDate} {userTime}</div>
+              <div><strong>Company HQ ({companyTzName}):</strong> {companyDate} {companyTime}</div>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
   // Enhanced Summary Statistics with Hover Definitions
   const SummaryStats = ({ data }) => {
     const stats = useMemo(() => {
@@ -1507,7 +1591,14 @@ export default function EmployeesPunchLogs() {
               Employee:
             </span>
             <MultiSelect
-              options={employees.map((e) => ({ value: e.id, label: e.email }))}
+              options={employees.map((e) => {
+                const firstName = e.profile?.firstName || '';
+                const lastName = e.profile?.lastName || '';
+                const fullName = `${firstName} ${lastName}`.trim();
+                const displayLabel = fullName || e.email.split('@')[0];
+                
+                return { value: e.id, label: displayLabel };
+              })}
               selected={filters.employeeIds}
               onChange={(v) => toggleListFilter("employeeIds", v)}
               allLabel="All employees"
@@ -1894,8 +1985,23 @@ export default function EmployeesPunchLogs() {
               </div>
               Punch Logs
             </CardTitle>
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <div className="flex flex-col md:flex-row items-end md:items-center gap-2 md:gap-4 text-sm text-muted-foreground">
               <span>Total Period Hours: <span className="font-semibold text-foreground">{totalPeriodHours}</span></span>
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-2 text-xs cursor-help">
+                      <Globe className="w-3 h-3" />
+                      <span className="font-medium text-primary">{getTimezoneName(userTimezone)}</span>
+                      <span className="text-muted-foreground">({getTimezoneName(companyTimezone)} HQ)</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs">
+                    <div>Times shown in {userTimezone}</div>
+                    <div className="text-muted-foreground">Company HQ: {companyTimezone}</div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
         </CardHeader>
@@ -1966,18 +2072,26 @@ export default function EmployeesPunchLogs() {
                           </TableCell>
                         )}
                         {columnVisibility.includes("dateTimeIn") && (
-                          <TableCell className="text-center text-sm">
-                            <div className="font-mono">{safeDateTime(t.timeIn)}</div>
+                          <TableCell className="text-center">
+                            <DualTimeDisplay 
+                              datetime={t.timeIn} 
+                              userTz={userTimezone}
+                              companyTz={companyTimezone}
+                            />
                           </TableCell>
                         )}
                         {columnVisibility.includes("dateTimeOut") && (
-                          <TableCell className="text-center text-sm">
-                            <div className="font-mono">{safeDateTime(t.timeOut)}</div>
+                          <TableCell className="text-center">
+                            <DualTimeDisplay 
+                              datetime={t.timeOut} 
+                              userTz={userTimezone}
+                              companyTz={companyTimezone}
+                            />
                           </TableCell>
                         )}
                         {columnVisibility.includes("duration") && (
                           <TableCell className="text-center text-sm font-medium">
-                            <TimeDisplayWithTooltip time={t.duration} type="duration" />
+                            <TimeDisplayWithTooltip time={t.periodHours} type="duration" />
                           </TableCell>
                         )}
                         {columnVisibility.includes("coffee") && (

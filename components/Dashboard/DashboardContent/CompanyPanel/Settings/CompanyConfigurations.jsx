@@ -752,6 +752,14 @@ function TimeDefaultsCard({ loading, draft, setDraft }) {
               step="5"
               icon={<Clock className="h-4 w-4 text-orange-500" />}
             />
+            <NumberField
+              label="Grace Period (minutes)"
+              value={draft?.gracePeriodMinutes ?? 15}
+              onChange={(v) => setDraft((o) => ({ ...o, gracePeriodMinutes: v }))}
+              step="5"
+              icon={<AlertCircle />}
+              helpText="Allowed lateness before deductions apply"
+            />
           </div>
         )}
       </CardContent>
