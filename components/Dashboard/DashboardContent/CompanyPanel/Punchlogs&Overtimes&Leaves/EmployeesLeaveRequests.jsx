@@ -16,7 +16,7 @@ import {
   Loader2,
   Trash2,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
 import DataTable from "@/components/common/DataTable";
 import { Button } from "@/components/ui/button";
@@ -207,6 +207,7 @@ export default function SupervisorLeaveRequests() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
+      console.log(data);
       
       if (!response.ok) throw new Error(data.message || "Failed to fetch leave requests");
       
@@ -221,6 +222,10 @@ export default function SupervisorLeaveRequests() {
   const handleAction = async () => {
     if (!actionDialog.request || !actionDialog.type) return;
     
+    // Save employee info before we close the modal
+    const employeeEmail = actionDialog.request.requester?.email || actionDialog.request.User?.email || "the employee";
+    const currentActionType = actionDialog.type;
+    
     setActionLoading(true);
     try {
       const response = await fetch(`${API_URL}/api/leaves/${actionDialog.request.id}/${actionDialog.type}`, {
@@ -234,14 +239,38 @@ export default function SupervisorLeaveRequests() {
 
       const data = await response.json();
 
-      if (!response.ok) throw new Error(data.message || `Failed to ${actionDialog.type} leave request`);
+      if (!response.ok) {
+        // Close the modal
+        setActionDialog({ open: false, type: null, request: null });
+        setComment("");
+        
+        // Check if there's debug info for insufficient balance
+        if (data.debug && data.debug.available !== undefined && data.debug.requested !== undefined) {
+          // Use toast() with description for Sonner
+          toast("Insufficient Leave Balance", {
+            description: `${employeeEmail} has ${data.debug.available}h available but needs ${data.debug.requested}h for ${data.debug.leaveType || 'this leave'}. Please contact HR to adjust the employee's leave balance.`,
+            icon: <AlertCircle className="h-5 w-5 text-amber-500" />,
+            duration: 8000,
+          });
+        } else {
+          // For other errors, show the error message
+          toast.error(data.message || `Failed to ${currentActionType} leave request`);
+        }
+        
+        setActionLoading(false);
+        return;
+      }
 
-      toast.success(`Leave request ${actionDialog.type}d successfully!`);
+      // Success
+      toast.success(`Leave request ${currentActionType}d successfully!`);
       setActionDialog({ open: false, type: null, request: null });
       setComment("");
       fetchLeaves();
     } catch (error) {
-      toast.error(error.message || `Failed to ${actionDialog.type} leave request`);
+      // Close modal on exception
+      setActionDialog({ open: false, type: null, request: null });
+      setComment("");
+      toast.error(error.message || `Failed to ${currentActionType} leave request`);
     } finally {
       setActionLoading(false);
     }
@@ -276,6 +305,8 @@ export default function SupervisorLeaveRequests() {
   }, [fetchLeaves]);
 
   return (
+    <>
+    <Toaster position="top-center" />
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -528,17 +559,75 @@ export default function SupervisorLeaveRequests() {
           </DialogHeader>
 
           {actionDialog.request && (
-            <div className={`p-4 rounded-md border ${
-              actionDialog.type === "approve"
-                ? "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800"
-                : "bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800"
-            }`}>
-              <div className="text-sm space-y-1">
-                <div><strong>Employee:</strong> {actionDialog.request.requester?.email || actionDialog.request.User?.email || "Unknown"}</div>
-                <div><strong>Leave Type:</strong> {actionDialog.request.leaveType}</div>
-                <div><strong>Duration:</strong> {new Date(actionDialog.request.startDate).toLocaleDateString()} to {new Date(actionDialog.request.endDate).toLocaleDateString()}</div>
+            <>
+              <div className={`p-4 rounded-md border ${
+                actionDialog.type === "approve"
+                  ? "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800"
+                  : "bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800"
+              }`}>
+                <div className="text-sm space-y-1">
+                  <div><strong>Employee:</strong> {actionDialog.request.requester?.email || actionDialog.request.User?.email || "Unknown"}</div>
+                  <div><strong>Leave Type:</strong> {actionDialog.request.leaveType}</div>
+                </div>
               </div>
-            </div>
+
+              {/* Detailed Hours Breakdown */}
+              <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-md p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Clock className="h-4 w-4 text-orange-600" />
+                  <div className="font-semibold text-sm text-orange-700 dark:text-orange-300">Leave Period Details</div>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Start Date & Time:</span>
+                    <span className="font-medium">
+                      {new Date(actionDialog.request.startDate).toLocaleDateString()} at {new Date(actionDialog.request.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">End Date & Time:</span>
+                    <span className="font-medium">
+                      {new Date(actionDialog.request.endDate).toLocaleDateString()} at {new Date(actionDialog.request.endDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <div className="h-px bg-orange-200 dark:bg-orange-800 my-2"></div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Number of Days:</span>
+                    <span className="font-medium">
+                      {(() => {
+                        const start = new Date(actionDialog.request.startDate);
+                        const end = new Date(actionDialog.request.endDate);
+                        start.setHours(0, 0, 0, 0);
+                        end.setHours(0, 0, 0, 0);
+                        const diffTime = end - start;
+                        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                        return `${diffDays} day${diffDays === 1 ? '' : 's'}`;
+                      })()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Hours per Day:</span>
+                    <span className="font-medium">8 hours</span>
+                  </div>
+                  <div className="h-px bg-orange-200 dark:bg-orange-800 my-2"></div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-orange-700 dark:text-orange-300">Total Hours Requested:</span>
+                    <span className="font-bold text-lg text-orange-600 dark:text-orange-400">
+                      {(() => {
+                        const start = new Date(actionDialog.request.startDate);
+                        const end = new Date(actionDialog.request.endDate);
+                        start.setHours(0, 0, 0, 0);
+                        end.setHours(0, 0, 0, 0);
+                        const diffTime = end - start;
+                        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                        const hours = diffDays * 8;
+                        return `${hours}h`;
+                      })()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
 
           <div className="space-y-2">
@@ -631,5 +720,6 @@ export default function SupervisorLeaveRequests() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }

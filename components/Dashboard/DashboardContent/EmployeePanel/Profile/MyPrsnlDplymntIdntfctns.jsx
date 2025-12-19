@@ -1,9 +1,8 @@
-// components/Dashboard/DashboardContent/Profile/MyPrsnlDplymntIdntfctns.jsx
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useEffect, useState } from "react";
-import { User, MapPin, Shield, Users, Eye, EyeOff, Mail, AtSign, AlertCircle, CheckCircle, Info } from "lucide-react";
+import { User, MapPin, Shield, Users, Eye, EyeOff, AtSign, AlertCircle, CheckCircle, Info } from "lucide-react";
 import useAuthStore from "@/store/useAuthStore";
 import { toast, Toaster } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -15,6 +14,27 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
+
+// ============================================
+// SSN/ITIN AUTO-FORMAT HELPER
+// Format: XXX-XX-XXXX
+// ============================================
+const formatSSN = (value) => {
+  // Remove all non-numeric characters
+  const numbers = value.replace(/\D/g, '');
+  
+  // Limit to 9 digits
+  const limited = numbers.slice(0, 9);
+  
+  // Format as XXX-XX-XXXX
+  if (limited.length <= 3) {
+    return limited;
+  } else if (limited.length <= 5) {
+    return `${limited.slice(0, 3)}-${limited.slice(3)}`;
+  } else {
+    return `${limited.slice(0, 3)}-${limited.slice(3, 5)}-${limited.slice(5)}`;
+  }
+};
 
 const FormSection = ({ icon: Icon, title, children, description }) => (
   <div className="space-y-4">
@@ -93,18 +113,22 @@ export default function MyPrsnlDplymntIdntfctns() {
     emergencyContactPhone: "",
   });
 
-  // Real-time validation
+  // ============================================
+  // REAL-TIME VALIDATION
+  // ============================================
   const validateField = (name, value) => {
     const errors = {};
-    
+
     switch (name) {
       case 'username':
         if (!value.trim()) {
           errors.username = 'Username is required';
-        } else if (!/^[a-z0-9]+$/i.test(value.trim())) {
-          errors.username = 'Username must be alphanumeric only';
         } else if (value.trim().length < 3) {
           errors.username = 'Username must be at least 3 characters';
+        } else if (!/^[a-z0-9]([a-z0-9._]*[a-z0-9])?$/i.test(value.trim())) {
+          errors.username = 'Must start and end with letter/number. Only letters, numbers, periods (.) and underscores (_) allowed';
+        } else if (/[._]{2,}/.test(value.trim())) {
+          errors.username = 'Cannot contain consecutive periods or underscores';
         }
         break;
       case 'email':
@@ -119,9 +143,18 @@ export default function MyPrsnlDplymntIdntfctns() {
           errors.phoneNumber = 'Please enter a valid phone number';
         }
         break;
+      case 'emergencyContactPhone':
+        if (value && !/^[\+]?[1-9][\d]{0,15}$/.test(value.replace(/[\s\-\(\)]/g, ''))) {
+          errors.emergencyContactPhone = 'Please enter a valid phone number';
+        }
+        break;
       case 'ssnItin':
-        if (value && (value.length < 9 || value.length > 15)) {
-          errors.ssnItin = 'Must be 9-15 characters';
+        if (value) {
+          // Remove dashes for length check
+          const digitsOnly = value.replace(/\D/g, '');
+          if (digitsOnly.length > 0 && digitsOnly.length !== 9) {
+            errors.ssnItin = 'SSN/ITIN must be 9 digits (format: XXX-XX-XXXX)';
+          }
         }
         break;
       case 'postalCode':
@@ -129,14 +162,40 @@ export default function MyPrsnlDplymntIdntfctns() {
           errors.postalCode = 'Format: 12345 or 12345-6789';
         }
         break;
+      case 'dateOfBirth':
+        if (value) {
+          const date = new Date(value);
+          if (isNaN(date.getTime())) {
+            errors.dateOfBirth = 'Please enter a valid date';
+          }
+        }
+        break;
     }
-    
+
     return errors;
   };
 
+  // ============================================
+  // HANDLE FIELD CHANGE (with SSN auto-format)
+  // ============================================
   const handleFieldChange = (name, value) => {
+    // Auto-format SSN/ITIN
+    if (name === 'ssnItin') {
+      const formattedValue = formatSSN(value);
+      setForm(f => ({ ...f, [name]: formattedValue }));
+
+      if (touched[name]) {
+        const fieldErrors = validateField(name, formattedValue);
+        setValidationErrors(prev => ({
+          ...prev,
+          [name]: fieldErrors[name]
+        }));
+      }
+      return;
+    }
+
     setForm(f => ({ ...f, [name]: value }));
-    
+
     // Validate on change if field has been touched
     if (touched[name]) {
       const fieldErrors = validateField(name, value);
@@ -156,6 +215,9 @@ export default function MyPrsnlDplymntIdntfctns() {
     }));
   };
 
+  // ============================================
+  // FETCH PROFILE ON MOUNT
+  // ============================================
   useEffect(() => {
     if (!token) return;
     fetch(`${API}/api/account/profile`, {
@@ -187,31 +249,55 @@ export default function MyPrsnlDplymntIdntfctns() {
       .finally(() => setLoading(false));
   }, [token]);
 
+  // ============================================
+  // SAVE PROFILE
+  // ============================================
   const save = async () => {
     // Validate all required fields
     const usernameErrors = validateField('username', form.username);
     const emailErrors = validateField('email', form.email);
-    
-    if (usernameErrors.username || emailErrors.email) {
-      setValidationErrors({
-        ...validationErrors,
-        ...usernameErrors,
-        ...emailErrors
+    const ssnErrors = validateField('ssnItin', form.ssnItin);
+    const postalCodeErrors = validateField('postalCode', form.postalCode);
+    const dobErrors = validateField('dateOfBirth', form.dateOfBirth);
+
+    const allErrors = {
+      ...usernameErrors,
+      ...emailErrors,
+      ...ssnErrors,
+      ...postalCodeErrors,
+      ...dobErrors,
+    };
+
+    if (Object.keys(allErrors).some(key => allErrors[key])) {
+      setValidationErrors(prev => ({ ...prev, ...allErrors }));
+      setTouched({
+        username: true,
+        email: true,
+        ssnItin: true,
+        postalCode: true,
+        dateOfBirth: true,
       });
-      setTouched({ username: true, email: true });
       toast.error("Please fix the validation errors before saving");
       return;
     }
 
     setSaving(true);
     try {
+      // Send all fields to backend
       const payload = {
-        // Only send the fields that the backend actually uses
         username: form.username.trim(),
         email: form.email.trim(),
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
         phoneNumber: form.phoneNumber.trim(),
+        ssnItin: form.ssnItin.trim(),
+        dateOfBirth: form.dateOfBirth || null,
+        addressLine: form.addressLine.trim(),
+        city: form.city.trim(),
+        state: form.state.trim(),
+        postalCode: form.postalCode.trim(),
+        emergencyContactName: form.emergencyContactName.trim(),
+        emergencyContactPhone: form.emergencyContactPhone.trim(),
       };
 
       const r = await fetch(`${API}/api/account/profile`, {
@@ -222,21 +308,24 @@ export default function MyPrsnlDplymntIdntfctns() {
         },
         body: JSON.stringify(payload),
       });
-      
+
       const response = await r.json();
-      
+
       if (r.ok) {
         toast.success("Profile saved successfully!");
         setValidationErrors({});
       } else {
         toast.error(response.message || response.error || "Save failed");
-        
+
         // Handle specific backend validation errors
-        if (response.message?.includes("Username")) {
+        if (response.message?.toLowerCase().includes("username")) {
           setValidationErrors(prev => ({ ...prev, username: response.message }));
         }
-        if (response.message?.includes("Email")) {
+        if (response.message?.toLowerCase().includes("email")) {
           setValidationErrors(prev => ({ ...prev, email: response.message }));
+        }
+        if (response.message?.toLowerCase().includes("ssn") || response.message?.toLowerCase().includes("itin")) {
+          setValidationErrors(prev => ({ ...prev, ssnItin: response.message }));
         }
       }
     } catch (error) {
@@ -249,10 +338,13 @@ export default function MyPrsnlDplymntIdntfctns() {
   const hasValidationErrors = Object.values(validationErrors).some(error => error);
   const isFormValid = hasRequiredFields && !hasValidationErrors;
 
+  // ============================================
+  // RENDER
+  // ============================================
   return (
     <div className="max-w-4xl mx-auto p-4 lg:px-6 px-2 space-y-6">
       <Toaster position="top-center" />
-      
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -270,7 +362,7 @@ export default function MyPrsnlDplymntIdntfctns() {
       <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
         <Info className="h-4 w-4 text-blue-600" />
         <AlertDescription className="text-blue-800 dark:text-blue-200">
-          <span className="font-medium">Required fields:</span> Only username and email are required to save your profile. 
+          <span className="font-medium">Required fields:</span> Only username and email are required to save your profile.
           Other information is optional but helps complete your employee record.
         </AlertDescription>
       </Alert>
@@ -285,7 +377,7 @@ export default function MyPrsnlDplymntIdntfctns() {
             Profile Information
           </CardTitle>
           <CardDescription>
-            Update your personal details and contact information. Fields marked with 
+            Update your personal details and contact information. Fields marked with
             <span className="text-red-500 mx-1">*</span> are required.
           </CardDescription>
         </CardHeader>
@@ -305,16 +397,16 @@ export default function MyPrsnlDplymntIdntfctns() {
             </div>
           ) : (
             <>
-              <FormSection 
-                icon={AtSign} 
+              <FormSection
+                icon={AtSign}
                 title="Account Information"
                 description="Essential account credentials required for system access"
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField 
-                    label="Username" 
+                  <FormField
+                    label="Username"
                     required
-                    description="Alphanumeric only, minimum 3 characters"
+                    description="Letters, numbers, periods (.) and underscores (_) only. Must start and end with letter/number."
                     error={validationErrors.username}
                     success={touched.username && !validationErrors.username && form.username ? "Valid username" : null}
                   >
@@ -324,13 +416,13 @@ export default function MyPrsnlDplymntIdntfctns() {
                       onChange={(e) => handleFieldChange('username', e.target.value)}
                       onBlur={() => handleFieldBlur('username')}
                       className={`focus:border-orange-500 focus:ring-orange-500/20 ${
-                        validationErrors.username ? 'border-red-500 focus:border-red-500' : 
+                        validationErrors.username ? 'border-red-500 focus:border-red-500' :
                         touched.username && !validationErrors.username && form.username ? 'border-green-500' : ''
                       }`}
                     />
                   </FormField>
-                  <FormField 
-                    label="Email Address" 
+                  <FormField
+                    label="Email Address"
                     required
                     description="Must be unique within your company"
                     error={validationErrors.email}
@@ -343,7 +435,7 @@ export default function MyPrsnlDplymntIdntfctns() {
                       onChange={(e) => handleFieldChange('email', e.target.value)}
                       onBlur={() => handleFieldBlur('email')}
                       className={`focus:border-orange-500 focus:ring-orange-500/20 ${
-                        validationErrors.email ? 'border-red-500 focus:border-red-500' : 
+                        validationErrors.email ? 'border-red-500 focus:border-red-500' :
                         touched.email && !validationErrors.email && form.email ? 'border-green-500' : ''
                       }`}
                     />
@@ -351,8 +443,8 @@ export default function MyPrsnlDplymntIdntfctns() {
                 </div>
               </FormSection>
 
-              <FormSection 
-                icon={User} 
+              <FormSection
+                icon={User}
                 title="Personal Information"
                 description="Optional personal details for your employee profile"
               >
@@ -376,7 +468,7 @@ export default function MyPrsnlDplymntIdntfctns() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField 
+                  <FormField
                     label="Phone Number"
                     error={validationErrors.phoneNumber}
                     description="Your primary contact number"
@@ -391,40 +483,47 @@ export default function MyPrsnlDplymntIdntfctns() {
                       }`}
                     />
                   </FormField>
-                  <FormField 
+                  <FormField
                     label="Date of Birth"
                     description="Used for age verification and benefits"
+                    error={validationErrors.dateOfBirth}
                   >
                     <Input
                       type="date"
                       value={form.dateOfBirth}
                       onChange={(e) => handleFieldChange('dateOfBirth', e.target.value)}
-                      className="focus:border-orange-500 focus:ring-orange-500/20"
+                      onBlur={() => handleFieldBlur('dateOfBirth')}
+                      className={`focus:border-orange-500 focus:ring-orange-500/20 ${
+                        validationErrors.dateOfBirth ? 'border-red-500 focus:border-red-500' : ''
+                      }`}
                     />
                   </FormField>
                 </div>
               </FormSection>
 
-              <FormSection 
-                icon={Shield} 
+              <FormSection
+                icon={Shield}
                 title="Identification"
                 description="Sensitive identification information (stored securely)"
               >
                 <div className="max-w-md">
-                  <FormField 
-                    label="SSN / ITIN" 
+                  <FormField
+                    label="SSN / ITIN"
                     description="Social Security Number or Individual Taxpayer Identification Number"
                     error={validationErrors.ssnItin}
+                    success={touched.ssnItin && !validationErrors.ssnItin && form.ssnItin.length === 11 ? "Valid format" : null}
                   >
                     <div className="relative">
                       <Input
-                        placeholder="XXX-XX-XXXX"
+                        placeholder="000-00-0000"
                         type={showSSN ? "text" : "password"}
                         value={form.ssnItin}
                         onChange={(e) => handleFieldChange('ssnItin', e.target.value)}
                         onBlur={() => handleFieldBlur('ssnItin')}
+                        maxLength={11}
                         className={`focus:border-orange-500 focus:ring-orange-500/20 pr-12 ${
-                          validationErrors.ssnItin ? 'border-red-500 focus:border-red-500' : ''
+                          validationErrors.ssnItin ? 'border-red-500 focus:border-red-500' :
+                          touched.ssnItin && !validationErrors.ssnItin && form.ssnItin.length === 11 ? 'border-green-500' : ''
                         }`}
                       />
                       <button
@@ -444,8 +543,8 @@ export default function MyPrsnlDplymntIdntfctns() {
                 </div>
               </FormSection>
 
-              <FormSection 
-                icon={MapPin} 
+              <FormSection
+                icon={MapPin}
                 title="Address Information"
                 description="Your primary residential address"
               >
@@ -475,7 +574,7 @@ export default function MyPrsnlDplymntIdntfctns() {
                       className="focus:border-orange-500 focus:ring-orange-500/20"
                     />
                   </FormField>
-                  <FormField 
+                  <FormField
                     label="Postal Code"
                     error={validationErrors.postalCode}
                   >
@@ -492,8 +591,8 @@ export default function MyPrsnlDplymntIdntfctns() {
                 </div>
               </FormSection>
 
-              <FormSection 
-                icon={Users} 
+              <FormSection
+                icon={Users}
                 title="Emergency Contact"
                 description="Someone to contact in case of emergency"
               >
@@ -506,12 +605,18 @@ export default function MyPrsnlDplymntIdntfctns() {
                       className="focus:border-orange-500 focus:ring-orange-500/20"
                     />
                   </FormField>
-                  <FormField label="Contact Phone">
+                  <FormField
+                    label="Contact Phone"
+                    error={validationErrors.emergencyContactPhone}
+                  >
                     <Input
                       placeholder="(555) 987-6543"
                       value={form.emergencyContactPhone}
                       onChange={(e) => handleFieldChange('emergencyContactPhone', e.target.value)}
-                      className="focus:border-orange-500 focus:ring-orange-500/20"
+                      onBlur={() => handleFieldBlur('emergencyContactPhone')}
+                      className={`focus:border-orange-500 focus:ring-orange-500/20 ${
+                        validationErrors.emergencyContactPhone ? 'border-red-500 focus:border-red-500' : ''
+                      }`}
                     />
                   </FormField>
                 </div>
@@ -528,13 +633,13 @@ export default function MyPrsnlDplymntIdntfctns() {
                       </AlertDescription>
                     </Alert>
                   )}
-                  
+
                   <Button
                     disabled={saving || !isFormValid}
                     onClick={save}
                     className={`w-full font-medium py-3 transition-all ${
-                      isFormValid 
-                        ? 'bg-orange-500 hover:bg-orange-600 text-white hover:shadow-lg' 
+                      isFormValid
+                        ? 'bg-orange-500 hover:bg-orange-600 text-white hover:shadow-lg'
                         : 'bg-gray-300 text-gray-500 cursor-not-allowed hover:bg-gray-300'
                     }`}
                     size="lg"
@@ -548,7 +653,7 @@ export default function MyPrsnlDplymntIdntfctns() {
                       "Save Profile Information"
                     )}
                   </Button>
-                  
+
                   {!hasRequiredFields && (
                     <p className="text-sm text-muted-foreground text-center">
                       Username and email are required to save your profile

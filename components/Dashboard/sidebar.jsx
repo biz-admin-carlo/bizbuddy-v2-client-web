@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
+// ✅ BASE Employee Panel (without Payroll - we'll add it dynamically based on role)
 const EmployeePanelItems = [
   {
     id: "overview",
@@ -38,9 +39,7 @@ const EmployeePanelItems = [
       { id: "employee/punch-logs", label: "Punch logs" },
       { id: "employee/schedule", label: "Schedule" },
       { id: "employee/overtime", label: "Overtime" },
-      // { id: "employee/contest-time-logs", label: "Contest Time Logs", hasPendingCount: true },
       { id: "employee/contest-time-logs", label: "Contest Time Logs" },
-
     ],
   },
   {
@@ -50,12 +49,34 @@ const EmployeePanelItems = [
       { id: "employee/leave-logs", label: "Leave Logs" },
     ],
   },
-  {
+  // ✅ Payroll will be added dynamically based on role
+];
+
+// ✅ NEW: Function to get Payroll items based on role
+function getPayrollItems(role) {
+  const roleLower = role.toLowerCase();
+  
+  // Admin, Supervisor, Superadmin → BOTH Payroll Management AND Payslip
+  if (["admin", "supervisor", "superadmin"].includes(roleLower)) {
+    return {
+      id: "payroll",
+      label: "Payroll",
+      children: [
+        { id: "employee/payroll", label: "Payroll Management" },
+        { id: "employee/payslip", label: "My Payslip" }  // ✅ Everyone needs to see their own payslip!
+      ],
+    };
+  }
+  
+  // Employee → Only Payslip
+  return {
     id: "payroll",
     label: "Payroll",
-    children: [{ id: "employee/payroll", label: "Payroll" }],
-  },
-];
+    children: [
+      { id: "employee/payslip", label: "My Payslip" }
+    ],
+  };
+}
 
 const CompanyPanelItems = [
   {
@@ -74,8 +95,8 @@ const CompanyPanelItems = [
       { id: "company/punch-logs", label: "Employees Punch logs" },
       { id: "company/overtime-requests", label: "Employees Overtime Requests" },
       { id: "company/leave-requests", label: "Employees Leave Requests" },
-      // { id: "company/contest-requests", label: "Employee Requests", hasPendingCount: true },
       { id: "company/contest-requests", label: "Employee Requests" },
+      { id: "company/cutoff-periods", label: "Employee Cutoff" },
     ],
   },
   {
@@ -111,11 +132,14 @@ const ReferralPanelItems = [
   },
 ];
 
+// ✅ UPDATED: Add payslip to free allowed routes
 const FREE_ALLOWED = new Set([
   "employee/punch",
   "employee/overtime",
   "employee/punch-logs",
   "employee/contest-requests",
+  "employee/payslip", // ✅ NEW: Free for employees
+  "employee/payroll", // ✅ Payroll Management (for admins)
   "company/punch-logs",
   "company/contest-requests",
   "company/deletion",
@@ -198,7 +222,6 @@ function SidebarSkeleton() {
 }
 
 function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle, pendingContestCount = 0 }) {
-  // Check if any child in this item has pending count
   const hasChildWithPendingCount = item.children.some(child => child.hasPendingCount);
   
   return (
@@ -367,7 +390,6 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
   
-  // Mock pending contest count - you can replace this with actual API call later
   const [pendingContestCount, setPendingContestCount] = useState(7);
   
   useEffect(() => {
@@ -397,7 +419,12 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
 
   const role = profileData?.user?.role || "employee";
   const roleLower = role.toLowerCase();
-  const features = applyPlanLock(EmployeePanelItems, plan);
+  
+  // ✅ NEW: Add payroll items based on role
+  const payrollItem = getPayrollItems(role);
+  const employeePanelWithPayroll = [...EmployeePanelItems, payrollItem];
+  
+  const features = applyPlanLock(employeePanelWithPayroll, plan); // ✅ UPDATED
   const settings = applyPlanLock(filterCompanyPanelByRole(CompanyPanelItems, roleLower), plan);
   const bizbuddy = getBizBuddyItems(role);
   const referral = ReferralPanelItems;

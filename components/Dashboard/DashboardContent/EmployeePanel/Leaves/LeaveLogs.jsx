@@ -894,9 +894,10 @@ export default function EmployeeLeaveRequests() {
                       <div className="text-sm text-muted-foreground py-4 text-center">No approvers available</div>
                     ) : (
                       approvers.map((a) => {
-                        const roleLabel = a.role === 'superadmin' ? 'Management' : 
-                                        a.role === 'admin' ? 'Management' : 
-                                        a.role === 'supervisor' ? 'Department Head' : a.role;
+                        // Show role badge for clarity
+                        const roleLabel = a.role === 'superadmin' ? 'Super Admin' : 
+                                        a.role === 'admin' ? 'Admin' : 
+                                        a.role === 'supervisor' ? 'Supervisor' : a.role;
                         return (
                           <SelectItem key={a.id} value={String(a.id)}>
                             <div className="flex items-center justify-between w-full gap-2">
@@ -913,13 +914,24 @@ export default function EmployeeLeaveRequests() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-orange-500" />
-                Start date <span className="text-orange-500">*</span>
-              </label>
-              <DateTimePicker value={start} onChange={(v) => { setStart(v); setErrors((e) => ({ ...e, start: undefined })); }} placeholder="Select start" />
-              {errors.start && <p className="text-red-500 text-xs flex items-center gap-1"><AlertCircle className="h-3 w-3" />{errors.start}</p>}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-orange-500" />
+                  Start date <span className="text-orange-500">*</span>
+                </label>
+                <DateTimePicker value={start} onChange={(v) => { setStart(v); setErrors((e) => ({ ...e, start: undefined })); }} placeholder="Select start" />
+                {errors.start && <p className="text-red-500 text-xs flex items-center gap-1"><AlertCircle className="h-3 w-3" />{errors.start}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-orange-500" />
+                  End date <span className="text-orange-500">*</span>
+                </label>
+                <DateTimePicker value={end} onChange={(v) => { setEnd(v); setErrors((e) => ({ ...e, end: undefined })); }} placeholder="Select end" />
+                {errors.end && <p className="text-red-500 text-xs flex items-center gap-1"><AlertCircle className="h-3 w-3" />{errors.end}</p>}
+              </div>
             </div>
 
             <div className="space-y-2">
