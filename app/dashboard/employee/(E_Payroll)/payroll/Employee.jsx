@@ -368,7 +368,7 @@ const Employee = () => {
   // ============================================
   return (
     <>
-      <Toaster position="top-right" richColors />
+      <Toaster position="top-center" richColors />
       
       <div className="grid grid-cols-12 gap-6 p-6">
         {/* Left Sidebar - Employee List */}
