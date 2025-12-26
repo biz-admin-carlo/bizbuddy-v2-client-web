@@ -29,7 +29,7 @@ const Payroll = () => {
     current: 0,
     total: 0,
     employeeName: '',
-    status: '', // 'fetching', 'processing', 'done'
+    status: '',
   });
 
   // Track if hours data has been loaded from API
@@ -52,8 +52,11 @@ const Payroll = () => {
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
-  // Pay date (date of generation - when PROCESS is clicked)
+  // Pay date
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // View mode: 'card' or 'list'
+  const [viewMode, setViewMode] = useState('card');
 
   // Hours Breakdown Modal
   const [hoursBreakdownEmployee, setHoursBreakdownEmployee] = useState(null);
@@ -105,23 +108,19 @@ const Payroll = () => {
         const initialHoursData = {};
 
         empData.forEach((emp) => {
-          // Initialize earnings (based on earning types)
           const earnings = {};
           etData.forEach((et) => {
             if (et.calculationType === 'flat') {
-              // For salary employees, pre-fill salary earning
               if (et.code === 'salary' && emp.payrollDetails.payType === 'salary') {
                 earnings[et.id] = emp.payrollDetails.payRate.toString();
               } else {
                 earnings[et.id] = '';
               }
             } else {
-              // Hours-based: will be filled from API
               earnings[et.id] = '';
             }
           });
 
-          // Initialize deductions
           const deductions = {};
           dtData.forEach((dt) => {
             deductions[dt.id] = '';
@@ -132,7 +131,6 @@ const Payroll = () => {
             deductions,
           };
 
-          // Initialize empty hours data (will be populated by Transfer)
           initialHoursData[emp.id] = {
             regularHours: 0,
             overtimeHours: 0,
@@ -142,13 +140,12 @@ const Payroll = () => {
 
         setPayrollData(initialPayrollData);
         setHoursData(initialHoursData);
-        setHoursDataLoaded(false); // Reset when data is reloaded
+        setHoursDataLoaded(false);
 
-        // Set default date range (current pay period - biweekly example)
         const today = new Date();
         const payTo = new Date(today);
         const payFrom = new Date(today);
-        payFrom.setDate(payFrom.getDate() - 13); // 2 weeks ago
+        payFrom.setDate(payFrom.getDate() - 13);
 
         setDateRange({
           payFrom: payFrom.toISOString().split('T')[0],
@@ -170,7 +167,6 @@ const Payroll = () => {
   // ==================== TRANSFER (IMPORT CLOCK HOURS) ====================
 
   const handleTransfer = async () => {
-    // Validation
     if (!dateRange.payFrom || !dateRange.payTo) {
       toast.error('Please select both Pay From and Pay To dates');
       return;
@@ -193,10 +189,8 @@ const Payroll = () => {
         status: 'fetching',
       });
 
-      // Simulate a small delay for UX
       await new Promise(resolve => setTimeout(resolve, 300));
 
-      // Call the import-clock-hours API
       setTransferProgress(prev => ({
         ...prev,
         employeeName: 'Fetching clock hours from server...',
@@ -222,13 +216,11 @@ const Payroll = () => {
       if (data.success) {
         const { employees: clockData, summary } = data.data;
 
-        // Process each employee with visual feedback
         const newHoursData = { ...hoursData };
         
         for (let i = 0; i < clockData.length; i++) {
           const empClock = clockData[i];
           
-          // Update progress
           setTransferProgress({
             current: i + 1,
             total: clockData.length,
@@ -236,15 +228,12 @@ const Payroll = () => {
             status: 'processing',
           });
 
-          // Small delay for visual feedback
           await new Promise(resolve => setTimeout(resolve, 100));
 
-          // Update hours data for this employee
           newHoursData[empClock.userId] = {
             regularHours: empClock.regularHours || 0,
             overtimeHours: empClock.approvedOvertimeHours || 0,
             isFinalClock: !empClock.hasActiveClockIn,
-            // Additional info for display
             totalRawClockedHours: empClock.totalRawClockedHours || 0,
             totalBreakDeductions: empClock.totalBreakDeductions || 0,
             totalScheduledHours: empClock.totalScheduledHours || 0,
@@ -252,7 +241,6 @@ const Payroll = () => {
             hasActiveClockIn: empClock.hasActiveClockIn || false,
             hasPendingOT: empClock.hasPendingOT || false,
             pendingOTCount: empClock.pendingOTCount || 0,
-            // Attendance tracking (new)
             tardyMinutes: empClock.tardyMinutes || 0,
             tardyCount: empClock.tardyCount || 0,
             undertimeMinutes: empClock.undertimeMinutes || 0,
@@ -265,18 +253,15 @@ const Payroll = () => {
         setHoursData(newHoursData);
         setHoursDataLoaded(true);
 
-        // Update progress to done
         setTransferProgress(prev => ({
           ...prev,
           status: 'done',
           employeeName: 'Complete!',
         }));
 
-        // Show success with summary
         const successMessage = `Imported ${summary.totalEmployees} employees: ${summary.totalRegularHours} regular hrs, ${summary.totalOvertimeHours} OT hrs`;
         toast.success(successMessage);
 
-        // Show warnings if any
         if (summary.employeesWithActiveClockIn > 0) {
           toast.warning(`${summary.employeesWithActiveClockIn} employee(s) still clocked in`);
         }
@@ -284,7 +269,6 @@ const Payroll = () => {
           toast.info(`${summary.employeesWithPendingOT} employee(s) have pending OT requests`);
         }
 
-        // Log summary to console
         console.log('═══════════════════════════════════════════════════════════════');
         console.log('                    CLOCK HOURS IMPORTED                        ');
         console.log('═══════════════════════════════════════════════════════════════');
@@ -299,7 +283,6 @@ const Payroll = () => {
       toast.error(errorMessage);
       console.error('Transfer error:', err);
     } finally {
-      // Small delay before hiding the modal
       await new Promise(resolve => setTimeout(resolve, 500));
       setTransferLoading(false);
       setTransferProgress({
@@ -334,31 +317,24 @@ const Payroll = () => {
 
   // ==================== CALCULATION FUNCTIONS ====================
 
-  /**
-   * Calculate earning value based on type
-   */
   const calculateEarningValue = (employee, earningType, inputValue, hoursInput) => {
     const payRate = parseDecimal(employee.payrollDetails?.payRate);
     const employeeEarningRates = employee.earningRates || {};
 
     switch (earningType.calculationType) {
       case 'flat':
-        // Direct dollar amount
         return round2(parseDecimal(inputValue));
 
       case 'hourly':
-        // Hours × payRate
         const hours = parseDecimal(hoursInput);
         return round2(hours * payRate);
 
       case 'hourly_ot':
-        // Hours × payRate × otMultiplier
         const otHours = parseDecimal(hoursInput);
         const otMultiplier = earningType.otMultiplier || 1.5;
         return round2(otHours * payRate * otMultiplier);
 
       case 'custom_rate':
-        // Units × employee's specific rate
         const units = parseDecimal(hoursInput);
         const customRate = parseDecimal(employeeEarningRates[earningType.id]);
         return round2(units * customRate);
@@ -368,9 +344,6 @@ const Payroll = () => {
     }
   };
 
-  /**
-   * Calculate all values for a single employee row
-   */
   const calculateRowValues = (employee) => {
     const empPayroll = payrollData[employee.id] || { earnings: {}, deductions: {} };
     const empHours = hoursData[employee.id] || { regularHours: 0, overtimeHours: 0 };
@@ -378,12 +351,10 @@ const Payroll = () => {
     let grossEarnings = 0;
     const earningsBreakdown = {};
 
-    // Calculate each earning
     earningTypes.forEach((et) => {
       let value = 0;
       const inputValue = empPayroll.earnings[et.id] || '';
 
-      // Determine what hours value to use
       let hoursValue = inputValue;
       if (et.calculationType === 'hourly' && et.code === 'regular_hours') {
         hoursValue = empHours.regularHours?.toString() || inputValue;
@@ -396,7 +367,6 @@ const Payroll = () => {
       grossEarnings += value;
     });
 
-    // Calculate deductions
     let totalDeductions = 0;
     const deductionsBreakdown = {};
 
@@ -406,7 +376,6 @@ const Payroll = () => {
       totalDeductions += value;
     });
 
-    // Calculate net pay
     const netPay = round2(grossEarnings - totalDeductions);
 
     return {
@@ -416,6 +385,37 @@ const Payroll = () => {
       earningsBreakdown,
       deductionsBreakdown,
       isNegative: netPay < 0,
+    };
+  };
+
+  const calculateTaxes = (employee, grossEarnings) => {
+    const taxableGross = grossEarnings;
+    
+    const ficaRate = 0.062;
+    const ficaWageBase = 168600;
+    const fica = round2(Math.min(taxableGross, ficaWageBase) * ficaRate);
+    
+    const medicareRate = 0.0145;
+    const medicare = round2(taxableGross * medicareRate);
+    
+    const sdiRate = 0.011;
+    const sdi = round2(taxableGross * sdiRate);
+    
+    const federalTax = round2(taxableGross * 0.12);
+    
+    const stateTax = round2(taxableGross * 0.05);
+    
+    const calSaversRate = employee.payrollDetails?.withCalSavers ? 0.05 : 0;
+    const calSavers = round2(taxableGross * calSaversRate);
+    
+    return {
+      fica,
+      medicare,
+      sdi,
+      federalTax,
+      stateTax,
+      calSavers,
+      totalTaxes: round2(fica + medicare + sdi + federalTax + stateTax + calSavers),
     };
   };
 
@@ -447,19 +447,16 @@ const Payroll = () => {
     }));
   };
 
-  // Open Employee Detail Modal
   const openEmployeeDetail = (employee) => {
     setSelectedEmployee(employee);
     setIsDetailModalOpen(true);
   };
 
-  // Close Employee Detail Modal
   const closeEmployeeDetail = () => {
     setSelectedEmployee(null);
     setIsDetailModalOpen(false);
   };
 
-  // Open Hours Breakdown Modal
   const openHoursBreakdown = async (employee) => {
     setHoursBreakdownEmployee(employee);
     setIsHoursBreakdownOpen(true);
@@ -494,59 +491,95 @@ const Payroll = () => {
     }
   };
 
-  // Close Hours Breakdown Modal
   const closeHoursBreakdown = () => {
     setHoursBreakdownEmployee(null);
     setIsHoursBreakdownOpen(false);
     setHoursBreakdownData(null);
   };
 
-  // Calculate taxes for an employee (placeholder - will implement full logic later)
-  const calculateTaxes = (employee, grossEarnings) => {
-    const payRate = parseDecimal(employee.payrollDetails?.payRate);
-    const empHours = hoursData[employee.id] || {};
-    
-    // Taxable gross (may differ based on pre-tax deductions)
-    const taxableGross = grossEarnings;
-    
-    // FICA (Social Security): 6.2% up to wage base ($168,600 for 2024)
-    const ficaRate = 0.062;
-    const ficaWageBase = 168600;
-    const fica = round2(Math.min(taxableGross, ficaWageBase) * ficaRate);
-    
-    // Medicare: 1.45% (no wage base limit)
-    const medicareRate = 0.0145;
-    const medicare = round2(taxableGross * medicareRate);
-    
-    // SDI (CA State Disability Insurance): ~1.1%
-    const sdiRate = 0.011;
-    const sdi = round2(taxableGross * sdiRate);
-    
-    // Federal Income Tax (simplified - will use IRS 15-T tables later)
-    // For now, using a simplified progressive estimate
-    const federalTax = round2(taxableGross * 0.12); // Placeholder 12%
-    
-    // State Income Tax (CA - simplified)
-    // Will implement CA withholding tables later
-    const stateTax = round2(taxableGross * 0.05); // Placeholder 5%
-    
-    // CalSavers (if enabled for employee)
-    const calSaversRate = employee.payrollDetails?.withCalSavers ? 0.05 : 0;
-    const calSavers = round2(taxableGross * calSaversRate);
-    
-    return {
-      fica,
-      medicare,
-      sdi,
-      federalTax,
-      stateTax,
-      calSavers,
-      totalTaxes: round2(fica + medicare + sdi + federalTax + stateTax + calSavers),
-    };
+  const handleGeneratePDF = async () => {
+    if (!hoursDataLoaded) {
+      toast.error('Please transfer clock hours first before generating PDF report');
+      return;
+    }
+  
+    const employeesWithPayRate = employees.filter(
+      emp => emp.payrollDetails?.payRate && parseFloat(emp.payrollDetails?.payRate) > 0
+    );
+  
+    const employeesWithoutPayRate = employees.filter(
+      emp => !emp.payrollDetails?.payRate || parseFloat(emp.payrollDetails?.payRate) <= 0
+    );
+  
+    if (employeesWithPayRate.length === 0) {
+      toast.error('Cannot generate PDF: No employees have pay rates configured');
+      return;
+    }
+  
+    if (employeesWithoutPayRate.length > 0) {
+      const names = employeesWithoutPayRate.map(emp => emp.name).join(', ');
+      toast.warning(
+        `⚠️ ${employeesWithoutPayRate.length} employee(s) excluded (no pay rate): ${names}`,
+        { duration: 5000 }
+      );
+    }
+  
+    try {
+      toast.info('Generating PDF report...');
+  
+      const pdfData = {
+        payrollData,
+        dateRange: {
+          ...dateRange,
+          payDate,
+        },
+        employees: employeesWithPayRate.map(emp => ({
+          userId: emp.id,
+          employeeName: emp.name,
+          position: emp.position,
+          payType: emp.payrollDetails?.payType || 'hourly',
+        })),
+        earningTypes: earningTypes.filter(et => et.enabled !== false),
+        deductionTypes: deductionTypes.filter(dt => dt.enabled !== false),
+        checkNumber,
+        excludedEmployees: employeesWithoutPayRate.map(emp => emp.name),
+      };
+  
+      const response = await fetch(
+        `${API_URL}/api/test/payroll-system/generate-pdf-report`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(pdfData),
+        }
+      );
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to generate PDF');
+      }
+  
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `payroll-report-${dateRange.payFrom}-${dateRange.payTo}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+  
+      toast.success(`PDF generated! Included ${employeesWithPayRate.length} employee(s)`);
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+      toast.error(err.message || 'Failed to generate PDF report');
+    }
   };
 
   const handleReset = () => {
-    // Re-initialize all payroll data
     const resetPayrollData = {};
     const resetHoursData = {};
 
@@ -580,7 +613,6 @@ const Payroll = () => {
   };
 
   const handleProcess = () => {
-    // Check for employees without pay rates
     const employeesWithoutPayRate = employees.filter(
       emp => !emp.payrollDetails?.payRate || parseFloat(emp.payrollDetails?.payRate) <= 0
     );
@@ -601,6 +633,7 @@ const Payroll = () => {
     console.log('\n');
 
     let grandTotalGross = 0;
+    let grandTotalTaxes = 0;
     let grandTotalDeductions = 0;
     let grandTotalNet = 0;
     const warnings = [];
@@ -608,9 +641,9 @@ const Payroll = () => {
 
     employees.forEach((emp) => {
       const calculated = calculateRowValues(emp);
-      const empHours = hoursData[emp.id] || {};
+      const taxes = calculateTaxes(emp, calculated.grossEarnings);
+      const netAfterTax = round2(calculated.netPay - taxes.totalTaxes);
 
-      // Skip employees with no earnings
       if (calculated.grossEarnings === 0) {
         warnings.push({
           employee: emp.name,
@@ -626,28 +659,25 @@ const Payroll = () => {
       console.log(`   Pay Rate: ${formatCurrency(emp.payrollDetails.payRate)}`);
       console.log('');
 
-      // Log earnings
       console.log('   📈 EARNINGS:');
       earningTypes.forEach((et) => {
         const value = calculated.earningsBreakdown[et.id];
         if (value > 0) {
-          let detail = '';
-          if (et.calculationType === 'hourly' && et.code === 'regular_hours') {
-            detail = ` (${empHours.regularHours} hrs × ${formatCurrency(emp.payrollDetails.payRate)})`;
-          } else if (et.calculationType === 'hourly_ot') {
-            detail = ` (${empHours.overtimeHours} hrs × ${formatCurrency(emp.payrollDetails.payRate)} × ${et.otMultiplier})`;
-          } else if (et.calculationType === 'custom_rate') {
-            const rate = emp.earningRates[et.id] || 0;
-            detail = ` (units × ${formatCurrency(rate)})`;
-          }
-          console.log(`      • ${et.label}: ${formatCurrency(value)}${detail}`);
+          console.log(`      • ${et.label}: ${formatCurrency(value)}`);
         }
       });
-      console.log(`      ────────────────────────────`);
       console.log(`      GROSS EARNINGS: ${formatCurrency(calculated.grossEarnings)}`);
       console.log('');
 
-      // Log deductions
+      console.log('   💳 TAXES:');
+      console.log(`      • Federal: ${formatCurrency(taxes.federalTax)}`);
+      console.log(`      • State: ${formatCurrency(taxes.stateTax)}`);
+      console.log(`      • FICA: ${formatCurrency(taxes.fica)}`);
+      console.log(`      • Medicare: ${formatCurrency(taxes.medicare)}`);
+      console.log(`      • SDI: ${formatCurrency(taxes.sdi)}`);
+      console.log(`      TOTAL TAXES: ${formatCurrency(taxes.totalTaxes)}`);
+      console.log('');
+
       if (calculated.totalDeductions > 0) {
         console.log('   📉 DEDUCTIONS:');
         deductionTypes.forEach((dt) => {
@@ -656,47 +686,46 @@ const Payroll = () => {
             console.log(`      • ${dt.label}: ${formatCurrency(value)}`);
           }
         });
-        console.log(`      ────────────────────────────`);
         console.log(`      TOTAL DEDUCTIONS: ${formatCurrency(calculated.totalDeductions)}`);
         console.log('');
       }
 
-      // Net pay
-      const netPayStyle = calculated.isNegative ? '⚠️ ' : '✅ ';
-      console.log(`   ${netPayStyle}NET PAY: ${formatCurrency(calculated.netPay)}`);
+      const netPayStyle = netAfterTax < 0 ? '⚠️ ' : '✅ ';
+      console.log(`   ${netPayStyle}NET PAY: ${formatCurrency(netAfterTax)}`);
 
-      if (calculated.isNegative) {
+      if (netAfterTax < 0) {
         warnings.push({
           employee: emp.name,
           type: 'NEGATIVE_NET',
-          message: `Negative net pay: ${formatCurrency(calculated.netPay)}`,
+          message: `Negative net pay: ${formatCurrency(netAfterTax)}`,
         });
       }
 
       grandTotalGross += calculated.grossEarnings;
+      grandTotalTaxes += taxes.totalTaxes;
       grandTotalDeductions += calculated.totalDeductions;
-      grandTotalNet += calculated.netPay;
+      grandTotalNet += netAfterTax;
 
       processedEmployees.push({
         id: emp.id,
         name: emp.name,
         payType: emp.payrollDetails.payType,
         ...calculated,
+        taxes: taxes.totalTaxes,
       });
     });
 
-    // Summary
     console.log('\n');
     console.log('═══════════════════════════════════════════════════════════════');
     console.log('                         GRAND TOTALS                           ');
     console.log('═══════════════════════════════════════════════════════════════');
     console.log(`   Total Gross Earnings:  ${formatCurrency(grandTotalGross)}`);
+    console.log(`   Total Taxes:           ${formatCurrency(grandTotalTaxes)}`);
     console.log(`   Total Deductions:      ${formatCurrency(grandTotalDeductions)}`);
     console.log(`   Total Net Pay:         ${formatCurrency(grandTotalNet)}`);
     console.log(`   Employees Processed:   ${processedEmployees.length}`);
     console.log('═══════════════════════════════════════════════════════════════');
 
-    // Warnings
     if (warnings.length > 0) {
       console.log('\n');
       console.log('⚠️  WARNINGS:');
@@ -708,7 +737,6 @@ const Payroll = () => {
       toast.success(`Payroll processed successfully! ${processedEmployees.length} employees.`);
     }
 
-    // Log raw data for debugging
     console.log('\n');
     console.log('📊 RAW DATA (for API integration):');
     console.log({
@@ -717,46 +745,17 @@ const Payroll = () => {
       employees: processedEmployees,
       totals: {
         grossEarnings: round2(grandTotalGross),
+        totalTaxes: round2(grandTotalTaxes),
         totalDeductions: round2(grandTotalDeductions),
         netPay: round2(grandTotalNet),
       },
     });
   };
 
-  // ==================== RENDER HELPERS ====================
-
-  /**
-   * Determine if a column should be disabled for an employee
-   */
-  const isColumnDisabled = (employee, earningType) => {
-    const payType = employee.payrollDetails?.payType;
-
-    // Salary employees: disable hours-based columns
-    if (payType === 'salary') {
-      if (['hourly', 'hourly_ot'].includes(earningType.calculationType)) {
-        return true;
-      }
-    }
-
-    // Hours from timekeeping are locked when data is loaded
-    if (earningType.code === 'regular_hours' || earningType.code === 'overtime') {
-      const empHours = hoursData[employee.id];
-      if (hoursDataLoaded && empHours?.isFinalClock) {
-        return true;
-      }
-    }
-
-    return false;
-  };
-
-  /**
-   * Get input value for an earning type
-   */
   const getEarningInputValue = (employee, earningType) => {
     const empPayroll = payrollData[employee.id] || { earnings: {} };
     const empHours = hoursData[employee.id] || {};
 
-    // For locked hours, show the hours data
     if (hoursDataLoaded) {
       if (earningType.code === 'regular_hours' && empHours.isFinalClock) {
         return empHours.regularHours?.toString() || '0';
@@ -769,21 +768,23 @@ const Payroll = () => {
     return empPayroll.earnings[earningType.id] || '';
   };
 
-  /**
-   * Get placeholder text for earning input
-   */
-  const getEarningPlaceholder = (earningType) => {
-    switch (earningType.calculationType) {
-      case 'flat':
-        return '0.00';
-      case 'hourly':
-      case 'hourly_ot':
-        return 'Hours';
-      case 'custom_rate':
-        return 'Units';
-      default:
-        return '0.00';
+  const isColumnDisabled = (employee, earningType) => {
+    const payType = employee.payrollDetails?.payType;
+
+    if (payType === 'salary') {
+      if (['hourly', 'hourly_ot'].includes(earningType.calculationType)) {
+        return true;
+      }
     }
+
+    if (earningType.code === 'regular_hours' || earningType.code === 'overtime') {
+      const empHours = hoursData[employee.id];
+      if (hoursDataLoaded && empHours?.isFinalClock) {
+        return true;
+      }
+    }
+
+    return false;
   };
 
   // ==================== LOADING & ERROR STATES ====================
@@ -821,6 +822,577 @@ const Payroll = () => {
       </div>
     </div>
   );
+
+  // ==================== TRANSFER LOADING MODAL ====================
+
+  const TransferLoadingModal = () => {
+    if (!transferLoading) return null;
+
+    const progressPercent = transferProgress.total > 0 
+      ? Math.round((transferProgress.current / transferProgress.total) * 100) 
+      : 0;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+        
+        <div className="relative bg-white rounded-xl shadow-2xl p-8 w-full max-w-md mx-4 transform transition-all">
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-orange-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-gray-900">Importing Clock Hours</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              {dateRange.payFrom} to {dateRange.payTo}
+            </p>
+          </div>
+
+          <div className="mb-6">
+            <div className="flex justify-between text-sm text-gray-600 mb-2">
+              <span>Progress</span>
+              <span>{transferProgress.current} of {transferProgress.total}</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+              <div 
+                className="bg-gradient-to-r from-orange-500 to-orange-600 h-3 rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${progressPercent}%` }}
+              ></div>
+            </div>
+          </div>
+
+          <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              {transferProgress.status === 'done' ? (
+                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+              ) : (
+                <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <div className="w-5 h-5 border-2 border-orange-600 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">
+                  {transferProgress.status === 'fetching' && 'Fetching data...'}
+                  {transferProgress.status === 'processing' && 'Processing employee'}
+                  {transferProgress.status === 'done' && 'Complete!'}
+                </p>
+                <p className="text-sm font-semibold text-gray-900 truncate">
+                  {transferProgress.employeeName}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-center text-xs text-gray-400 mt-4">
+            Please wait while we fetch clock hours from the timekeeping system...
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  // ==================== HOURS BREAKDOWN MODAL ====================
+
+  const HoursBreakdownModal = () => {
+    if (!isHoursBreakdownOpen || !hoursBreakdownEmployee) return null;
+
+    const employee = hoursBreakdownEmployee;
+    const empHours = hoursData[employee.id] || {};
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto">
+        <div 
+          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          onClick={closeHoursBreakdown}
+        ></div>
+        
+        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl mx-4 my-8 max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-4 rounded-t-xl flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold">{employee.name} - Hours Breakdown</h3>
+                  <p className="text-sm text-blue-100">
+                    {dateRange.payFrom} to {dateRange.payTo}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={closeHoursBreakdown}
+                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-gray-50 px-6 py-4 border-b grid grid-cols-5 gap-4 flex-shrink-0">
+            <div className="text-center">
+              <p className="text-xs text-gray-500 uppercase">Regular Hours</p>
+              <p className="text-lg font-bold text-green-600">{(empHours.regularHours || 0).toFixed(2)}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-gray-500 uppercase">Overtime</p>
+              <p className="text-lg font-bold text-orange-600">{(empHours.overtimeHours || 0).toFixed(2)}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-gray-500 uppercase">Days Worked</p>
+              <p className="text-lg font-bold text-blue-600">{empHours.daysWorked || 0}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-gray-500 uppercase">Tardy</p>
+              <p className={`text-lg font-bold ${empHours.tardyCount > 0 ? 'text-yellow-600' : 'text-gray-400'}`}>
+                {empHours.tardyCount || 0}x
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-gray-500 uppercase">Undertime</p>
+              <p className={`text-lg font-bold ${empHours.undertimeCount > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                {empHours.undertimeCount || 0}x
+              </p>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-6">
+            {hoursBreakdownLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 border-4 border-blue-200 rounded-full border-t-blue-600 animate-spin"></div>
+                  <span className="text-gray-600">Loading daily breakdown...</span>
+                </div>
+              </div>
+            ) : hoursBreakdownData ? (
+              <div className="space-y-4">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-700">Date</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-700">Day</th>
+                        <th className="px-4 py-3 text-center font-semibold text-gray-700">Regular</th>
+                        <th className="px-4 py-3 text-center font-semibold text-gray-700">OT</th>
+                        <th className="px-4 py-3 text-center font-semibold text-gray-700">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {hoursBreakdownData.dailyBreakdown && hoursBreakdownData.dailyBreakdown.length > 0 ? (
+                        hoursBreakdownData.dailyBreakdown.map((day, index) => (
+                          <tr 
+                            key={day.date} 
+                            className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50/50 transition-colors`}
+                          >
+                            <td className="px-4 py-3 font-medium text-gray-900">{day.date}</td>
+                            <td className="px-4 py-3 text-gray-600">{day.dayOfWeek}</td>
+                            <td className="px-4 py-3 text-center font-semibold text-green-600">
+                              {day.regularHours?.toFixed(2) || '0.00'} hrs
+                            </td>
+                            <td className="px-4 py-3 text-center font-semibold text-orange-600">
+                              {day.approvedOTHours > 0 ? `${day.approvedOTHours.toFixed(2)} hrs` : '—'}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <div className="flex items-center justify-center gap-1 flex-wrap">
+                                {day.status === 'no_log' ? (
+                                  <span className="text-xs text-gray-400">No Clock</span>
+                                ) : day.status === 'active' ? (
+                                  <span className="text-xs text-yellow-600 bg-yellow-100 px-2 py-1 rounded">Active</span>
+                                ) : (
+                                  <>
+                                    {day.attendance?.isTardy && (
+                                      <span className="text-xs text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded" title={`${day.attendance.tardyMinutes} min late`}>
+                                        Tardy {day.attendance.tardyMinutes}m
+                                      </span>
+                                    )}
+                                    {day.attendance?.isUndertime && (
+                                      <span className="text-xs text-red-700 bg-red-100 px-2 py-0.5 rounded" title={`${day.attendance.undertimeMinutes} min early`}>
+                                        Under {day.attendance.undertimeMinutes}m
+                                      </span>
+                                    )}
+                                    {!day.attendance?.isTardy && !day.attendance?.isUndertime && day.status === 'completed' && (
+                                      <span className="text-xs text-green-600">✓ OK</span>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                            No clock data found for this period
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {hoursBreakdownData.summary && (
+                  <div className="mt-6 grid grid-cols-3 gap-4">
+                    <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                      <h4 className="text-xs font-semibold text-green-800 uppercase mb-2">Hours Summary</h4>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Regular:</span>
+                          <span className="font-semibold text-green-700">{hoursBreakdownData.summary.regularHours?.toFixed(2)} hrs</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Approved OT:</span>
+                          <span className="font-semibold text-orange-700">{hoursBreakdownData.summary.approvedOvertimeHours?.toFixed(2)} hrs</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Pending OT:</span>
+                          <span className="font-semibold text-yellow-700">{hoursBreakdownData.summary.pendingOvertimeHours?.toFixed(2)} hrs</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                      <h4 className="text-xs font-semibold text-blue-800 uppercase mb-2">Raw Data</h4>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Raw Clocked:</span>
+                          <span className="font-semibold">{hoursBreakdownData.summary.totalRawClockedHours?.toFixed(2)} hrs</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Scheduled:</span>
+                          <span className="font-semibold">{hoursBreakdownData.summary.totalScheduledHours?.toFixed(2)} hrs</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Break Deductions:</span>
+                          <span className="font-semibold text-red-600">-{hoursBreakdownData.summary.totalBreakDeductions?.toFixed(2)} hrs</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                      <h4 className="text-xs font-semibold text-yellow-800 uppercase mb-2">Attendance</h4>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Days Worked:</span>
+                          <span className="font-semibold">{hoursBreakdownData.summary.daysWorked}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Tardy:</span>
+                          <span className={`font-semibold ${hoursBreakdownData.summary.tardyCount > 0 ? 'text-yellow-700' : 'text-gray-400'}`}>
+                            {hoursBreakdownData.summary.tardyCount}x ({hoursBreakdownData.summary.tardyMinutes} min)
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Undertime:</span>
+                          <span className={`font-semibold ${hoursBreakdownData.summary.undertimeCount > 0 ? 'text-red-700' : 'text-gray-400'}`}>
+                            {hoursBreakdownData.summary.undertimeCount}x ({hoursBreakdownData.summary.undertimeMinutes} min)
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-500">
+                No data available
+              </div>
+            )}
+          </div>
+
+          <div className="bg-gray-100 px-6 py-3 rounded-b-xl flex justify-end flex-shrink-0">
+            <button
+              onClick={closeHoursBreakdown}
+              className="px-6 py-2 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ==================== EMPLOYEE DETAIL MODAL ====================
+
+  const EmployeeDetailModal = () => {
+    if (!isDetailModalOpen || !selectedEmployee) return null;
+
+    const employee = selectedEmployee;
+    const calculated = calculateRowValues(employee);
+    const taxes = calculateTaxes(employee, calculated.grossEarnings);
+    const isSalary = employee.payrollDetails?.payType === 'salary';
+
+    const employeeIndex = employees.findIndex(e => e.id === employee.id);
+    const employeeCheckNumber = parseInt(checkNumber) + employeeIndex;
+
+    const netPayAfterTaxes = round2(calculated.netPay - taxes.totalTaxes);
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto">
+        <div 
+          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          onClick={closeEmployeeDetail}
+        ></div>
+        
+        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl mx-4 my-8 max-h-[90vh] overflow-y-auto">
+          <div className="sticky top-0 bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-4 rounded-t-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold">{employee.name}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-sm text-orange-100">{employee.position || 'No position'}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      isSalary ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+                    }`}>
+                      {isSalary ? 'SALARY' : 'HOURLY'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={closeEmployeeDetail}
+                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-gray-50 px-6 py-3 border-b grid grid-cols-4 gap-4">
+            <div>
+              <label className="text-xs text-gray-500 uppercase tracking-wide">Pay Date</label>
+              <p className="text-sm font-semibold text-gray-900">{payDate}</p>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 uppercase tracking-wide">Pay From</label>
+              <p className="text-sm font-semibold text-gray-900">{dateRange.payFrom}</p>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 uppercase tracking-wide">Pay To</label>
+              <p className="text-sm font-semibold text-gray-900">{dateRange.payTo}</p>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 uppercase tracking-wide">Check Number</label>
+              <p className="text-sm font-semibold text-gray-900">#{employeeCheckNumber}</p>
+            </div>
+          </div>
+
+          <div className="p-6 grid grid-cols-3 gap-6">
+            {/* EARNINGS */}
+            <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+              <h4 className="text-sm font-bold text-green-800 uppercase tracking-wide mb-4 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Earnings
+              </h4>
+              
+              <div className="space-y-3">
+                {earningTypes.filter(et => et.enabled !== false).map((et) => {
+                  const value = calculated.earningsBreakdown[et.id] || 0;
+                  const inputValue = getEarningInputValue(employee, et);
+                  const isHoursType = ['hourly', 'hourly_ot'].includes(et.calculationType);
+                  
+                  return (
+                    <div key={et.id} className="flex justify-between items-center">
+                      <div>
+                        <span className="text-sm text-gray-700">{et.label}</span>
+                        {isHoursType && inputValue && parseFloat(inputValue) > 0 && (
+                          <span className="text-xs text-gray-500 ml-1">
+                            ({inputValue} hrs)
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-sm font-semibold ${value > 0 ? 'text-green-700' : 'text-gray-400'}`}>
+                        {formatCurrency(value)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              
+              <div className="mt-4 pt-4 border-t border-green-300">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-bold text-green-800">GROSS PAY</span>
+                  <span className="text-lg font-bold text-green-700">
+                    {formatCurrency(calculated.grossEarnings)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* TAXES */}
+            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+              <h4 className="text-sm font-bold text-blue-800 uppercase tracking-wide mb-4 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z" />
+                </svg>
+                Taxes
+              </h4>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="text-sm text-gray-700">Federal Income Tax</span>
+                    <span className="text-xs text-gray-400 ml-1">(Est.)</span>
+                  </div>
+                  <span className="text-sm font-semibold text-blue-700">
+                    {formatCurrency(taxes.federalTax)}
+                  </span>
+                </div>
+                
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="text-sm text-gray-700">State Income Tax</span>
+                    <span className="text-xs text-gray-400 ml-1">(CA)</span>
+                  </div>
+                  <span className="text-sm font-semibold text-blue-700">
+                    {formatCurrency(taxes.stateTax)}
+                  </span>
+                </div>
+                
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="text-sm text-gray-700">FICA</span>
+                    <span className="text-xs text-gray-400 ml-1">(6.2%)</span>
+                  </div>
+                  <span className="text-sm font-semibold text-blue-700">
+                    {formatCurrency(taxes.fica)}
+                  </span>
+                </div>
+                
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="text-sm text-gray-700">Medicare</span>
+                    <span className="text-xs text-gray-400 ml-1">(1.45%)</span>
+                  </div>
+                  <span className="text-sm font-semibold text-blue-700">
+                    {formatCurrency(taxes.medicare)}
+                  </span>
+                </div>
+                
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="text-sm text-gray-700">SDI</span>
+                    <span className="text-xs text-gray-400 ml-1">(1.1%)</span>
+                  </div>
+                  <span className="text-sm font-semibold text-blue-700">
+                    {formatCurrency(taxes.sdi)}
+                  </span>
+                </div>
+                
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="text-sm text-gray-700">CalSavers</span>
+                    {employee.payrollDetails?.withCalSavers ? (
+                      <span className="text-xs text-green-500 ml-1">(Enrolled)</span>
+                    ) : (
+                      <span className="text-xs text-gray-400 ml-1">(Not enrolled)</span>
+                    )}
+                  </div>
+                  <span className="text-sm font-semibold text-blue-700">
+                    {formatCurrency(taxes.calSavers)}
+                  </span>
+                </div>
+              </div>
+              
+              <div className="mt-4 pt-4 border-t border-blue-300">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-bold text-blue-800">TOTAL TAXES</span>
+                  <span className="text-lg font-bold text-blue-700">
+                    {formatCurrency(taxes.totalTaxes)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* DEDUCTIONS */}
+            <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+              <h4 className="text-sm font-bold text-red-800 uppercase tracking-wide mb-4 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Deductions
+              </h4>
+              
+              <div className="space-y-3">
+                {deductionTypes.filter(dt => dt.enabled !== false).map((dt) => {
+                  const value = calculated.deductionsBreakdown[dt.id] || 0;
+                  
+                  return (
+                    <div key={dt.id} className="flex justify-between items-center">
+                      <div>
+                        <span className="text-sm text-gray-700">{dt.label}</span>
+                        <span className={`text-xs ml-1 ${dt.isPreTax ? 'text-green-500' : 'text-gray-400'}`}>
+                          ({dt.isPreTax ? 'Pre-Tax' : 'Post-Tax'})
+                        </span>
+                      </div>
+                      <span className={`text-sm font-semibold ${value > 0 ? 'text-red-700' : 'text-gray-400'}`}>
+                        {formatCurrency(value)}
+                      </span>
+                    </div>
+                  );
+                })}
+                
+                {deductionTypes.filter(dt => dt.enabled !== false).length === 0 && (
+                  <p className="text-sm text-gray-500 italic">No deductions configured</p>
+                )}
+              </div>
+              
+              <div className="mt-4 pt-4 border-t border-red-300">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-bold text-red-800">TOTAL DEDUCTIONS</span>
+                  <span className="text-lg font-bold text-red-700">
+                    {formatCurrency(calculated.totalDeductions)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer: Net Pay Summary */}
+          <div className="bg-gray-900 text-white px-6 py-4 rounded-b-xl">
+            <div className="grid grid-cols-3 gap-4 items-center">
+              <div className="text-center">
+                <p className="text-xs text-gray-400 uppercase">Gross Earnings</p>
+                <p className="text-lg font-bold text-green-400">{formatCurrency(calculated.grossEarnings)}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-gray-400 uppercase">Total Taxes + Deductions</p>
+                <p className="text-lg font-bold text-red-400">
+                  - {formatCurrency(taxes.totalTaxes + calculated.totalDeductions)}
+                </p>
+              </div>
+              <div className="text-center bg-white/10 rounded-lg py-2">
+                <p className="text-xs text-gray-300 uppercase">Net Pay</p>
+                <p className={`text-2xl font-bold ${netPayAfterTaxes < 0 ? 'text-red-400' : 'text-white'}`}>
+                  {formatCurrency(netPayAfterTaxes)}
+                  {netPayAfterTaxes < 0 && <span className="ml-1">⚠️</span>}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // ==================== HOURS TOOLTIP COMPONENT ====================
 
@@ -903,606 +1475,743 @@ const Payroll = () => {
     );
   };
 
-  // ==================== HOURS BREAKDOWN MODAL ====================
+  // ==================== ORIGINAL LIST/TABLE VIEW ====================
 
-  const HoursBreakdownModal = () => {
-    if (!isHoursBreakdownOpen || !hoursBreakdownEmployee) return null;
-
-    const employee = hoursBreakdownEmployee;
-    const empHours = hoursData[employee.id] || {};
+  const renderListView = () => {
+    const enabledEarningTypes = earningTypes.filter((et) => et.enabled !== false);
+    const enabledDeductionTypes = deductionTypes.filter((dt) => dt.enabled !== false);
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto">
-        {/* Backdrop */}
-        <div 
-          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-          onClick={closeHoursBreakdown}
-        ></div>
-        
-        {/* Modal */}
-        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl mx-4 my-8 max-h-[90vh] overflow-hidden flex flex-col">
-          {/* Header */}
-          <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-4 rounded-t-xl flex-shrink-0">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold">{employee.name} - Hours Breakdown</h3>
-                  <p className="text-sm text-blue-100">
-                    {dateRange.payFrom} to {dateRange.payTo}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={closeHoursBreakdown}
-                className="p-2 hover:bg-white/20 rounded-full transition-colors"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          </div>
+      <div className="overflow-x-auto">
+        <div className="inline-block min-w-full align-middle">
+          <div className="overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-100">
+                <tr>
+                  {/* Employee Name - Sticky */}
+                  <th className="sticky left-0 z-20 bg-gray-100 px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200 min-w-[180px]">
+                    Employee Name
+                  </th>
 
-          {/* Summary Bar */}
-          <div className="bg-gray-50 px-6 py-4 border-b grid grid-cols-5 gap-4 flex-shrink-0">
-            <div className="text-center">
-              <p className="text-xs text-gray-500 uppercase">Regular Hours</p>
-              <p className="text-lg font-bold text-green-600">{(empHours.regularHours || 0).toFixed(2)}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-gray-500 uppercase">Overtime</p>
-              <p className="text-lg font-bold text-orange-600">{(empHours.overtimeHours || 0).toFixed(2)}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-gray-500 uppercase">Days Worked</p>
-              <p className="text-lg font-bold text-blue-600">{empHours.daysWorked || 0}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-gray-500 uppercase">Tardy</p>
-              <p className={`text-lg font-bold ${empHours.tardyCount > 0 ? 'text-yellow-600' : 'text-gray-400'}`}>
-                {empHours.tardyCount || 0}x
-              </p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-gray-500 uppercase">Undertime</p>
-              <p className={`text-lg font-bold ${empHours.undertimeCount > 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                {empHours.undertimeCount || 0}x
-              </p>
-            </div>
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6">
-            {hoursBreakdownLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 border-4 border-blue-200 rounded-full border-t-blue-600 animate-spin"></div>
-                  <span className="text-gray-600">Loading daily breakdown...</span>
-                </div>
-              </div>
-            ) : hoursBreakdownData ? (
-              <div className="space-y-4">
-                {/* Daily Breakdown Table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-700">Date</th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-700">Day</th>
-                        <th className="px-4 py-3 text-center font-semibold text-gray-700">Scheduled</th>
-                        <th className="px-4 py-3 text-center font-semibold text-gray-700">Regular</th>
-                        <th className="px-4 py-3 text-center font-semibold text-gray-700">OT</th>
-                        <th className="px-4 py-3 text-center font-semibold text-gray-700">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {hoursBreakdownData.dailyBreakdown && hoursBreakdownData.dailyBreakdown.length > 0 ? (
-                        hoursBreakdownData.dailyBreakdown.map((day, index) => (
-                          <tr 
-                            key={day.date} 
-                            className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50/50 transition-colors`}
-                          >
-                            <td className="px-4 py-3 font-medium text-gray-900">{day.date}</td>
-                            <td className="px-4 py-3 text-gray-600">{day.dayOfWeek}</td>
-                            <td className="px-4 py-3 text-center">
-                              {day.noSchedule ? (
-                                <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">No Schedule</span>
-                              ) : (
-                                <span>{day.scheduledHours?.toFixed(2) || '0.00'} hrs</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-center font-semibold text-green-600">
-                              {day.regularHours?.toFixed(2) || '0.00'} hrs
-                            </td>
-                            <td className="px-4 py-3 text-center font-semibold text-orange-600">
-                              {day.approvedOTHours > 0 ? `${day.approvedOTHours.toFixed(2)} hrs` : '—'}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <div className="flex items-center justify-center gap-1 flex-wrap">
-                                {day.status === 'no_log' ? (
-                                  <span className="text-xs text-gray-400">No Clock</span>
-                                ) : day.status === 'active' ? (
-                                  <span className="text-xs text-yellow-600 bg-yellow-100 px-2 py-1 rounded">Active</span>
-                                ) : (
-                                  <>
-                                    {day.attendance?.isTardy && (
-                                      <span className="text-xs text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded" title={`${day.attendance.tardyMinutes} min late`}>
-                                        Tardy {day.attendance.tardyMinutes}m
-                                      </span>
-                                    )}
-                                    {day.attendance?.isUndertime && (
-                                      <span className="text-xs text-red-700 bg-red-100 px-2 py-0.5 rounded" title={`${day.attendance.undertimeMinutes} min early`}>
-                                        Under {day.attendance.undertimeMinutes}m
-                                      </span>
-                                    )}
-                                    {!day.attendance?.isTardy && !day.attendance?.isUndertime && day.status === 'completed' && (
-                                      <span className="text-xs text-green-600">✓ OK</span>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                            No clock data found for this period
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Summary Stats */}
-                {hoursBreakdownData.summary && (
-                  <div className="mt-6 grid grid-cols-3 gap-4">
-                    <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                      <h4 className="text-xs font-semibold text-green-800 uppercase mb-2">Hours Summary</h4>
-                      <div className="space-y-1 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Regular:</span>
-                          <span className="font-semibold text-green-700">{hoursBreakdownData.summary.regularHours?.toFixed(2)} hrs</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Approved OT:</span>
-                          <span className="font-semibold text-orange-700">{hoursBreakdownData.summary.approvedOvertimeHours?.toFixed(2)} hrs</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Pending OT:</span>
-                          <span className="font-semibold text-yellow-700">{hoursBreakdownData.summary.pendingOvertimeHours?.toFixed(2)} hrs</span>
-                        </div>
+                  {/* Dynamic Earning Columns */}
+                  {enabledEarningTypes.map((et) => (
+                    <th
+                      key={`earning-${et.id}`}
+                      className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[100px]"
+                    >
+                      <div className="flex flex-col">
+                        <span>{et.label}</span>
+                        <span className="text-[10px] font-normal text-gray-400 capitalize">
+                          ({et.calculationType.replace('_', ' ')})
+                        </span>
                       </div>
-                    </div>
-                    
-                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                      <h4 className="text-xs font-semibold text-blue-800 uppercase mb-2">Raw Data</h4>
-                      <div className="space-y-1 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Raw Clocked:</span>
-                          <span className="font-semibold">{hoursBreakdownData.summary.totalRawClockedHours?.toFixed(2)} hrs</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Scheduled:</span>
-                          <span className="font-semibold">{hoursBreakdownData.summary.totalScheduledHours?.toFixed(2)} hrs</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Break Deductions:</span>
-                          <span className="font-semibold text-red-600">-{hoursBreakdownData.summary.totalBreakDeductions?.toFixed(2)} hrs</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
-                      <h4 className="text-xs font-semibold text-yellow-800 uppercase mb-2">Attendance</h4>
-                      <div className="space-y-1 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Days Worked:</span>
-                          <span className="font-semibold">{hoursBreakdownData.summary.daysWorked}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Tardy:</span>
-                          <span className={`font-semibold ${hoursBreakdownData.summary.tardyCount > 0 ? 'text-yellow-700' : 'text-gray-400'}`}>
-                            {hoursBreakdownData.summary.tardyCount}x ({hoursBreakdownData.summary.tardyMinutes} min)
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Undertime:</span>
-                          <span className={`font-semibold ${hoursBreakdownData.summary.undertimeCount > 0 ? 'text-red-700' : 'text-gray-400'}`}>
-                            {hoursBreakdownData.summary.undertimeCount}x ({hoursBreakdownData.summary.undertimeMinutes} min)
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-gray-500">
-                No data available
-              </div>
-            )}
-          </div>
+                    </th>
+                  ))}
 
-          {/* Footer */}
-          <div className="bg-gray-100 px-6 py-3 rounded-b-xl flex justify-end flex-shrink-0">
-            <button
-              onClick={closeHoursBreakdown}
-              className="px-6 py-2 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition-colors"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // ==================== TRANSFER LOADING MODAL ====================
-
-  const TransferLoadingModal = () => {
-    if (!transferLoading) return null;
-
-    const progressPercent = transferProgress.total > 0 
-      ? Math.round((transferProgress.current / transferProgress.total) * 100) 
-      : 0;
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
-        {/* Backdrop */}
-        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
-        
-        {/* Modal */}
-        <div className="relative bg-white rounded-xl shadow-2xl p-8 w-full max-w-md mx-4 transform transition-all">
-          {/* Header */}
-          <div className="text-center mb-6">
-            <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-orange-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-bold text-gray-900">Importing Clock Hours</h3>
-            <p className="text-sm text-gray-500 mt-1">
-              {dateRange.payFrom} to {dateRange.payTo}
-            </p>
-          </div>
-
-          {/* Progress Bar */}
-          <div className="mb-6">
-            <div className="flex justify-between text-sm text-gray-600 mb-2">
-              <span>Progress</span>
-              <span>{transferProgress.current} of {transferProgress.total}</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-              <div 
-                className="bg-gradient-to-r from-orange-500 to-orange-600 h-3 rounded-full transition-all duration-300 ease-out"
-                style={{ width: `${progressPercent}%` }}
-              ></div>
-            </div>
-          </div>
-
-          {/* Current Employee */}
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
-            <div className="flex items-center gap-3">
-              {transferProgress.status === 'done' ? (
-                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-              ) : (
-                <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <div className="w-5 h-5 border-2 border-orange-600 border-t-transparent rounded-full animate-spin"></div>
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-gray-500 uppercase tracking-wide">
-                  {transferProgress.status === 'fetching' && 'Fetching data...'}
-                  {transferProgress.status === 'processing' && 'Processing employee'}
-                  {transferProgress.status === 'done' && 'Complete!'}
-                </p>
-                <p className="text-sm font-semibold text-gray-900 truncate">
-                  {transferProgress.employeeName}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Status Message */}
-          <p className="text-center text-xs text-gray-400 mt-4">
-            Please wait while we fetch clock hours from the timekeeping system...
-          </p>
-        </div>
-      </div>
-    );
-  };
-
-  // ==================== EMPLOYEE DETAIL MODAL ====================
-
-  const EmployeeDetailModal = () => {
-    if (!isDetailModalOpen || !selectedEmployee) return null;
-
-    const employee = selectedEmployee;
-    const calculated = calculateRowValues(employee);
-    const empHours = hoursData[employee.id] || {};
-    const taxes = calculateTaxes(employee, calculated.grossEarnings);
-    const isSalary = employee.payrollDetails?.payType === 'salary';
-
-    // Get employee check number (incremented based on position)
-    const employeeIndex = employees.findIndex(e => e.id === employee.id);
-    const employeeCheckNumber = parseInt(checkNumber) + employeeIndex;
-
-    // Calculate Net Pay after taxes
-    const netPayAfterTaxes = round2(calculated.netPay - taxes.totalTaxes);
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto">
-        {/* Backdrop */}
-        <div 
-          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-          onClick={closeEmployeeDetail}
-        ></div>
-        
-        {/* Modal */}
-        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl mx-4 my-8 max-h-[90vh] overflow-y-auto">
-          {/* Header */}
-          <div className="sticky top-0 bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-4 rounded-t-xl">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold">{employee.name}</h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-sm text-orange-100">{employee.position || 'No position'}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      isSalary ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
-                    }`}>
-                      {isSalary ? 'SALARY' : 'HOURLY'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={closeEmployeeDetail}
-                className="p-2 hover:bg-white/20 rounded-full transition-colors"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          {/* Pay Period Info Bar */}
-          <div className="bg-gray-50 px-6 py-3 border-b grid grid-cols-4 gap-4">
-            <div>
-              <label className="text-xs text-gray-500 uppercase tracking-wide">Pay Date</label>
-              <p className="text-sm font-semibold text-gray-900">{payDate}</p>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 uppercase tracking-wide">Pay From</label>
-              <p className="text-sm font-semibold text-gray-900">{dateRange.payFrom}</p>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 uppercase tracking-wide">Pay To</label>
-              <p className="text-sm font-semibold text-gray-900">{dateRange.payTo}</p>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 uppercase tracking-wide">Check Number</label>
-              <p className="text-sm font-semibold text-gray-900">#{employeeCheckNumber}</p>
-            </div>
-          </div>
-
-          {/* Three Column Layout */}
-          <div className="p-6 grid grid-cols-3 gap-6">
-            {/* LEFT COLUMN: Earnings */}
-            <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-              <h4 className="text-sm font-bold text-green-800 uppercase tracking-wide mb-4 flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Earnings
-              </h4>
-              
-              <div className="space-y-3">
-                {earningTypes.filter(et => et.enabled !== false).map((et) => {
-                  const value = calculated.earningsBreakdown[et.id] || 0;
-                  const inputValue = getEarningInputValue(employee, et);
-                  const isHoursType = ['hourly', 'hourly_ot'].includes(et.calculationType);
-                  
-                  return (
-                    <div key={et.id} className="flex justify-between items-center">
-                      <div>
-                        <span className="text-sm text-gray-700">{et.label}</span>
-                        {isHoursType && inputValue && parseFloat(inputValue) > 0 && (
-                          <span className="text-xs text-gray-500 ml-1">
-                            ({inputValue} hrs)
-                          </span>
-                        )}
-                      </div>
-                      <span className={`text-sm font-semibold ${value > 0 ? 'text-green-700' : 'text-gray-400'}`}>
-                        {formatCurrency(value)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-              
-              {/* Gross Pay Total */}
-              <div className="mt-4 pt-4 border-t border-green-300">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-bold text-green-800">GROSS PAY</span>
-                  <span className="text-lg font-bold text-green-700">
-                    {formatCurrency(calculated.grossEarnings)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* MIDDLE COLUMN: Taxes */}
-            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-              <h4 className="text-sm font-bold text-blue-800 uppercase tracking-wide mb-4 flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z" />
-                </svg>
-                Taxes
-              </h4>
-              
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <span className="text-sm text-gray-700">Federal Income Tax</span>
-                    <span className="text-xs text-gray-400 ml-1">(Est.)</span>
-                  </div>
-                  <span className="text-sm font-semibold text-blue-700">
-                    {formatCurrency(taxes.federalTax)}
-                  </span>
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <div>
-                    <span className="text-sm text-gray-700">State Income Tax</span>
-                    <span className="text-xs text-gray-400 ml-1">(CA)</span>
-                  </div>
-                  <span className="text-sm font-semibold text-blue-700">
-                    {formatCurrency(taxes.stateTax)}
-                  </span>
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <div>
-                    <span className="text-sm text-gray-700">FICA</span>
-                    <span className="text-xs text-gray-400 ml-1">(6.2%)</span>
-                  </div>
-                  <span className="text-sm font-semibold text-blue-700">
-                    {formatCurrency(taxes.fica)}
-                  </span>
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <div>
-                    <span className="text-sm text-gray-700">Medicare</span>
-                    <span className="text-xs text-gray-400 ml-1">(1.45%)</span>
-                  </div>
-                  <span className="text-sm font-semibold text-blue-700">
-                    {formatCurrency(taxes.medicare)}
-                  </span>
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <div>
-                    <span className="text-sm text-gray-700">SDI</span>
-                    <span className="text-xs text-gray-400 ml-1">(1.1%)</span>
-                  </div>
-                  <span className="text-sm font-semibold text-blue-700">
-                    {formatCurrency(taxes.sdi)}
-                  </span>
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <div>
-                    <span className="text-sm text-gray-700">CalSavers</span>
-                    {employee.payrollDetails?.withCalSavers ? (
-                      <span className="text-xs text-green-500 ml-1">(Enrolled)</span>
-                    ) : (
-                      <span className="text-xs text-gray-400 ml-1">(Not enrolled)</span>
-                    )}
-                  </div>
-                  <span className="text-sm font-semibold text-blue-700">
-                    {formatCurrency(taxes.calSavers)}
-                  </span>
-                </div>
-              </div>
-              
-              {/* Total Taxes */}
-              <div className="mt-4 pt-4 border-t border-blue-300">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-bold text-blue-800">TOTAL TAXES</span>
-                  <span className="text-lg font-bold text-blue-700">
-                    {formatCurrency(taxes.totalTaxes)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* RIGHT COLUMN: Deductions */}
-            <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-              <h4 className="text-sm font-bold text-red-800 uppercase tracking-wide mb-4 flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Deductions
-              </h4>
-              
-              <div className="space-y-3">
-                {deductionTypes.filter(dt => dt.enabled !== false).map((dt) => {
-                  const value = calculated.deductionsBreakdown[dt.id] || 0;
-                  
-                  return (
-                    <div key={dt.id} className="flex justify-between items-center">
-                      <div>
-                        <span className="text-sm text-gray-700">{dt.label}</span>
-                        <span className={`text-xs ml-1 ${dt.isPreTax ? 'text-green-500' : 'text-gray-400'}`}>
+                  {/* Dynamic Deduction Columns */}
+                  {enabledDeductionTypes.map((dt) => (
+                    <th
+                      key={`deduction-${dt.id}`}
+                      className="px-3 py-3 text-left text-xs font-semibold text-red-700 uppercase tracking-wider bg-red-50 min-w-[100px]"
+                    >
+                      <div className="flex flex-col">
+                        <span>{dt.label}</span>
+                        <span className="text-[10px] font-normal text-red-400">
                           ({dt.isPreTax ? 'Pre-Tax' : 'Post-Tax'})
                         </span>
                       </div>
-                      <span className={`text-sm font-semibold ${value > 0 ? 'text-red-700' : 'text-gray-400'}`}>
-                        {formatCurrency(value)}
-                      </span>
-                    </div>
+                    </th>
+                  ))}
+
+                  {/* Calculated Columns */}
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-green-700 uppercase tracking-wider bg-green-50 min-w-[110px]">
+                    Gross Pay
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-700 uppercase tracking-wider bg-blue-50 min-w-[110px]">
+                    Taxes
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-red-700 uppercase tracking-wider bg-red-50 min-w-[110px]">
+                    Deductions
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider bg-gray-100 min-w-[110px]">
+                    Net Pay
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {employees.map((employee, index) => {
+                  const calculated = calculateRowValues(employee);
+                  const taxes = calculateTaxes(employee, calculated.grossEarnings);
+                  const netAfterTax = round2(calculated.netPay - taxes.totalTaxes);
+                  const isSalary = employee.payrollDetails?.payType === 'salary';
+                  const empHours = hoursData[employee.id] || {};
+                  const hasNoPayRate = !employee.payrollDetails?.payRate || parseFloat(employee.payrollDetails?.payRate) <= 0;
+
+                  return (
+                    <tr
+                      key={employee.id}
+                      className={`
+                        ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} 
+                        hover:bg-orange-50/30 transition-colors
+                        ${hasNoPayRate ? 'bg-red-50/50 border-l-4 border-l-red-400' : ''}
+                      `}
+                    >
+                      {/* Employee Name - Sticky */}
+                      <td className="sticky left-0 z-10 bg-inherit px-4 py-3 whitespace-nowrap border-r border-gray-200">
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-900">
+                              {employee.name}
+                            </span>
+                            {/* Info icon */}
+                            {hoursDataLoaded && (
+                              <button
+                                onClick={() => openEmployeeDetail(employee)}
+                                className="group relative p-1 hover:bg-orange-100 rounded-full transition-colors"
+                                title="View payroll details"
+                              >
+                                <svg 
+                                  className="w-4 h-4 text-orange-500 hover:text-orange-600" 
+                                  fill="none" 
+                                  stroke="currentColor" 
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path 
+                                    strokeLinecap="round" 
+                                    strokeLinejoin="round" 
+                                    strokeWidth={2} 
+                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
+                                  />
+                                </svg>
+                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                                  View Details
+                                </span>
+                              </button>
+                            )}
+                            {hasNoPayRate && (
+                              <div className="group relative">
+                                <svg 
+                                  className="w-4 h-4 text-red-500" 
+                                  fill="currentColor" 
+                                  viewBox="0 0 20 20"
+                                >
+                                  <path 
+                                    fillRule="evenodd" 
+                                    d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" 
+                                    clipRule="evenodd" 
+                                  />
+                                </svg>
+                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-red-600 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-30">
+                                  No pay rate configured
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-xs text-gray-500">{employee.position || 'No position'}</span>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                isSalary
+                                  ? 'bg-purple-100 text-purple-700'
+                                  : 'bg-green-100 text-green-700'
+                              }`}
+                            >
+                              {isSalary ? 'SALARY' : 'HOURLY'}
+                            </span>
+                            {hasNoPayRate && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-red-100 text-red-700">
+                                NO RATE
+                              </span>
+                            )}
+                            {empHours.hasActiveClockIn && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-yellow-100 text-yellow-700">
+                                ACTIVE
+                              </span>
+                            )}
+                            {empHours.hasPendingOT && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-orange-100 text-orange-700">
+                                OT PENDING
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Dynamic Earning Inputs */}
+                      {enabledEarningTypes.map((et) => {
+                        const isDisabled = isColumnDisabled(employee, et);
+                        const inputValue = getEarningInputValue(employee, et);
+                        const calculatedValue = calculated.earningsBreakdown[et.id] || 0;
+                        const isHoursField = ['hourly', 'hourly_ot', 'custom_rate'].includes(et.calculationType);
+                        
+                        const isTransferredHours = hoursDataLoaded && 
+                          ((et.code === 'regular_hours' && empHours.isFinalClock) ||
+                           (et.code === 'overtime' && empHours.isFinalClock));
+
+                        return (
+                          <td key={`earning-${et.id}`} className="px-3 py-3 whitespace-nowrap">
+                            <div className="flex flex-col gap-1">
+                              {isTransferredHours ? (
+                                <div className="flex items-center gap-2">
+                                  <HoursTooltip empHours={empHours}>
+                                    <div className="flex flex-col items-end cursor-default">
+                                      <div className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded border border-gray-200">
+                                        <span className="text-sm font-semibold text-gray-700">
+                                          {parseFloat(inputValue || 0).toFixed(2)}
+                                        </span>
+                                        <span className="text-xs text-gray-500">hrs</span>
+                                      </div>
+                                      {calculatedValue > 0 && (
+                                        <span className="text-[10px] text-green-600 mt-1">
+                                          = {formatCurrency(calculatedValue)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </HoursTooltip>
+                                  {/* Info icon for hours breakdown */}
+                                  {et.code === 'regular_hours' && (
+                                    <button
+                                      onClick={() => openHoursBreakdown(employee)}
+                                      className="group relative p-1 hover:bg-blue-100 rounded-full transition-colors flex-shrink-0"
+                                      title="View hours breakdown"
+                                    >
+                                      <svg 
+                                        className="w-4 h-4 text-blue-500 hover:text-blue-600" 
+                                        fill="none" 
+                                        stroke="currentColor" 
+                                        viewBox="0 0 24 24"
+                                      >
+                                        <path 
+                                          strokeLinecap="round" 
+                                          strokeLinejoin="round" 
+                                          strokeWidth={2} 
+                                          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
+                                        />
+                                      </svg>
+                                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                                        Daily Breakdown
+                                      </span>
+                                    </button>
+                                  )}
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="text"
+                                      value={inputValue}
+                                      onChange={(e) => handleEarningChange(employee.id, et.id, e.target.value)}
+                                      disabled={isDisabled}
+                                      placeholder="0.00"
+                                      className={`w-20 px-2 py-1 text-sm border rounded text-right focus:outline-none focus:ring-1 focus:ring-orange-500 ${
+                                        isDisabled
+                                          ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200'
+                                          : 'border-gray-300'
+                                      }`}
+                                    />
+                                    {isHoursField && inputValue && (
+                                      <span className="text-xs text-gray-400">hrs</span>
+                                    )}
+                                  </div>
+                                  {et.calculationType !== 'flat' && calculatedValue > 0 && (
+                                    <span className="text-[10px] text-green-600 text-right">
+                                      = {formatCurrency(calculatedValue)}
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        );
+                      })}
+
+                      {/* Dynamic Deduction Inputs */}
+                      {enabledDeductionTypes.map((dt) => (
+                        <td key={`deduction-${dt.id}`} className="px-3 py-3 whitespace-nowrap bg-red-50/30">
+                          <input
+                            type="text"
+                            value={payrollData[employee.id]?.deductions[dt.id] || ''}
+                            onChange={(e) => handleDeductionChange(employee.id, dt.id, e.target.value)}
+                            placeholder="0.00"
+                            className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-orange-500"
+                          />
+                        </td>
+                      ))}
+
+                      {/* Gross Pay */}
+                      <td className="px-4 py-3 whitespace-nowrap bg-green-50">
+                        <div className="text-sm font-semibold text-green-700 text-right">
+                          {formatCurrency(calculated.grossEarnings)}
+                        </div>
+                      </td>
+
+                      {/* Taxes */}
+                      <td className="px-4 py-3 whitespace-nowrap bg-blue-50">
+                        <div className="text-sm font-semibold text-blue-700 text-right">
+                          {formatCurrency(taxes.totalTaxes)}
+                        </div>
+                      </td>
+
+                      {/* Total Deductions */}
+                      <td className="px-4 py-3 whitespace-nowrap bg-red-50">
+                        <div className="text-sm font-semibold text-red-700 text-right">
+                          {formatCurrency(calculated.totalDeductions)}
+                        </div>
+                      </td>
+
+                      {/* Net Pay */}
+                      <td className="px-4 py-3 whitespace-nowrap bg-gray-100">
+                        <div
+                          className={`text-sm font-bold text-right ${
+                            netAfterTax < 0 ? 'text-red-600' : 'text-gray-700'
+                          }`}
+                        >
+                          {formatCurrency(netAfterTax)}
+                          {netAfterTax < 0 && <span className="ml-1">⚠️</span>}
+                        </div>
+                      </td>
+                    </tr>
                   );
                 })}
-                
-                {deductionTypes.filter(dt => dt.enabled !== false).length === 0 && (
-                  <p className="text-sm text-gray-500 italic">No deductions configured</p>
+
+                {/* Totals Row */}
+                {hoursDataLoaded && (
+                  <tr className="bg-gray-100 border-t-2 border-gray-300 font-semibold">
+                    <td className="sticky left-0 z-10 bg-gray-100 px-4 py-3 whitespace-nowrap border-r border-gray-200">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                        <span className="text-sm font-bold text-gray-700">TOTALS</span>
+                        <span className="text-xs text-gray-500">({employees.length} employees)</span>
+                      </div>
+                    </td>
+
+                    {/* Earning Totals */}
+                    {enabledEarningTypes.map((et) => {
+                      let totalValue = 0;
+                      let totalHours = 0;
+                      
+                      employees.forEach((emp) => {
+                        const empCalc = calculateRowValues(emp);
+                        const empHours = hoursData[emp.id] || {};
+                        totalValue += empCalc.earningsBreakdown[et.id] || 0;
+                        
+                        if (et.code === 'regular_hours') {
+                          totalHours += empHours.regularHours || 0;
+                        } else if (et.code === 'overtime') {
+                          totalHours += empHours.overtimeHours || 0;
+                        }
+                      });
+
+                      const isHoursType = ['hourly', 'hourly_ot'].includes(et.calculationType) && 
+                        (et.code === 'regular_hours' || et.code === 'overtime');
+
+                      return (
+                        <td key={`total-earning-${et.id}`} className="px-3 py-3 whitespace-nowrap bg-gray-100">
+                          <div className="flex flex-col items-end">
+                            {isHoursType && totalHours > 0 ? (
+                              <>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-sm font-bold text-gray-700">
+                                    {totalHours.toFixed(2)}
+                                  </span>
+                                  <span className="text-xs text-gray-500">hrs</span>
+                                </div>
+                                <span className="text-[10px] text-green-600 font-semibold">
+                                  = {formatCurrency(totalValue)}
+                                </span>
+                              </>
+                            ) : totalValue > 0 ? (
+                              <span className="text-sm font-bold text-gray-700">
+                                {formatCurrency(totalValue)}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-gray-400">—</span>
+                            )}
+                          </div>
+                        </td>
+                      );
+                    })}
+
+                    {/* Deduction Totals */}
+                    {enabledDeductionTypes.map((dt) => {
+                      let totalDeduction = 0;
+                      employees.forEach((emp) => {
+                        const empCalc = calculateRowValues(emp);
+                        totalDeduction += empCalc.deductionsBreakdown[dt.id] || 0;
+                      });
+
+                      return (
+                        <td key={`total-deduction-${dt.id}`} className="px-3 py-3 whitespace-nowrap bg-red-100/50">
+                          <div className="text-sm font-bold text-red-700 text-right">
+                            {totalDeduction > 0 ? formatCurrency(totalDeduction) : '—'}
+                          </div>
+                        </td>
+                      );
+                    })}
+
+                    {/* Grand Totals */}
+                    {(() => {
+                      let grandGross = 0;
+                      let grandTaxes = 0;
+                      let grandDeductions = 0;
+                      let grandNet = 0;
+
+                      employees.forEach((emp) => {
+                        const empCalc = calculateRowValues(emp);
+                        const empTaxes = calculateTaxes(emp, empCalc.grossEarnings);
+                        grandGross += empCalc.grossEarnings;
+                        grandTaxes += empTaxes.totalTaxes;
+                        grandDeductions += empCalc.totalDeductions;
+                        grandNet += round2(empCalc.netPay - empTaxes.totalTaxes);
+                      });
+
+                      return (
+                        <>
+                          <td className="px-4 py-3 whitespace-nowrap bg-green-100">
+                            <div className="text-sm font-bold text-green-700 text-right">
+                              {formatCurrency(grandGross)}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap bg-blue-100">
+                            <div className="text-sm font-bold text-blue-700 text-right">
+                              {formatCurrency(grandTaxes)}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap bg-red-100">
+                            <div className="text-sm font-bold text-red-700 text-right">
+                              {formatCurrency(grandDeductions)}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap bg-gray-200">
+                            <div className="text-sm font-bold text-gray-700 text-right">
+                              {formatCurrency(grandNet)}
+                            </div>
+                          </td>
+                        </>
+                      );
+                    })()}
+                  </tr>
                 )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ==================== MODERN CARD-BASED PAYROLL VIEW ====================
+
+  const renderModernPayrollCards = () => {
+    const enabledEarningTypes = earningTypes.filter((et) => et.enabled !== false);
+    const enabledDeductionTypes = deductionTypes.filter((dt) => dt.enabled !== false);
+
+    // Calculate grand totals
+    let grandTotalGross = 0;
+    let grandTotalTaxes = 0;
+    let grandTotalDeductions = 0;
+    let grandTotalNet = 0;
+
+    employees.forEach((emp) => {
+      const calc = calculateRowValues(emp);
+      const taxes = calculateTaxes(emp, calc.grossEarnings);
+      grandTotalGross += calc.grossEarnings;
+      grandTotalTaxes += taxes.totalTaxes;
+      grandTotalDeductions += calc.totalDeductions;
+      grandTotalNet += round2(calc.netPay - taxes.totalTaxes);
+    });
+
+    return (
+      <div className="space-y-4">
+        {employees.map((employee, index) => {
+          const calculated = calculateRowValues(employee);
+          const taxes = calculateTaxes(employee, calculated.grossEarnings);
+          const isSalary = employee.payrollDetails?.payType === 'salary';
+          const empHours = hoursData[employee.id] || {};
+          const hasNoPayRate = !employee.payrollDetails?.payRate || parseFloat(employee.payrollDetails?.payRate) <= 0;
+          const netAfterTax = round2(calculated.netPay - taxes.totalTaxes);
+          const employeeCheckNumber = parseInt(checkNumber) + index;
+
+          return (
+            <div 
+              key={employee.id} 
+              className={`bg-white rounded-xl shadow-sm border transition-all hover:shadow-md ${
+                hasNoPayRate ? 'border-red-300 bg-red-50/20' : 'border-gray-200'
+              }`}
+            >
+              {/* Employee Header */}
+              <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 rounded-t-xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                      <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-bold text-gray-900">{employee.name}</h3>
+                        {/* Info icon - opens employee detail modal */}
+                        <button
+                          onClick={() => openEmployeeDetail(employee)}
+                          className="p-1.5 hover:bg-orange-100 rounded-full transition-colors"
+                          title="View Details"
+                        >
+                          <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-sm text-gray-600">{employee.position || 'No position'}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          isSalary ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+                        }`}>
+                          {isSalary ? 'SALARY' : 'HOURLY'}
+                        </span>
+                        {hasNoPayRate && (
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700 flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            NO RATE
+                          </span>
+                        )}
+                        {empHours.hasActiveClockIn && (
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-yellow-100 text-yellow-700">
+                            ACTIVE
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500 uppercase">Check #</p>
+                    <p className="text-sm font-bold text-gray-900">#{employeeCheckNumber}</p>
+                  </div>
+                </div>
               </div>
-              
-              {/* Total Deductions */}
-              <div className="mt-4 pt-4 border-t border-red-300">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-bold text-red-800">TOTAL DEDUCTIONS</span>
-                  <span className="text-lg font-bold text-red-700">
-                    {formatCurrency(calculated.totalDeductions)}
-                  </span>
+
+              {/* Three Column Layout */}
+              <div className="p-6 grid grid-cols-3 gap-4">
+                {/* EARNINGS */}
+                <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-4 h-4 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <h4 className="text-xs font-bold text-green-800 uppercase">Earnings</h4>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {enabledEarningTypes.map((et) => {
+                      const value = calculated.earningsBreakdown[et.id] || 0;
+                      const inputValue = getEarningInputValue(employee, et);
+                      const isDisabled = isColumnDisabled(employee, et);
+                      const isHoursType = ['hourly', 'hourly_ot'].includes(et.calculationType);
+                      const isTransferredHours = hoursDataLoaded && 
+                        ((et.code === 'regular_hours' && empHours.isFinalClock) ||
+                         (et.code === 'overtime' && empHours.isFinalClock));
+
+                      if (value === 0 && !inputValue) return null;
+
+                      return (
+                        <div key={et.id} className="text-xs">
+                          <div className="flex justify-between items-start mb-1">
+                            <span className="text-gray-600 font-medium">{et.label}</span>
+                            <span className="text-green-700 font-bold">{formatCurrency(value)}</span>
+                          </div>
+                          {isTransferredHours ? (
+                            <div className="flex items-center gap-1 text-gray-500">
+                              <span>{parseFloat(inputValue || 0).toFixed(2)} hrs</span>
+                              {/* Info icon for hours breakdown - opens daily breakdown modal */}
+                              {et.code === 'regular_hours' && (
+                                <button
+                                  onClick={() => openHoursBreakdown(employee)}
+                                  className="text-blue-500 hover:text-blue-700"
+                                  title="View daily breakdown"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+                          ) : isHoursType && (
+                            <input
+                              type="text"
+                              value={inputValue}
+                              onChange={(e) => handleEarningChange(employee.id, et.id, e.target.value)}
+                              disabled={isDisabled}
+                              placeholder="0.00"
+                              className="w-full px-2 py-1 text-xs border rounded"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  <div className="mt-3 pt-3 border-t border-green-300">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-green-800">GROSS</span>
+                      <span className="text-sm font-bold text-green-700">
+                        {formatCurrency(calculated.grossEarnings)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* TAXES */}
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-4 h-4 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z" />
+                    </svg>
+                    <h4 className="text-xs font-bold text-blue-800 uppercase">Taxes</h4>
+                  </div>
+                  
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Federal</span>
+                      <span className="text-blue-700 font-semibold">{formatCurrency(taxes.federalTax)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">State (CA)</span>
+                      <span className="text-blue-700 font-semibold">{formatCurrency(taxes.stateTax)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">FICA</span>
+                      <span className="text-blue-700 font-semibold">{formatCurrency(taxes.fica)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Medicare</span>
+                      <span className="text-blue-700 font-semibold">{formatCurrency(taxes.medicare)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">SDI</span>
+                      <span className="text-blue-700 font-semibold">{formatCurrency(taxes.sdi)}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-3 pt-3 border-t border-blue-300">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-blue-800">TOTAL</span>
+                      <span className="text-sm font-bold text-blue-700">
+                        {formatCurrency(taxes.totalTaxes)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* DEDUCTIONS */}
+                <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-4 h-4 text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <h4 className="text-xs font-bold text-red-800 uppercase">Deductions</h4>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {enabledDeductionTypes.map((dt) => {
+                      const value = calculated.deductionsBreakdown[dt.id] || 0;
+                      const inputValue = payrollData[employee.id]?.deductions[dt.id] || '';
+
+                      return (
+                        <div key={dt.id} className="text-xs">
+                          <div className="flex justify-between items-start mb-1">
+                            <span className="text-gray-600 font-medium">{dt.label}</span>
+                            <span className="text-red-700 font-bold">{formatCurrency(value)}</span>
+                          </div>
+                          <input
+                            type="text"
+                            value={inputValue}
+                            onChange={(e) => handleDeductionChange(employee.id, dt.id, e.target.value)}
+                            placeholder="0.00"
+                            className="w-full px-2 py-1 text-xs border rounded"
+                          />
+                        </div>
+                      );
+                    })}
+                    
+                    {enabledDeductionTypes.length === 0 && (
+                      <p className="text-xs text-gray-500 italic">No deductions</p>
+                    )}
+                  </div>
+                  
+                  <div className="mt-3 pt-3 border-t border-red-300">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-red-800">TOTAL</span>
+                      <span className="text-sm font-bold text-red-700">
+                        {formatCurrency(calculated.totalDeductions)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer: Net Pay */}
+              <div className="px-6 py-3 bg-gray-900 rounded-b-xl">
+                <div className="flex items-center justify-between text-white">
+                  <div className="flex items-center gap-6">
+                    <div>
+                      <p className="text-xs text-gray-400">Gross</p>
+                      <p className="text-sm font-bold text-green-400">{formatCurrency(calculated.grossEarnings)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400">Taxes + Deductions</p>
+                      <p className="text-sm font-bold text-red-400">
+                        - {formatCurrency(taxes.totalTaxes + calculated.totalDeductions)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-400 uppercase">Net Pay</p>
+                    <p className={`text-2xl font-bold ${netAfterTax < 0 ? 'text-red-400' : 'text-white'}`}>
+                      {formatCurrency(netAfterTax)}
+                      {netAfterTax < 0 && <span className="ml-1">⚠️</span>}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          );
+        })}
 
-          {/* Footer: Net Pay Summary */}
-          <div className="bg-gray-900 text-white px-6 py-4 rounded-b-xl">
-            <div className="grid grid-cols-3 gap-4 items-center">
+        {/* Grand Totals Summary */}
+        {hoursDataLoaded && (
+          <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-xl shadow-lg p-6 text-white mt-6">
+            <div className="flex items-center gap-3 mb-4">
+              <svg className="w-6 h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+              <h3 className="text-xl font-bold">Payroll Totals</h3>
+              <span className="text-sm text-gray-400">({employees.length} employees)</span>
+            </div>
+            
+            <div className="grid grid-cols-4 gap-6">
               <div className="text-center">
-                <p className="text-xs text-gray-400 uppercase">Gross Earnings</p>
-                <p className="text-lg font-bold text-green-400">{formatCurrency(calculated.grossEarnings)}</p>
+                <p className="text-xs text-gray-400 uppercase mb-1">Gross Earnings</p>
+                <p className="text-2xl font-bold text-green-400">{formatCurrency(grandTotalGross)}</p>
               </div>
               <div className="text-center">
-                <p className="text-xs text-gray-400 uppercase">Total Taxes + Deductions</p>
-                <p className="text-lg font-bold text-red-400">
-                  - {formatCurrency(taxes.totalTaxes + calculated.totalDeductions)}
-                </p>
+                <p className="text-xs text-gray-400 uppercase mb-1">Total Taxes</p>
+                <p className="text-2xl font-bold text-blue-400">{formatCurrency(grandTotalTaxes)}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-gray-400 uppercase mb-1">Total Deductions</p>
+                <p className="text-2xl font-bold text-red-400">{formatCurrency(grandTotalDeductions)}</p>
               </div>
               <div className="text-center bg-white/10 rounded-lg py-2">
-                <p className="text-xs text-gray-300 uppercase">Net Pay</p>
-                <p className={`text-2xl font-bold ${netPayAfterTaxes < 0 ? 'text-red-400' : 'text-white'}`}>
-                  {formatCurrency(netPayAfterTaxes)}
-                  {netPayAfterTaxes < 0 && <span className="ml-1">⚠️</span>}
-                </p>
+                <p className="text-xs text-gray-300 uppercase mb-1">Net Pay</p>
+                <p className="text-2xl font-bold">{formatCurrency(grandTotalNet)}</p>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     );
   };
@@ -1540,13 +2249,9 @@ const Payroll = () => {
       );
     }
 
-    // Filter to only enabled types
-    const enabledEarningTypes = earningTypes.filter((et) => et.enabled !== false);
-    const enabledDeductionTypes = deductionTypes.filter((dt) => dt.enabled !== false);
-
     return (
       <>
-        <Toaster position="top-right" richColors />
+        <Toaster position="top-center" richColors />
         <TransferLoadingModal />
         <EmployeeDetailModal />
         <HoursBreakdownModal />
@@ -1572,7 +2277,7 @@ const Payroll = () => {
                 {hoursDataLoaded ? (
                   <>
                     <span className="font-medium">✓ Clock hours imported successfully!</span>
-                    {' '}Hours data has been loaded from the timekeeping system. Grayed-out fields are locked.
+                    {' '}Hours data has been loaded from the timekeeping system.
                   </>
                 ) : (
                   <>
@@ -1616,513 +2321,196 @@ const Payroll = () => {
           );
         })()}
 
-        {/* Date and Transfer */}
+        {/* Date and Transfer Controls */}
         <div className="p-6 border-b">
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Pay Date
-              </label>
-              <input
-                type="date"
-                value={payDate}
-                onChange={(e) => setPayDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Pay From
-              </label>
-              <input
-                type="date"
-                value={dateRange.payFrom}
-                onChange={(e) => setDateRange((prev) => ({ ...prev, payFrom: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Pay To
-              </label>
-              <input
-                type="date"
-                value={dateRange.payTo}
-                onChange={(e) => setDateRange((prev) => ({ ...prev, payTo: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Check Number
-              </label>
-              <input
-                type="text"
-                value={checkNumber}
-                onChange={(e) => setCheckNumber(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-            <button
-              onClick={handleTransfer}
-              disabled={transferLoading || !dateRange.payFrom || !dateRange.payTo}
-              className={`px-6 py-2.5 font-medium rounded-md transition-colors duration-200 flex items-center justify-center gap-2 ${
-                transferLoading || !dateRange.payFrom || !dateRange.payTo
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-orange-600 text-white hover:bg-orange-700'
-              }`}
-            >
-              {transferLoading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Transferring...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                  </svg>
-                  Transfer
-                </>
-              )}
-            </button>
-            {hoursDataLoaded && (
-              <div className="flex items-center gap-2 text-sm text-green-600">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-                <span>Hours loaded</span>
+          <div className="flex items-end justify-between gap-4 mb-4">
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Pay Date
+                </label>
+                <input
+                  type="date"
+                  value={payDate}
+                  onChange={(e) => setPayDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
               </div>
-            )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Pay From
+                </label>
+                <input
+                  type="date"
+                  value={dateRange.payFrom}
+                  onChange={(e) => setDateRange((prev) => ({ ...prev, payFrom: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Pay To
+                </label>
+                <input
+                  type="date"
+                  value={dateRange.payTo}
+                  onChange={(e) => setDateRange((prev) => ({ ...prev, payTo: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Check Number
+                </label>
+                <input
+                  type="text"
+                  value={checkNumber}
+                  onChange={(e) => setCheckNumber(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+              <button
+                onClick={handleTransfer}
+                disabled={transferLoading || !dateRange.payFrom || !dateRange.payTo}
+                className={`px-6 py-2.5 font-medium rounded-md transition-colors duration-200 flex items-center justify-center gap-2 ${
+                  transferLoading || !dateRange.payFrom || !dateRange.payTo
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-orange-600 text-white hover:bg-orange-700'
+                }`}
+              >
+                {transferLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Transferring...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Transfer
+                  </>
+                )}
+              </button>
+              
+              {/* Auto-Calculate Dates Button */}
+              <button
+                onClick={() => {
+                  const today = new Date();
+                  const day = today.getDate();
+                  
+                  let payFrom, payTo, payDateCalc;
+                  
+                  if (day >= 1 && day <= 15) {
+                    // Current day is 1-15: Use PREVIOUS period (16th-end of last month)
+                    payTo = new Date(today.getFullYear(), today.getMonth(), 0); // Last day of previous month
+                    payFrom = new Date(today.getFullYear(), today.getMonth() - 1, 16); // 16th of previous month
+                    payDateCalc = new Date(payTo);
+                    payDateCalc.setDate(payDateCalc.getDate() + 5); // 5 days after cutoff end
+                  } else {
+                    // Current day is 16-31: Use CURRENT period (1st-15th of current month)
+                    payFrom = new Date(today.getFullYear(), today.getMonth(), 1); // 1st of current month
+                    payTo = new Date(today.getFullYear(), today.getMonth(), 15); // 15th of current month
+                    payDateCalc = new Date(payTo);
+                    payDateCalc.setDate(payDateCalc.getDate() + 5); // 5 days after (20th)
+                  }
+                  
+                  setDateRange({
+                    payFrom: payFrom.toISOString().split('T')[0],
+                    payTo: payTo.toISOString().split('T')[0],
+                  });
+                  setPayDate(payDateCalc.toISOString().split('T')[0]);
+                  
+                  toast.success(`Auto-calculated: ${payFrom.toLocaleDateString()} - ${payTo.toLocaleDateString()}, Pay: ${payDateCalc.toLocaleDateString()}`);
+                }}
+                className="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
+                title="Auto-calculate pay period based on today's date"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Auto-Detect Period
+              </button>
+            </div>
+
+            {/* View Mode Toggle */}
+            <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('card')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+                  viewMode === 'card'
+                    ? 'bg-white text-orange-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+                Card
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+                  viewMode === 'list'
+                    ? 'bg-white text-orange-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                </svg>
+                List
+              </button>
+            </div>
           </div>
+          
+          {hoursDataLoaded && (
+            <div className="flex items-center gap-2 text-sm text-green-600">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              <span>Hours loaded</span>
+            </div>
+          )}
         </div>
 
-        {/* Payroll Table */}
-        <div className="overflow-x-auto">
-          <div className="inline-block min-w-full align-middle">
-            <div className="overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-100">
-                  <tr>
-                    {/* Employee Name - Sticky */}
-                    <th className="sticky left-0 z-20 bg-gray-100 px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200 min-w-[180px]">
-                      Employee Name
-                    </th>
-
-                    {/* Dynamic Earning Columns */}
-                    {enabledEarningTypes.map((et) => (
-                      <th
-                        key={`earning-${et.id}`}
-                        className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[100px]"
-                      >
-                        <div className="flex flex-col">
-                          <span>{et.label}</span>
-                          <span className="text-[10px] font-normal text-gray-400 capitalize">
-                            ({et.calculationType.replace('_', ' ')})
-                          </span>
-                        </div>
-                      </th>
-                    ))}
-
-                    {/* Dynamic Deduction Columns */}
-                    {enabledDeductionTypes.map((dt) => (
-                      <th
-                        key={`deduction-${dt.id}`}
-                        className="px-3 py-3 text-left text-xs font-semibold text-red-700 uppercase tracking-wider bg-red-50 min-w-[100px]"
-                      >
-                        <div className="flex flex-col">
-                          <span>{dt.label}</span>
-                          <span className="text-[10px] font-normal text-red-400">
-                            ({dt.isPreTax ? 'Pre-Tax' : 'Post-Tax'})
-                          </span>
-                        </div>
-                      </th>
-                    ))}
-
-                    {/* Calculated Columns */}
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-green-700 uppercase tracking-wider bg-green-50 min-w-[110px]">
-                      Gross Pay
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-red-700 uppercase tracking-wider bg-red-50 min-w-[110px]">
-                      Deductions
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-blue-700 uppercase tracking-wider bg-blue-50 min-w-[110px]">
-                      Net Pay
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {employees.map((employee, index) => {
-                    const calculated = calculateRowValues(employee);
-                    const isSalary = employee.payrollDetails?.payType === 'salary';
-                    const empHours = hoursData[employee.id] || {};
-                    const hasNoPayRate = !employee.payrollDetails?.payRate || parseFloat(employee.payrollDetails?.payRate) <= 0;
-
-                    return (
-                      <tr
-                        key={employee.id}
-                        className={`
-                          ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} 
-                          hover:bg-orange-50/30 transition-colors
-                          ${hasNoPayRate ? 'bg-red-50/50 border-l-4 border-l-red-400' : ''}
-                        `}
-                      >
-                        {/* Employee Name - Sticky */}
-                        <td className="sticky left-0 z-10 bg-inherit px-4 py-3 whitespace-nowrap border-r border-gray-200">
-                          <div className="flex flex-col">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-gray-900">
-                                {employee.name}
-                              </span>
-                              {/* Info icon - appears after transfer */}
-                              {hoursDataLoaded && (
-                                <button
-                                  onClick={() => openEmployeeDetail(employee)}
-                                  className="group relative p-1 hover:bg-orange-100 rounded-full transition-colors"
-                                  title="View payroll details"
-                                >
-                                  <svg 
-                                    className="w-4 h-4 text-orange-500 hover:text-orange-600" 
-                                    fill="none" 
-                                    stroke="currentColor" 
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path 
-                                      strokeLinecap="round" 
-                                      strokeLinejoin="round" 
-                                      strokeWidth={2} 
-                                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
-                                    />
-                                  </svg>
-                                  {/* Tooltip */}
-                                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                                    View Details
-                                  </span>
-                                </button>
-                              )}
-                              {/* Warning icon for missing pay rate */}
-                              {(!employee.payrollDetails?.payRate || parseFloat(employee.payrollDetails?.payRate) <= 0) && (
-                                <div className="group relative">
-                                  <svg 
-                                    className="w-4 h-4 text-red-500" 
-                                    fill="currentColor" 
-                                    viewBox="0 0 20 20"
-                                  >
-                                    <path 
-                                      fillRule="evenodd" 
-                                      d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" 
-                                      clipRule="evenodd" 
-                                    />
-                                  </svg>
-                                  {/* Tooltip */}
-                                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-red-600 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-30">
-                                    No pay rate configured
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-xs text-gray-500">{employee.position || 'No position'}</span>
-                              <span
-                                className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                  isSalary
-                                    ? 'bg-purple-100 text-purple-700'
-                                    : 'bg-green-100 text-green-700'
-                                }`}
-                              >
-                                {isSalary ? 'SALARY' : 'HOURLY'}
-                              </span>
-                              {/* Missing pay rate badge */}
-                              {(!employee.payrollDetails?.payRate || parseFloat(employee.payrollDetails?.payRate) <= 0) && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-red-100 text-red-700">
-                                  NO RATE
-                                </span>
-                              )}
-                              {/* Warning badges */}
-                              {empHours.hasActiveClockIn && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-yellow-100 text-yellow-700">
-                                  ACTIVE
-                                </span>
-                              )}
-                              {empHours.hasPendingOT && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-orange-100 text-orange-700">
-                                  OT PENDING
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Dynamic Earning Inputs */}
-                        {enabledEarningTypes.map((et) => {
-                          const isDisabled = isColumnDisabled(employee, et);
-                          const inputValue = getEarningInputValue(employee, et);
-                          const calculatedValue = calculated.earningsBreakdown[et.id] || 0;
-                          const isHoursField = ['hourly', 'hourly_ot', 'custom_rate'].includes(et.calculationType);
-                          
-                          // Check if this is a transferred hours field
-                          const isTransferredHours = hoursDataLoaded && 
-                            ((et.code === 'regular_hours' && empHours.isFinalClock) ||
-                             (et.code === 'overtime' && empHours.isFinalClock));
-
-                          return (
-                            <td key={`earning-${et.id}`} className="px-3 py-3 whitespace-nowrap">
-                              <div className="flex flex-col gap-1">
-                                {/* Show hours display for transferred data */}
-                                {isTransferredHours ? (
-                                  <div className="flex items-center gap-2">
-                                    <HoursTooltip empHours={empHours}>
-                                      <div className="flex flex-col items-end cursor-default">
-                                        <div className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded border border-gray-200">
-                                          <span className="text-sm font-semibold text-gray-700">
-                                            {parseFloat(inputValue || 0).toFixed(2)}
-                                          </span>
-                                          <span className="text-xs text-gray-500">hrs</span>
-                                        </div>
-                                        {calculatedValue > 0 && (
-                                          <span className="text-[10px] text-green-600 mt-1">
-                                            = {formatCurrency(calculatedValue)}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </HoursTooltip>
-                                    {/* Info icon for hours breakdown - only on regular hours */}
-                                    {et.code === 'regular_hours' && (
-                                      <button
-                                        onClick={() => openHoursBreakdown(employee)}
-                                        className="group relative p-1 hover:bg-blue-100 rounded-full transition-colors flex-shrink-0"
-                                        title="View hours breakdown"
-                                      >
-                                        <svg 
-                                          className="w-4 h-4 text-blue-500 hover:text-blue-600" 
-                                          fill="none" 
-                                          stroke="currentColor" 
-                                          viewBox="0 0 24 24"
-                                        >
-                                          <path 
-                                            strokeLinecap="round" 
-                                            strokeLinejoin="round" 
-                                            strokeWidth={2} 
-                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
-                                          />
-                                        </svg>
-                                        {/* Tooltip */}
-                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                                          Daily Breakdown
-                                        </span>
-                                      </button>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <>
-                                    <div className="flex items-center gap-1">
-                                      <input
-                                        type="text"
-                                        value={inputValue}
-                                        onChange={(e) => handleEarningChange(employee.id, et.id, e.target.value)}
-                                        disabled={isDisabled}
-                                        placeholder={getEarningPlaceholder(et)}
-                                        className={`w-20 px-2 py-1 text-sm border rounded text-right focus:outline-none focus:ring-1 focus:ring-orange-500 ${
-                                          isDisabled
-                                            ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200'
-                                            : 'border-gray-300'
-                                        }`}
-                                      />
-                                      {/* Show "hrs" suffix for hours-based inputs */}
-                                      {isHoursField && inputValue && (
-                                        <span className="text-xs text-gray-400">hrs</span>
-                                      )}
-                                    </div>
-                                    {/* Show calculated value for non-flat types */}
-                                    {et.calculationType !== 'flat' && calculatedValue > 0 && (
-                                      <span className="text-[10px] text-green-600 text-right">
-                                        = {formatCurrency(calculatedValue)}
-                                      </span>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                          );
-                        })}
-
-                        {/* Dynamic Deduction Inputs */}
-                        {enabledDeductionTypes.map((dt) => (
-                          <td key={`deduction-${dt.id}`} className="px-3 py-3 whitespace-nowrap bg-red-50/30">
-                            <input
-                              type="text"
-                              value={payrollData[employee.id]?.deductions[dt.id] || ''}
-                              onChange={(e) => handleDeductionChange(employee.id, dt.id, e.target.value)}
-                              placeholder="0.00"
-                              className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-orange-500"
-                            />
-                          </td>
-                        ))}
-
-                        {/* Gross Pay */}
-                        <td className="px-4 py-3 whitespace-nowrap bg-green-50">
-                          <div className="text-sm font-semibold text-green-700 text-right">
-                            {formatCurrency(calculated.grossEarnings)}
-                          </div>
-                        </td>
-
-                        {/* Total Deductions */}
-                        <td className="px-4 py-3 whitespace-nowrap bg-red-50">
-                          <div className="text-sm font-semibold text-red-700 text-right">
-                            {formatCurrency(calculated.totalDeductions)}
-                          </div>
-                        </td>
-
-                        {/* Net Pay */}
-                        <td className="px-4 py-3 whitespace-nowrap bg-blue-50">
-                          <div
-                            className={`text-sm font-bold text-right ${
-                              calculated.isNegative ? 'text-red-600' : 'text-blue-700'
-                            }`}
-                          >
-                            {formatCurrency(calculated.netPay)}
-                            {calculated.isNegative && <span className="ml-1">⚠️</span>}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-
-                  {/* Totals Row */}
-                  {hoursDataLoaded && (
-                    <tr className="bg-gray-100 border-t-2 border-gray-300 font-semibold">
-                      {/* Employee Name - Sticky */}
-                      <td className="sticky left-0 z-10 bg-gray-100 px-4 py-3 whitespace-nowrap border-r border-gray-200">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                          </svg>
-                          <span className="text-sm font-bold text-gray-700">TOTALS</span>
-                          <span className="text-xs text-gray-500">({employees.length} employees)</span>
-                        </div>
-                      </td>
-
-                      {/* Earning Totals */}
-                      {enabledEarningTypes.map((et) => {
-                        // Calculate total hours for this earning type
-                        let totalValue = 0;
-                        let totalHours = 0;
-                        
-                        employees.forEach((emp) => {
-                          const empCalc = calculateRowValues(emp);
-                          const empHours = hoursData[emp.id] || {};
-                          totalValue += empCalc.earningsBreakdown[et.id] || 0;
-                          
-                          // Sum up hours for hourly types
-                          if (et.code === 'regular_hours') {
-                            totalHours += empHours.regularHours || 0;
-                          } else if (et.code === 'overtime') {
-                            totalHours += empHours.overtimeHours || 0;
-                          }
-                        });
-
-                        const isHoursType = ['hourly', 'hourly_ot'].includes(et.calculationType) && 
-                          (et.code === 'regular_hours' || et.code === 'overtime');
-
-                        return (
-                          <td key={`total-earning-${et.id}`} className="px-3 py-3 whitespace-nowrap bg-gray-100">
-                            <div className="flex flex-col items-end">
-                              {isHoursType && totalHours > 0 ? (
-                                <>
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-sm font-bold text-gray-700">
-                                      {totalHours.toFixed(2)}
-                                    </span>
-                                    <span className="text-xs text-gray-500">hrs</span>
-                                  </div>
-                                  <span className="text-[10px] text-green-600 font-semibold">
-                                    = {formatCurrency(totalValue)}
-                                  </span>
-                                </>
-                              ) : totalValue > 0 ? (
-                                <span className="text-sm font-bold text-gray-700">
-                                  {formatCurrency(totalValue)}
-                                </span>
-                              ) : (
-                                <span className="text-sm text-gray-400">—</span>
-                              )}
-                            </div>
-                          </td>
-                        );
-                      })}
-
-                      {/* Deduction Totals */}
-                      {enabledDeductionTypes.map((dt) => {
-                        let totalDeduction = 0;
-                        employees.forEach((emp) => {
-                          const empCalc = calculateRowValues(emp);
-                          totalDeduction += empCalc.deductionsBreakdown[dt.id] || 0;
-                        });
-
-                        return (
-                          <td key={`total-deduction-${dt.id}`} className="px-3 py-3 whitespace-nowrap bg-red-100/50">
-                            <div className="text-sm font-bold text-red-700 text-right">
-                              {totalDeduction > 0 ? formatCurrency(totalDeduction) : '—'}
-                            </div>
-                          </td>
-                        );
-                      })}
-
-                      {/* Grand Totals */}
-                      {(() => {
-                        let grandGross = 0;
-                        let grandDeductions = 0;
-                        let grandNet = 0;
-
-                        employees.forEach((emp) => {
-                          const empCalc = calculateRowValues(emp);
-                          grandGross += empCalc.grossEarnings;
-                          grandDeductions += empCalc.totalDeductions;
-                          grandNet += empCalc.netPay;
-                        });
-
-                        return (
-                          <>
-                            <td className="px-4 py-3 whitespace-nowrap bg-green-100">
-                              <div className="text-sm font-bold text-green-700 text-right">
-                                {formatCurrency(grandGross)}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap bg-red-100">
-                              <div className="text-sm font-bold text-red-700 text-right">
-                                {formatCurrency(grandDeductions)}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap bg-blue-100">
-                              <div className="text-sm font-bold text-blue-700 text-right">
-                                {formatCurrency(grandNet)}
-                              </div>
-                            </td>
-                          </>
-                        );
-                      })()}
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+        {/* Payroll View - Card or List */}
+        <div className="p-6">
+          {viewMode === 'card' ? renderModernPayrollCards() : renderListView()}
         </div>
 
         {/* Action Buttons */}
-        <div className="p-6 bg-gray-50 border-t flex justify-end gap-4">
+        <div className="p-6 bg-gray-50 border-t flex justify-between items-center">
           <button
-            onClick={handleReset}
-            className="px-8 py-3 bg-gray-600 text-white font-medium rounded-md hover:bg-gray-700 transition-colors duration-200"
+            onClick={handleGeneratePDF}
+            disabled={!hoursDataLoaded}
+            className={`px-6 py-3 font-medium rounded-md transition-colors duration-200 flex items-center gap-2 ${
+              !hoursDataLoaded
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+            title={!hoursDataLoaded ? 'Transfer hours first to generate PDF' : 'Generate PDF Report'}
           >
-            RESET
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Download PDF Report
           </button>
-          <button
-            onClick={handleProcess}
-            className="px-8 py-3 bg-orange-600 text-white font-medium rounded-md hover:bg-orange-700 transition-colors duration-200"
-          >
-            PROCESS
-          </button>
+
+          <div className="flex gap-4">
+            <button
+              onClick={handleReset}
+              className="px-8 py-3 bg-gray-600 text-white font-medium rounded-md hover:bg-gray-700 transition-colors duration-200"
+            >
+              RESET
+            </button>
+            <button
+              onClick={handleProcess}
+              className="px-8 py-3 bg-orange-600 text-white font-medium rounded-md hover:bg-orange-700 transition-colors duration-200"
+            >
+              PROCESS
+            </button>
+          </div>
         </div>
       </>
     );
