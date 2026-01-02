@@ -11,6 +11,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 const Payroll = () => {
   const { token } = useAuthStore();
   const [activeTab, setActiveTab] = useState('create-paycheck');
+  const [saving, setSaving] = useState(false);
+  const [unviewedCount, setUnviewedCount] = useState(0);
 
   // ==================== STATE ====================
   
@@ -67,10 +69,40 @@ const Payroll = () => {
   // ==================== FETCH DATA ====================
 
   useEffect(() => {
+    if (token) { 
+      fetchUnviewedReportsCount();
+    }
+  }, [token]);
+
+  useEffect(() => {
     if (token && activeTab === 'create-paycheck') {
       fetchPayrollData();
     }
   }, [token, activeTab]);
+
+  const fetchUnviewedReportsCount = async () => {
+    try {
+      const response = await fetch(
+        `${API_URL}/api/payroll-system/unviewed-reports-count`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+      const result = await response.json();
+      if (response.ok) {
+        setUnviewedCount(result.data.count); 
+      }
+    } catch (error) {
+      console.error('Error fetching unviewed reports count:', error);
+    }
+  };
+
+  const handlePayrollSaved = () => {
+    fetchUnviewedReportsCount(); 
+  };
+
 
   const fetchPayrollData = async () => {
     if (!token) {
@@ -148,8 +180,8 @@ const Payroll = () => {
         payFrom.setDate(payFrom.getDate() - 13);
 
         setDateRange({
-          payFrom: payFrom.toISOString().split('T')[0],
-          payTo: payTo.toISOString().split('T')[0],
+          payFrom: payFrom.toLocaleDateString('en-CA'),
+          payTo: payTo.toLocaleDateString('en-CA'),
         });
 
         toast.success('Payroll data loaded successfully');
@@ -198,7 +230,7 @@ const Payroll = () => {
       }));
 
       const response = await fetch(
-        `${API_URL}/api/test/payroll-system/import-clock-hours?from=${dateRange.payFrom}&to=${dateRange.payTo}`,
+        `${API_URL}/api/payroll-system/import-clock-hours?from=${dateRange.payFrom}&to=${dateRange.payTo}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -465,7 +497,7 @@ const Payroll = () => {
 
     try {
       const response = await fetch(
-        `${API_URL}/api/test/payroll-system/import-clock-hours/${employee.id}?from=${dateRange.payFrom}&to=${dateRange.payTo}`,
+        `${API_URL}/api/payroll-system/import-clock-hours/${employee.id}?from=${dateRange.payFrom}&to=${dateRange.payTo}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -546,7 +578,7 @@ const Payroll = () => {
       };
   
       const response = await fetch(
-        `${API_URL}/api/test/payroll-system/generate-pdf-report`,
+        `${API_URL}/api/payroll-system/generate-pdf-report`,
         {
           method: 'POST',
           headers: {
@@ -612,144 +644,87 @@ const Payroll = () => {
     toast.success('Payroll data reset successfully');
   };
 
-  const handleProcess = () => {
+  const handleSavePayroll = async () => {
+    // Validate employees with pay rates
     const employeesWithoutPayRate = employees.filter(
       emp => !emp.payrollDetails?.payRate || parseFloat(emp.payrollDetails?.payRate) <= 0
     );
-
+  
     if (employeesWithoutPayRate.length > 0) {
       const names = employeesWithoutPayRate.map(emp => emp.name).join(', ');
-      toast.error(`Cannot process: ${employeesWithoutPayRate.length} employee(s) missing pay rate: ${names}`);
-      console.error('❌ PROCESSING BLOCKED - Employees without pay rates:', names);
+      toast.error(`Cannot save: ${employeesWithoutPayRate.length} employee(s) missing pay rate: ${names}`);
       return;
     }
-
-    console.log('\n');
-    console.log('═══════════════════════════════════════════════════════════════');
-    console.log('                    PAYROLL PROCESSING RESULTS                   ');
-    console.log('═══════════════════════════════════════════════════════════════');
-    console.log('\n📅 Pay Period:', dateRange.payFrom, 'to', dateRange.payTo);
-    console.log('📝 Starting Check Number:', checkNumber);
-    console.log('\n');
-
-    let grandTotalGross = 0;
-    let grandTotalTaxes = 0;
-    let grandTotalDeductions = 0;
-    let grandTotalNet = 0;
-    const warnings = [];
-    const processedEmployees = [];
-
-    employees.forEach((emp) => {
-      const calculated = calculateRowValues(emp);
-      const taxes = calculateTaxes(emp, calculated.grossEarnings);
-      const netAfterTax = round2(calculated.netPay - taxes.totalTaxes);
-
-      if (calculated.grossEarnings === 0) {
-        warnings.push({
-          employee: emp.name,
-          type: 'NO_EARNINGS',
-          message: 'No earnings entered',
-        });
-        return;
-      }
-
-      console.log('───────────────────────────────────────────────────────────────');
-      console.log(`👤 ${emp.name} (${emp.payrollDetails.payType.toUpperCase()})`);
-      console.log(`   Position: ${emp.position}`);
-      console.log(`   Pay Rate: ${formatCurrency(emp.payrollDetails.payRate)}`);
-      console.log('');
-
-      console.log('   📈 EARNINGS:');
-      earningTypes.forEach((et) => {
-        const value = calculated.earningsBreakdown[et.id];
-        if (value > 0) {
-          console.log(`      • ${et.label}: ${formatCurrency(value)}`);
-        }
-      });
-      console.log(`      GROSS EARNINGS: ${formatCurrency(calculated.grossEarnings)}`);
-      console.log('');
-
-      console.log('   💳 TAXES:');
-      console.log(`      • Federal: ${formatCurrency(taxes.federalTax)}`);
-      console.log(`      • State: ${formatCurrency(taxes.stateTax)}`);
-      console.log(`      • FICA: ${formatCurrency(taxes.fica)}`);
-      console.log(`      • Medicare: ${formatCurrency(taxes.medicare)}`);
-      console.log(`      • SDI: ${formatCurrency(taxes.sdi)}`);
-      console.log(`      TOTAL TAXES: ${formatCurrency(taxes.totalTaxes)}`);
-      console.log('');
-
-      if (calculated.totalDeductions > 0) {
-        console.log('   📉 DEDUCTIONS:');
-        deductionTypes.forEach((dt) => {
-          const value = calculated.deductionsBreakdown[dt.id];
-          if (value > 0) {
-            console.log(`      • ${dt.label}: ${formatCurrency(value)}`);
-          }
-        });
-        console.log(`      TOTAL DEDUCTIONS: ${formatCurrency(calculated.totalDeductions)}`);
-        console.log('');
-      }
-
-      const netPayStyle = netAfterTax < 0 ? '⚠️ ' : '✅ ';
-      console.log(`   ${netPayStyle}NET PAY: ${formatCurrency(netAfterTax)}`);
-
-      if (netAfterTax < 0) {
-        warnings.push({
-          employee: emp.name,
-          type: 'NEGATIVE_NET',
-          message: `Negative net pay: ${formatCurrency(netAfterTax)}`,
-        });
-      }
-
-      grandTotalGross += calculated.grossEarnings;
-      grandTotalTaxes += taxes.totalTaxes;
-      grandTotalDeductions += calculated.totalDeductions;
-      grandTotalNet += netAfterTax;
-
-      processedEmployees.push({
-        id: emp.id,
-        name: emp.name,
-        payType: emp.payrollDetails.payType,
-        ...calculated,
-        taxes: taxes.totalTaxes,
-      });
-    });
-
-    console.log('\n');
-    console.log('═══════════════════════════════════════════════════════════════');
-    console.log('                         GRAND TOTALS                           ');
-    console.log('═══════════════════════════════════════════════════════════════');
-    console.log(`   Total Gross Earnings:  ${formatCurrency(grandTotalGross)}`);
-    console.log(`   Total Taxes:           ${formatCurrency(grandTotalTaxes)}`);
-    console.log(`   Total Deductions:      ${formatCurrency(grandTotalDeductions)}`);
-    console.log(`   Total Net Pay:         ${formatCurrency(grandTotalNet)}`);
-    console.log(`   Employees Processed:   ${processedEmployees.length}`);
-    console.log('═══════════════════════════════════════════════════════════════');
-
-    if (warnings.length > 0) {
-      console.log('\n');
-      console.log('⚠️  WARNINGS:');
-      warnings.forEach((w) => {
-        console.log(`   • ${w.employee}: ${w.message}`);
-      });
-      toast.error(`${warnings.length} warning(s) detected! Check console for details.`);
-    } else {
-      toast.success(`Payroll processed successfully! ${processedEmployees.length} employees.`);
+  
+    if (!hoursDataLoaded) {
+      toast.error('Please transfer clock hours before saving payroll');
+      return;
     }
-
-    console.log('\n');
-    console.log('📊 RAW DATA (for API integration):');
-    console.log({
-      payPeriod: dateRange,
-      checkNumber,
-      employees: processedEmployees,
-      totals: {
-        grossEarnings: round2(grandTotalGross),
-        totalTaxes: round2(grandTotalTaxes),
-        totalDeductions: round2(grandTotalDeductions),
-        netPay: round2(grandTotalNet),
-      },
-    });
+  
+    try {
+      setSaving(true);
+      
+      // Calculate all employee data
+      const employeesData = employees.map((emp) => {
+        const calculated = calculateRowValues(emp);
+        const taxes = calculateTaxes(emp, calculated.grossEarnings);
+        const netAfterTax = round2(calculated.netPay - taxes.totalTaxes);
+        
+        return {
+          id: emp.id,
+          name: emp.name,
+          position: emp.position,
+          payrollDetails: emp.payrollDetails,
+          calculated,
+          taxes,
+          netPayAfterTaxes: netAfterTax,
+        };
+      });
+  
+      // Calculate totals
+      const totals = {
+        grossEarnings: employeesData.reduce((sum, emp) => sum + emp.calculated.grossEarnings, 0),
+        totalTaxes: employeesData.reduce((sum, emp) => sum + emp.taxes.totalTaxes, 0),
+        totalDeductions: employeesData.reduce((sum, emp) => sum + emp.calculated.totalDeductions, 0),
+        netPay: employeesData.reduce((sum, emp) => sum + emp.netPayAfterTaxes, 0),
+      };
+  
+      // Save to backend
+      const response = await fetch(`${API_URL}/api/payroll-system/save-payroll-run`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          payDate,
+          periodStart: dateRange.payFrom,
+          periodEnd: dateRange.payTo,
+          checkNumberStart: checkNumber,
+          employees: employeesData,
+          earningTypes: earningTypes.filter(et => et.enabled !== false),
+          deductionTypes: deductionTypes.filter(dt => dt.enabled !== false),
+          totals,
+          hoursData,
+        }),
+      });
+  
+      const result = await response.json();
+  
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to save payroll');
+      }
+  
+      toast.success(`✅ Payroll saved! ${result.data.employeesProcessed} employees processed.`);
+      console.log('✅ Payroll Run Saved:', result.data);
+      fetchUnviewedReportsCount();
+      
+    } catch (error) {
+      console.error('❌ Error saving payroll:', error);
+      toast.error(error.message || 'Failed to save payroll');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const getEarningInputValue = (employee, earningType) => {
@@ -2324,7 +2299,7 @@ const Payroll = () => {
         {/* Date and Transfer Controls */}
         <div className="p-6 border-b">
           <div className="flex items-end justify-between gap-4 mb-4">
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Pay Date
@@ -2369,6 +2344,54 @@ const Payroll = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
               </div>
+            </div>
+
+            {/* Action Buttons - Auto-Detect and Transfer on same line */}
+            <div className="flex gap-3">
+              {/* Auto-Detect Period Button */}
+              <button
+                onClick={() => {
+                  const today = new Date();
+                  const day = today.getDate();
+                  
+                  let payFrom, payTo, payDateCalc;
+                  
+                  if (day >= 1 && day <= 5) {
+                    // Day 1-5: Previous period (16th-end of previous month)
+                    // Still processing last month's second period
+                    payFrom = new Date(today.getFullYear(), today.getMonth() - 1, 16);
+                    payTo = new Date(today.getFullYear(), today.getMonth(), 0); // Last day of previous month
+                    payDateCalc = new Date(today.getFullYear(), today.getMonth(), 5); // 5th of current month
+                  } else if (day >= 6 && day <= 20) {
+                    // Day 6-20: Current period (1st-15th)
+                    payFrom = new Date(today.getFullYear(), today.getMonth(), 1);
+                    payTo = new Date(today.getFullYear(), today.getMonth(), 15);
+                    payDateCalc = new Date(today.getFullYear(), today.getMonth(), 20); // 20th of current month
+                  } else {
+                    // Day 21-31: Current period (16th-last day)
+                    payFrom = new Date(today.getFullYear(), today.getMonth(), 16);
+                    payTo = new Date(today.getFullYear(), today.getMonth() + 1, 0); // Last day of current month
+                    payDateCalc = new Date(today.getFullYear(), today.getMonth() + 1, 5); // 5th of next month
+                  }
+                  
+                  setDateRange({
+                    payFrom: payFrom.toLocaleDateString('en-CA'),
+                    payTo: payTo.toLocaleDateString('en-CA'),
+                  });
+                  setPayDate(payDateCalc.toISOString().split('T')[0]);
+                  
+                  toast.success(`Period: ${payFrom.toLocaleDateString()} - ${payTo.toLocaleDateString()}, Pay: ${payDateCalc.toLocaleDateString()}`);
+                }}
+                className="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
+                title="Auto-calculate pay period based on today's date"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Auto-Detect
+              </button>
+
+              {/* Transfer Button */}
               <button
                 onClick={handleTransfer}
                 disabled={transferLoading || !dateRange.payFrom || !dateRange.payTo}
@@ -2391,45 +2414,6 @@ const Payroll = () => {
                     Transfer
                   </>
                 )}
-              </button>
-              
-              {/* Auto-Calculate Dates Button */}
-              <button
-                onClick={() => {
-                  const today = new Date();
-                  const day = today.getDate();
-                  
-                  let payFrom, payTo, payDateCalc;
-                  
-                  if (day >= 1 && day <= 15) {
-                    // Current day is 1-15: Use PREVIOUS period (16th-end of last month)
-                    payTo = new Date(today.getFullYear(), today.getMonth(), 0); // Last day of previous month
-                    payFrom = new Date(today.getFullYear(), today.getMonth() - 1, 16); // 16th of previous month
-                    payDateCalc = new Date(payTo);
-                    payDateCalc.setDate(payDateCalc.getDate() + 5); // 5 days after cutoff end
-                  } else {
-                    // Current day is 16-31: Use CURRENT period (1st-15th of current month)
-                    payFrom = new Date(today.getFullYear(), today.getMonth(), 1); // 1st of current month
-                    payTo = new Date(today.getFullYear(), today.getMonth(), 15); // 15th of current month
-                    payDateCalc = new Date(payTo);
-                    payDateCalc.setDate(payDateCalc.getDate() + 5); // 5 days after (20th)
-                  }
-                  
-                  setDateRange({
-                    payFrom: payFrom.toISOString().split('T')[0],
-                    payTo: payTo.toISOString().split('T')[0],
-                  });
-                  setPayDate(payDateCalc.toISOString().split('T')[0]);
-                  
-                  toast.success(`Auto-calculated: ${payFrom.toLocaleDateString()} - ${payTo.toLocaleDateString()}, Pay: ${payDateCalc.toLocaleDateString()}`);
-                }}
-                className="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
-                title="Auto-calculate pay period based on today's date"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                Auto-Detect Period
               </button>
             </div>
 
@@ -2481,21 +2465,6 @@ const Payroll = () => {
 
         {/* Action Buttons */}
         <div className="p-6 bg-gray-50 border-t flex justify-between items-center">
-          <button
-            onClick={handleGeneratePDF}
-            disabled={!hoursDataLoaded}
-            className={`px-6 py-3 font-medium rounded-md transition-colors duration-200 flex items-center gap-2 ${
-              !hoursDataLoaded
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            }`}
-            title={!hoursDataLoaded ? 'Transfer hours first to generate PDF' : 'Generate PDF Report'}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Download PDF Report
-          </button>
 
           <div className="flex gap-4">
             <button
@@ -2505,10 +2474,15 @@ const Payroll = () => {
               RESET
             </button>
             <button
-              onClick={handleProcess}
-              className="px-8 py-3 bg-orange-600 text-white font-medium rounded-md hover:bg-orange-700 transition-colors duration-200"
+              onClick={handleSavePayroll}
+              disabled={saving || !hoursDataLoaded}
+              className={`px-8 py-3 font-medium rounded-md transition-colors duration-200 ${
+                saving || !hoursDataLoaded
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-orange-600 text-white hover:bg-orange-700'
+              }`}
             >
-              PROCESS
+              {saving ? 'SAVING...' : 'SAVE PAYROLL'}
             </button>
           </div>
         </div>
@@ -2520,7 +2494,7 @@ const Payroll = () => {
 
   const tabs = [
     { id: 'create-paycheck', label: 'Create Paycheck' },
-    { id: 'reports', label: 'Reports' },
+    { id: 'reports', label: 'Reports', badge: unviewedCount },
     { id: 'employee', label: 'Employee' },
     { id: 'company', label: 'Company' },
   ];
@@ -2550,23 +2524,37 @@ const Payroll = () => {
           </div>
 
           {/* Tab Navigation */}
-          <div className="px-6">
-            <nav className="flex space-x-8 border-b">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`pb-4 px-1 text-sm font-medium transition-colors relative ${
-                    activeTab === tab.id
-                      ? 'text-orange-600 border-b-2 border-orange-600'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </nav>
-          </div>
+          <div className="bg-white rounded-t-lg border-b">
+          <nav className="flex space-x-1 px-6">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  if (tab.id === 'reports') {
+                    setUnviewedCount(0);
+                  }
+                }}
+                className={`
+                  relative px-6 py-3 text-sm font-medium border-b-2 transition-colors
+                  ${activeTab === tab.id
+                    ? 'text-orange-600 border-orange-600'
+                    : 'text-gray-600 border-transparent hover:text-gray-800'
+                  }
+                `}
+              >
+                {tab.label}
+                
+                {/* Notification Badge */}
+                {tab.badge > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
+        </div>
         </div>
 
         {/* Tab Content */}

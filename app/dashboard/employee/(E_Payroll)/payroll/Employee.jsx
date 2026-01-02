@@ -66,7 +66,7 @@ const Employee = () => {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`${API_URL}/api/test/payroll-system/get-employees-list`, {
+      const response = await fetch(`${API_URL}/api/payroll-system/get-employees-list`, {
         headers: { 
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
