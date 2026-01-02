@@ -473,6 +473,7 @@ export default function ModernEmployees() {
       email: employee.email || "",
       password: "",
       role: employee.role || "employee",
+      status: employee.status || "active",
       departmentId: employee.department?.id || "none",
       employeeId: employee.employmentDetail?.employeeId || "",
       hireDate: employee.employmentDetail?.hireDate || "",
@@ -488,7 +489,7 @@ export default function ModernEmployees() {
   };
 
   const handleSaveEdit = async () => {
-    const { id, firstName, lastName, email, password, role, departmentId, employeeId, hireDate, ...employment } = editForm;
+    const { id, firstName, lastName, email, password, role, status, departmentId, employeeId, hireDate, ...employment } = editForm;
     
     if (!val(firstName) || !val(lastName) || !val(email)) {
       toast.error("First name, last name, and email are required.");
@@ -501,6 +502,7 @@ export default function ModernEmployees() {
       lastName: val(lastName),
       email: val(email),
       role,
+      status,
       departmentId: departmentId === "none" ? undefined : departmentId,
       employeeId: val(employeeId),
       hireDate: val(hireDate),
@@ -516,6 +518,7 @@ export default function ModernEmployees() {
         body: JSON.stringify(payload),
       });
       const j = await r.json();
+      console.log(j)
       if (r.ok) {
         toast.success("Employee updated successfully!");
         setShowEditModal(false);
@@ -1139,6 +1142,18 @@ export default function ModernEmployees() {
                             {dept.name}
                           </SelectItem>
                         ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Status</label>
+                    <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

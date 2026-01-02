@@ -1,10 +1,12 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { toast, Toaster } from 'sonner';
 import useAuthStore from "@/store/useAuthStore";
 import * as XLSX from 'xlsx';
 
 const Reports = () => {
+  const { token } = useAuthStore();
+  const API_URL = process.env.NEXT_PUBLIC_API_URL;
   const [activeReportTab, setActiveReportTab] = useState('payroll-detail');
   const [filters, setFilters] = useState({
     from: '01-01',
@@ -14,11 +16,9 @@ const Reports = () => {
   });
   const [payrollReports, setPayrollReports] = useState([]);
   const [loading, setLoading] = useState(false);
-  const { token } = useAuthStore();
   const [selectedReport, setSelectedReport] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   const formatCurrency = (num) => {
     return new Intl.NumberFormat('en-US', {
@@ -35,29 +35,115 @@ const Reports = () => {
       return;
     }
   
-    // 1. Prepare the data (flattening the object for a spreadsheet)
-    const excelData = payrollReports.map(report => ({
-      'Pay Date': new Date(report.payDate).toLocaleDateString(),
-      'Period Start': new Date(report.periodStart).toLocaleDateString(),
-      'Period End': new Date(report.periodEnd).toLocaleDateString(),
-      'Employees': report.employeeCount,
-      'Gross Pay ($)': report.totalGross,
-      'Taxes ($)': report.totalTaxes,
-      'Deductions ($)': report.totalDeductions,
-      'Net Pay ($)': report.totalNet,
-    }));
+    try {
+      const workbook = XLSX.utils.book_new();
   
-    // 2. Create a worksheet
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
-    
-    // 3. Create a workbook and add the worksheet
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Payroll Summary");
+      const summaryData = payrollReports.map(report => ({
+        'Pay Date': new Date(report.payDate).toLocaleDateString(),
+        'Period Start': new Date(report.periodStart).toLocaleDateString(),
+        'Period End': new Date(report.periodEnd).toLocaleDateString(),
+        'Employees': report.employeeCount,
+        'Gross Pay': report.totalGross,
+        'Taxes': report.totalTaxes,
+        'Deductions': report.totalDeductions,
+        'Net Pay': report.totalNet,
+      }));
   
-    // 4. Trigger download
-    XLSX.writeFile(workbook, `Payroll_Report_${filters.year}_${filters.from}_to_${filters.to}.xlsx`);
-    
-    toast.success("Excel file generated!");
+      const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+      
+      summarySheet['!cols'] = [
+        { wch: 12 },  // Pay Date
+        { wch: 12 },  // Period Start
+        { wch: 12 },  // Period End
+        { wch: 10 },  // Employees
+        { wch: 12 },  // Gross Pay
+        { wch: 12 },  // Taxes
+        { wch: 12 },  // Deductions
+        { wch: 12 },  // Net Pay
+      ];
+  
+      XLSX.utils.book_append_sheet(workbook, summarySheet, "Payroll Summary");
+  
+      const employeeData = [];
+  
+      payrollReports.forEach(report => {
+        report.employees.forEach(emp => {
+          employeeData.push({
+            'Pay Date': new Date(report.payDate).toLocaleDateString(),
+            'Period': `${new Date(report.periodStart).toLocaleDateString()} - ${new Date(report.periodEnd).toLocaleDateString()}`,
+            'Employee Name': emp.employeeName,
+            'Position': emp.position || 'N/A',
+            'Pay Type': emp.payType?.toUpperCase() || 'N/A',
+            'Check Number': emp.checkNumber,
+            'Gross Pay': emp.grossPay || 0,
+            'Federal Tax': emp.taxes?.federalTax || 0,
+            'State Tax': emp.taxes?.stateTax || 0,
+            'FICA': emp.taxes?.fica || 0,
+            'Medicare': emp.taxes?.medicare || 0,
+            'SDI': emp.taxes?.sdi || 0,
+            'CalSavers': emp.taxes?.calSavers || 0,
+            'Total Taxes': emp.totalTaxes || 0,
+            'Deductions': emp.totalDeductions || 0,
+            'Net Pay': emp.netPay || 0,
+          });
+        });
+      });
+  
+      const detailSheet = XLSX.utils.json_to_sheet(employeeData);
+  
+      detailSheet['!cols'] = [
+        { wch: 12 },  // Pay Date
+        { wch: 25 },  // Period
+        { wch: 20 },  // Employee Name
+        { wch: 18 },  // Position
+        { wch: 10 },  // Pay Type
+        { wch: 12 },  // Check Number
+        { wch: 12 },  // Gross Pay
+        { wch: 12 },  // Federal Tax
+        { wch: 12 },  // State Tax
+        { wch: 12 },  // FICA
+        { wch: 12 },  // Medicare
+        { wch: 12 },  // SDI
+        { wch: 12 },  // CalSavers
+        { wch: 12 },  // Total Taxes
+        { wch: 12 },  // Deductions
+        { wch: 12 },  // Net Pay
+      ];
+  
+      XLSX.utils.book_append_sheet(workbook, detailSheet, "Employee Details");
+  
+      const filename = `Payroll_Report_${filters.year}_${filters.from}_to_${filters.to}.xlsx`;
+      XLSX.writeFile(workbook, filename);
+  
+      toast.success(`Excel file generated with ${employeeData.length} employee records!`);
+  
+    } catch (error) {
+      console.error('Error generating Excel:', error);
+      toast.error('Failed to generate Excel file');
+    }
+  };
+
+  const handleViewPayslip = async (payrollRunId, employeeId) => {
+    try {
+      const response = await fetch(
+        `${API_URL}/api/payroll-system/generate-payslip-pdf/${payrollRunId}/${employeeId}`, // ✅ Admin route with employeeId
+        {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${token}` },
+        }
+      );
+  
+      if (!response.ok) throw new Error('Failed to generate payslip');
+  
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => window.URL.revokeObjectURL(url), 100);
+      
+    } catch (error) {
+      console.error('Error viewing payslip:', error);
+      toast.error('Failed to view payslip');
+    }
   };
 
   const handleDownloadPayslip = async (payrollRunId, employeeId) => {
@@ -65,7 +151,7 @@ const Reports = () => {
       toast.info('Generating payslip PDF...');
   
       const response = await fetch(
-        `${API_URL}/api/payroll-system/generate-payslip-pdf/${payrollRunId}/${employeeId}`,
+        `${API_URL}/api/payroll-system/generate-payslip-pdf/${payrollRunId}/${employeeId}`, // ✅ Admin route with employeeId
         {
           method: 'GET',
           headers: {
@@ -77,12 +163,22 @@ const Reports = () => {
       if (!response.ok) {
         throw new Error('Failed to generate payslip');
       }
+
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'payslip.pdf';
+
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, '');
+        }
+      }
   
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `payslip-${employeeId}-${payrollRunId}.pdf`;
+      link.download = filename; 
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -224,15 +320,28 @@ const Reports = () => {
                         <p className="text-lg font-bold text-orange-600">{formatCurrency(emp.netPay || 0)}</p>
                       </div>
                       {/* PDF Button */}
-                      <button
-                        onClick={() => handleDownloadPayslip(selectedReport.id, emp.employeeId)}
-                        className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                        title="Download PDF Payslip"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleViewPayslip(selectedReport.id, emp.employeeId)}
+                          className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                          title="View PDF Payslip"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        </button>
+                        
+                        <button
+                          onClick={() => handleDownloadPayslip(selectedReport.id, emp.employeeId)}
+                          className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                          title="Download PDF Payslip"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -270,9 +379,9 @@ const Reports = () => {
   };
 
   const reportTabs = [
-    { id: 'payroll-detail', label: 'Payroll Detail' },
-    { id: '941-tax', label: '941 Tax Liability' },
-    { id: 'de-9c', label: 'DE-9C' },
+    { id: 'payroll-detail', label: 'Payroll Detail', enabled: true },
+    { id: '941-tax', label: '941 Tax Liability', enabled: false },
+    { id: 'de-9c', label: 'DE-9C', enabled: false },
   ];
 
   // Render Payroll Detail Tab
@@ -281,7 +390,8 @@ const Reports = () => {
       <PayrollDetailModal />
       {/* Filters Section */}
       <div className="p-6 bg-gray-50 border-b">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+        {/* Filters Row */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">From</label>
             <input
@@ -292,6 +402,7 @@ const Reports = () => {
               placeholder="01-01"
             />
           </div>
+          
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">To</label>
             <input
@@ -302,16 +413,20 @@ const Reports = () => {
               placeholder="12-31"
             />
           </div>
+          
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
-            <input
-              type="text"
+            <select
               value={filters.year}
               onChange={(e) => setFilters({ ...filters, year: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-              placeholder="2025"
-            />
+            >
+              {Array.from({ length: new Date().getFullYear() - 2024 }, (_, i) => 2025 + i).map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
           </div>
+          
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
             <select
@@ -323,22 +438,25 @@ const Reports = () => {
               <option>Amount</option>
             </select>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={fetchPayrollReports}
-              disabled={loading}
-              className="flex-1 px-6 py-2 bg-orange-600 text-white font-medium rounded-md hover:bg-orange-700 transition-colors disabled:opacity-50"
-            >
-              {loading ? 'LOADING...' : 'VIEW'}
-            </button>
+        </div>
 
-            <button
-              onClick={exportToExcel}
-              disabled={payrollReports.length === 0}
-              className="flex-1 px-6 py-2 bg-green-700 text-white font-medium rounded-md hover:bg-green-800 disabled:opacity-50"            >
-              EXPORT EXCEL
-            </button>
-          </div>
+        {/* Action Buttons Row */}
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={fetchPayrollReports}
+            disabled={loading}
+            className="px-8 py-2.5 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+          >
+            {loading ? 'LOADING...' : 'VIEW'}
+          </button>
+
+          <button
+            onClick={exportToExcel}
+            disabled={payrollReports.length === 0}
+            className="px-8 py-2.5 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+          >
+            EXPORT EXCEL
+          </button>
         </div>
       </div>
 
@@ -427,16 +545,20 @@ const Reports = () => {
             {reportTabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveReportTab(tab.id)}
+                onClick={() => tab.enabled && setActiveReportTab(tab.id)}
+                disabled={!tab.enabled}
                 className={`
                   px-6 py-2 text-sm font-medium rounded-t-lg transition-colors
                   ${activeReportTab === tab.id
                     ? 'bg-orange-500 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    : tab.enabled 
+                      ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                   }
                 `}
               >
                 {tab.label}
+                {!tab.enabled}
               </button>
             ))}
           </nav>

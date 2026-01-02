@@ -458,7 +458,6 @@ export default function EmployeesPunchLogs() {
         
         const ctz = cJ.data?.timezone || cJ.data?.companyTimezone || "America/Los_Angeles";
         setCompanyTimezone(ctz);
-        console.log("Company timezone:", ctz);
       }
       if (pJ?.data?.company?.name) setCompanyName(pJ.data.company.name.replace(/\s+/g, "_"));
       if (pJ?.data) {
@@ -474,7 +473,6 @@ export default function EmployeesPunchLogs() {
                      Intl.DateTimeFormat().resolvedOptions().timeZone || 
                      "UTC";
         setUserTimezone(utz);
-        console.log("User timezone:", utz);
       }
       if (eJ?.data) setEmployees(eJ.data);
       if (dJ?.data) setDepartments(dJ.data);
