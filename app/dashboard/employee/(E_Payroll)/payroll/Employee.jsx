@@ -111,7 +111,6 @@ const Employee = () => {
       });
       
       const data = await response.json();
-      console.log(data);
       
       if (!response.ok) {
         throw new Error(data.message || 'Failed to fetch employee details');
@@ -402,23 +401,33 @@ const Employee = () => {
                   {employees.map((employee) => (
                     <li
                       key={employee.id}
-                      onClick={() => handleSelectEmployee(employee.id)}
-                      className={`px-4 py-3 cursor-pointer transition-colors ${
-                        selectedEmployee === employee.id
-                          ? 'bg-orange-50 text-orange-700'
-                          : 'text-gray-700 hover:bg-gray-50'
+                      onClick={() => employee.status === 'Active' ? handleSelectEmployee(employee.id) : null}
+                      className={`px-4 py-3 transition-colors ${
+                        employee.status !== 'Active'
+                          ? 'opacity-50 bg-gray-100 cursor-not-allowed'
+                          : selectedEmployee === employee.id
+                            ? 'bg-orange-50 text-orange-700 cursor-pointer'
+                            : 'text-gray-700 hover:bg-gray-50 cursor-pointer'
                       }`}
                     >
                       <div className="flex flex-col">
-                        <span className={`text-sm ${selectedEmployee === employee.id ? 'font-semibold' : 'font-medium'}`}>
+                        <span className={`text-sm ${
+                          employee.status !== 'Active'
+                            ? 'text-gray-400 line-through'
+                            : selectedEmployee === employee.id 
+                              ? 'font-semibold' 
+                              : 'font-medium'
+                        }`}>
                           {employee.name}
                         </span>
-                        <span className="text-xs text-gray-500 mt-1">
+                        <span className={`text-xs mt-1 ${
+                          employee.status !== 'Active' ? 'text-gray-400' : 'text-gray-500'
+                        }`}>
                           {employee.position || 'No position'}
                         </span>
                         {employee.status !== 'Active' && (
-                          <span className="text-xs text-gray-400 mt-1">
-                            ({employee.status})
+                          <span className="text-xs text-red-500 mt-1 font-medium">
+                            (Inactive)
                           </span>
                         )}
                       </div>
