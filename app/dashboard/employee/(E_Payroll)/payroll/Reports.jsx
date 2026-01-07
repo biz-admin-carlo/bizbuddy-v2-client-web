@@ -191,6 +191,44 @@ const Reports = () => {
     }
   };
 
+  const handlePrintCheck = async (payrollRunId, employeeId) => {
+    try {
+      toast.info('Generating check for printing...');
+  
+      const response = await fetch(
+        `${API_URL}/api/payroll-system/generate-check-pdf/${payrollRunId}/${employeeId}`,
+        {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${token}` },
+        }
+      );
+  
+      if (!response.ok) throw new Error('Failed to generate check');
+  
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'check.pdf';
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (match && match[1]) filename = match[1].replace(/['"]/g, '');
+      }
+  
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      
+      // Open in new window for printing
+      const printWindow = window.open(url, '_blank');
+      printWindow.addEventListener('load', () => {
+        printWindow.print();
+      });
+      
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+      toast.success('Check ready for printing!');
+    } catch (error) {
+      console.error('Error generating check:', error);
+      toast.error('Failed to generate check');
+    }
+  };
+
   const fetchPayrollReports = async () => {
     try {
       setLoading(true);
@@ -339,6 +377,15 @@ const Reports = () => {
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => handlePrintCheck(selectedReport.id, emp.employeeId)}
+                          className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                          title="Print Check"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                           </svg>
                         </button>
                       </div>
