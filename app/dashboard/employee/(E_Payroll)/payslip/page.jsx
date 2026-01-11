@@ -48,7 +48,7 @@ export default function PayslipPage() {
       toast.info('Generating payslip PDF...');
   
       const response = await fetch(
-        `${API_URL}/api/payroll-system/my-payslip/${payrollRunId}`, // ✅ Just payrollRunId!
+        `${API_URL}/api/payroll-system/my-payslip/${payrollRunId}`,
         {
           method: 'GET',
           headers: { 'Authorization': `Bearer ${token}` },
@@ -85,7 +85,7 @@ export default function PayslipPage() {
   const handleViewPayslip = async (payrollRunId) => {
     try {
       const response = await fetch(
-        `${API_URL}/api/payroll-system/my-payslip/${payrollRunId}`, // ✅ Just payrollRunId!
+        `${API_URL}/api/payroll-system/my-payslip/${payrollRunId}`,
         {
           method: 'GET',
           headers: { 'Authorization': `Bearer ${token}` },

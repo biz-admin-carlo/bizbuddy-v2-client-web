@@ -44,6 +44,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
+import CheckSettings from './CheckSettings';
 
 // Common IANA Timezones
 const TIMEZONES = [
@@ -480,7 +481,9 @@ export default function ModernCompanyConfigurations() {
           updateDepartmentCoffeeSetting={updateDepartmentCoffeeSetting}
           loading={loadingDepartments}
         />
-        
+
+        <CheckSettings />
+
         {/* Leave Types Management */}
         <LeaveTypesCard API={API} token={token} policies={policies} reload={loadData} />
         
