@@ -140,7 +140,22 @@ export default function EmployeeAccountDeletion() {
       });
       const json = await response.json();
       if (response.ok) {
-        setRequests(json.data || []);
+        const transformedData = (json.data || []).map((request) => ({
+          ...request,
+          employeeName: request.user?.profile
+            ? `${request.user.profile.firstName || ""} ${request.user.profile.lastName || ""}`.trim()
+            : "Unknown",
+          employeeEmail: request.user?.email || "N/A",
+          departmentName: request.department?.name || "No Department",
+          requestedByName: request.requestedByUser?.profile
+            ? `${request.requestedByUser.profile.firstName || ""} ${request.requestedByUser.profile.lastName || ""}`.trim()
+            : request.requestedByUser?.email || "Unknown",
+          reviewedByName: request.reviewedByUser?.profile
+            ? `${request.reviewedByUser.profile.firstName || ""} ${request.reviewedByUser.profile.lastName || ""}`.trim()
+            : request.reviewedByUser?.email || null,
+        }));
+        
+        setRequests(transformedData);
       } else {
         toast.error(json.error || "Failed to fetch deletion requests");
       }
@@ -181,14 +196,17 @@ export default function EmployeeAccountDeletion() {
   };
 
   const idOpts = requests.map((r) => ({ value: r.id, label: r.id }));
-  const nameOpts = [...new Set(requests.map((r) => r.employeeName))].map((name) => ({
+
+  const nameOpts = [...new Set(requests.map((r) => r.employeeName).filter(Boolean))].map((name) => ({
     value: name.toLowerCase(),
     label: name,
   }));
-  const deptOpts = [...new Set(requests.map((r) => r.departmentName))].map((dept) => ({
+  
+  const deptOpts = [...new Set(requests.map((r) => r.departmentName).filter(Boolean))].map((dept) => ({
     value: dept.toLowerCase(),
     label: dept,
   }));
+  
   const statusOpts = ["pending", "approved", "rejected", "completed"].map((s) => ({
     value: s,
     label: s.charAt(0).toUpperCase() + s.slice(1),

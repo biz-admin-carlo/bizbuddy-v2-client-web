@@ -118,6 +118,7 @@ const CompanyPanelItems = [
     children: [
       { id: "company/profile", label: "Profile" },
       { id: "company/configurations", label: "Configurations" },
+      { id: "company/notifications", label: "Notifications" },
       { id: "company/subscription", label: "Subscription" },
       { id: "company/deletion", label: "Deletion" },
     ],
