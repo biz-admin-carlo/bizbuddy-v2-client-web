@@ -10,22 +10,22 @@ import {
   User, 
   CheckSquare, 
   AlertCircle, 
-  Pencil, 
+  Info, 
   Trash2,
   Plus,
   Settings,
   Users,
   Calendar,
   TrendingUp,
-  Eye,
+  Moon,
   Edit3,
-  UserCheck,
+  Sun,
   Award,
   Timer,
   RefreshCw,
   Globe,
   Coffee,
-  Info
+  Bell,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
@@ -443,7 +443,6 @@ export default function ModernCompanyConfigurations() {
           </Card>
         </div>
 
-        {/* Company TimeZone - CRITICAL SETTING */}
         <CompanyTimezoneCard 
           loading={loadingSettings}
           draft={draft}
@@ -451,7 +450,6 @@ export default function ModernCompanyConfigurations() {
           onTimezoneChange={handleTimezoneChange}
         />
 
-        {/* TimeZone Confirmation Modal */}
         <TimezoneConfirmationModal
           open={showTimezoneModal}
           onOpenChange={setShowTimezoneModal}
@@ -461,10 +459,8 @@ export default function ModernCompanyConfigurations() {
           previewTime={currentTime}
         />
 
-        {/* Time-keeping Defaults */}
         <TimeDefaultsCard loading={loadingSettings} draft={draft} setDraft={setDraft} />
         
-        {/* Department Lunch Break Policy */}
         <DepartmentBreakPolicyCard 
           departments={departments}
           departmentBreakSettings={departmentBreakSettings}
@@ -473,7 +469,6 @@ export default function ModernCompanyConfigurations() {
           loading={loadingDepartments}
         />
         
-        {/* Department Coffee Break Policy - NEW */}
         <DepartmentCoffeeBreakPolicyCard
           departments={departments}
           departmentCoffeeSettings={departmentCoffeeSettings}
