@@ -1,7 +1,3 @@
-// ============================================================================
-// LocationGuard Component - Blocks app until location is enabled
-// ============================================================================
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -13,9 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function LocationGuard({ children }) {
-  const [locationEnabled, setLocationEnabled] = useState(null); // null = checking, true = enabled, false = disabled
+  const [locationEnabled, setLocationEnabled] = useState(null);
   const [checking, setChecking] = useState(false);
   const [browserType, setBrowserType] = useState("chrome");
+  const [errorMessage, setErrorMessage] = useState("");
 
   // Check location permission on mount
   useEffect(() => {
@@ -32,31 +29,57 @@ export default function LocationGuard({ children }) {
     else setBrowserType("chrome"); // default
   };
 
-  const checkLocationPermission = async () => {
+const checkLocationPermission = async () => {
     setChecking(true);
+    setErrorMessage(""); // ✅ Clear previous errors
     
-    try {
-      // Try to get location
+    try {      
+      // Try to get location with relaxed settings
       const position = await new Promise((resolve, reject) => {
-        if (!("geolocation" in navigator)) {
-          reject(new Error("Geolocation not supported"));
-          return;
-        }
+        // if (!("geolocation" in navigator)) {
+        //   reject(new Error("Geolocation not supported by browser"));
+        //   return;
+        // }
 
         navigator.geolocation.getCurrentPosition(
-          (pos) => resolve(pos),
-          (err) => reject(err),
-          { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+          (pos) => {
+            // console.log('✅ Location obtained:', pos.coords);
+            resolve(pos);
+          },
+          (err) => {
+            // console.error('❌ Location error:', err);
+            reject(err);
+          },
+          { 
+            enableHighAccuracy: false, // ✅ CHANGED: Use false for faster response
+            timeout: 15000, // ✅ INCREASED: 15 seconds timeout
+            maximumAge: 10000 // ✅ CHANGED: Allow cached location up to 10 seconds old
+          }
         );
       });
 
       if (position.coords.latitude && position.coords.longitude) {
+        // console.log('✅ Location enabled successfully');
         setLocationEnabled(true);
       } else {
+        // console.error('❌ Location coordinates missing');
         setLocationEnabled(false);
+        setErrorMessage("Location coordinates not available");
       }
     } catch (error) {
+      // console.error('❌ Location check failed:', error);
       setLocationEnabled(false);
+      
+      // ✅ Set user-friendly error messages
+      if (error.code === 1) {
+        setErrorMessage("Location permission denied. Please allow location access.");
+      } else if (error.code === 2) {
+        setErrorMessage("Location unavailable. Please check your device settings.");
+      } else if (error.code === 3) {
+        setErrorMessage("Location request timed out. Please try again.");
+      } else {
+        setErrorMessage(error.message || "Unable to access location");
+      }
     } finally {
       setChecking(false);
     }
@@ -80,6 +103,9 @@ export default function LocationGuard({ children }) {
           </motion.div>
           <p className="mt-4 text-lg font-medium text-neutral-700 dark:text-neutral-300">
             Checking location permissions...
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            This may take a few seconds
           </p>
         </div>
       </div>
@@ -116,6 +142,15 @@ export default function LocationGuard({ children }) {
               This app requires your location to track your work attendance. Please enable location services to continue.
             </DialogDescription>
           </DialogHeader>
+
+          {errorMessage && (
+            <Alert className="bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-sm">
+                <strong>Error:</strong> {errorMessage}
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Why Location is Required */}
           <Alert className="bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-800">
