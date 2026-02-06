@@ -49,6 +49,7 @@ import TableSkeleton from "@/components/common/TableSkeleton";
 import ConfirmDeleteDialog from "@/components/common/ConfirmDeleteDialog";
 import FormDialog from "@/components/common/FormDialog";
 import OrangeLoadingSpinner from "@/components/common/Spinner";
+import { exportPunchLogsCSV, exportPunchLogsPDF } from "@/lib/exportUtils";
 
 const MAX_DEV_CHARS = 15;
 const truncate = (s = "", L = MAX_DEV_CHARS) => (s.length > L ? s.slice(0, L) + "…" : s);
@@ -150,7 +151,6 @@ const getLocation = (log, dir) => {
       }
     : { txt: "—", lat: null, lng: null };
 };
-const wrap = (v) => `"${String(v).replace(/"/g, '""')}"`;
 const NUM2DAY = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 const parseRRuleDays = (str) => {
   const m = str.match(/BYDAY=([^;]+)/i);
@@ -655,77 +655,48 @@ export default function PunchLogs() {
   
   };
 
-  const buildCSV = (rows) => {
-    const header = ["ID", "Time In", "Time Out", "Duration", "Coffee", "Lunch", "OT", "OT Status", "Late", "Period", "Status"].map(wrap);
-    const cell = (r) => [
-      r.id,
-      safeDateTime(r.timeIn),
-      safeDateTime(r.timeOut),
-      r.duration,
-      r.coffeeMins,
-      r.lunchMins,
-      r.otHours,
-      r.otStatus,
-      r.lateHours,
-      r.periodHours,
-      r.status ? "Active" : "Completed",
-    ].map(wrap);
-    const body = rows.map(cell);
-    return [header, ...body].map((row) => row.join(",")).join("\r\n");
-  };
-
-  const exportCSV = () => {
+  const exportCSV = async () => {
     if (!filteredSorted.length) {
-      toast.message("No rows to export");
+      toast.error("No rows to export");
       return;
     }
+    
     setExporting(true);
-    const blob = new Blob([buildCSV(filteredSorted)], {
-      type: "text/csv;charset=utf-8;",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `MyTimelogs_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.message("CSV exported");
-    setExporting(false);
+    
+    try {
+      const result = await exportPunchLogsCSV({ data: filteredSorted });
+      
+      if (result.success) {
+        toast.success(`${result.filename}`);
+      }
+    } catch (error) {
+      toast.error(`Export failed: ${error.message}`);
+    } finally {
+      setExporting(false);
+    }
   };
-
-  const exportPDF = () => {
+  
+  const exportPDF = async () => {
     if (!filteredSorted.length) {
-      toast.message("No rows to export");
+      toast.error("No rows to export");
       return;
     }
-    const company = user?.company?.name || "—";
-    const fullName = `${user?.profile?.firstName || ""} ${user?.profile?.lastName || ""}`.trim() || "—";
-    const email = user?.email || "—";
-    const tableHead = [["ID", "Time In", "Time Out", "Duration", "OT", "Status"]];
-    const tableBody = filteredSorted.map((row) => [
-      row.id,
-      safeDateTime(row.timeIn),
-      safeDateTime(row.timeOut),
-      row.duration,
-      row.otHours,
-      row.status ? "Active" : "Completed",
-    ]);
-    const doc = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
-    doc.setFontSize(12);
-    doc.text(`Company : ${company}`, 14, 20);
-    doc.text(`Full Name: ${fullName}`, 14, 28);
-    doc.text(`Email    : ${email}`, 14, 36);
-    autoTable(doc, {
-      head: tableHead,
-      body: tableBody,
-      startY: 44,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [255, 165, 0] },
-    });
-    const stamp = new Date().toISOString().slice(0, 10);
-    doc.save(`MyTimelogs_${stamp}.pdf`);
-    toast.message("PDF exported");
+    
+    setExporting(true);
+    
+    try {
+      const result = await exportPunchLogsPDF({ data: filteredSorted });
+      
+      if (result.success) {
+        toast.success(`${result.filename}`);
+      }
+    } catch (error) {
+      toast.error(`Export failed: ${error.message}`);
+    } finally {
+      setExporting(false);
+    }
   };
+  
 
   return (
     <TooltipProvider delayDuration={300}>

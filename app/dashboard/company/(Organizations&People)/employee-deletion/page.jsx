@@ -22,9 +22,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
 import useAuthStore from "@/store/useAuthStore";
+import { exportDeletionRequestsCSV, exportDeletionRequestsPDF } from "@/lib/exportUtils";
 import IconBtn from "@/components/common/IconBtn";
 import ColumnSelector from "@/components/common/ColumnSelector";
 import MultiSelect from "@/components/common/MultiSelect";
@@ -349,62 +348,54 @@ export default function EmployeeAccountDeletion() {
     return [head, ...body].join("\r\n");
   };
 
-  const exportCSV = () => {
-    if (!list.length) return toast.message("No data to export");
-    setExporting(true);
-    const d = new Date();
-    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-    const blob = new Blob([buildCSV()], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `DeletionRequests_${stamp}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.message("CSV exported");
-    setExporting(false);
-  };
-
-  const exportPDF = () => {
+  const exportCSV = async () => {
     if (!list.length) {
       toast.message("No data to export");
       return;
     }
+    
+    setExporting(true);
+    
+    try {
+      const result = await exportDeletionRequestsCSV({ 
+        data: list,
+        visibleColumns: visibleCols,
+        columnMap: headerMap,
+      });
+      
+      if (result.success) {
+        toast.success(`${result.filename}`);
+      }
+    } catch (error) {
+      toast.error(`Export failed: ${error.message}`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportPDF = async () => {
+    if (!list.length) {
+      toast.message("No data to export");
+      return;
+    }
+    
     setPdfExporting(true);
-    const cols = columnOptions.filter((c) => c.value !== "actions" && visibleCols.includes(c.value));
-    const tableHead = [cols.map((c) => c.label)];
-    const tableBody = list.map((r) => {
-      const rowMap = {
-        id: r.id,
-        employeeName: r.employeeName,
-        employeeEmail: r.employeeEmail,
-        department: r.departmentName,
-        status: r.status,
-        requestReason: r.requestReason || "",
-        requestedAt: fmt(r.requestedAt),
-        requestedBy: r.requestedByName,
-        reviewedBy: r.reviewedByName || "",
-        reviewedAt: fmt(r.reviewedAt),
-        completedAt: fmt(r.completedAt),
-        createdAt: fmt(r.createdAt),
-        updatedAt: fmt(r.updatedAt),
-      };
-      return cols.map((c) => rowMap[c.value]);
-    });
-    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-    doc.setFontSize(12);
-    doc.text("Employee Account Deletion Requests", 14, 18);
-    autoTable(doc, {
-      head: tableHead,
-      body: tableBody,
-      startY: 24,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [255, 165, 0] },
-    });
-    const stamp = new Date().toISOString().slice(0, 10);
-    doc.save(`DeletionRequests_${stamp}.pdf`);
-    toast.message("PDF exported");
-    setPdfExporting(false);
+    
+    try {
+      const result = await exportDeletionRequestsPDF({ 
+        data: list,
+        visibleColumns: visibleCols,
+        columnMap: headerMap,
+      });
+      
+      if (result.success) {
+        toast.success(`${result.filename}`);
+      }
+    } catch (error) {
+      toast.error(`Export failed: ${error.message}`);
+    } finally {
+      setPdfExporting(false);
+    }
   };
 
   return (

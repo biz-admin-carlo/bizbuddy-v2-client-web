@@ -36,9 +36,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
 import useAuthStore from "@/store/useAuthStore";
+import { exportEmployeePunchLogsCSV, exportEmployeePunchLogsPDF } from "@/lib/exportUtils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -111,13 +110,45 @@ const fmtLoc = (loc) => {
 const wrap = (v) => `"${String(v).replace(/"/g, '""')}"`;
 const JS_DAY_TO_RRULE = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 const templateMatchesDate = (tmpl, userId, isoDate) => {
-  if (!(tmpl.assignedToAll || tmpl.assignedUserId === userId)) return false;
-  const d = new Date(isoDate);
-  if (d < new Date(tmpl.startDate)) return false;
-  if (tmpl.endDate && d > new Date(tmpl.endDate)) return false;
-  const byDay = tmpl.recurrencePattern.match(/BYDAY=([^;]+)/i)?.[1] || "";
-  return byDay.split(",").filter(Boolean).includes(JS_DAY_TO_RRULE[d.getUTCDay()]);
+  // Check user assignment
+  if (!(tmpl.assignedToAll || tmpl.assignedUserId === userId)) {
+    return false;
+  }
+  
+  // Parse the date consistently
+  const checkDate = new Date(isoDate + 'T00:00:00Z'); // Force UTC midnight
+  const startDate = new Date(tmpl.startDate);
+  const endDate = tmpl.endDate ? new Date(tmpl.endDate) : null;
+  
+  // Check date range
+  if (checkDate < startDate) {
+    return false;
+  }
+  
+  if (endDate && checkDate > endDate) {
+    return false;
+  }
+  
+  // Check day of week
+  const byDayMatch = tmpl.recurrencePattern?.match(/BYDAY=([^;]+)/i);
+  if (!byDayMatch) {
+    // If no BYDAY pattern, assume all days match
+    return true;
+  }
+  
+  const byDayStr = byDayMatch[1];
+  const allowedDays = byDayStr.split(",").map(d => d.trim()).filter(Boolean);
+  
+  // Get day of week (0 = Sunday, 6 = Saturday)
+  const dayOfWeek = checkDate.getUTCDay();
+  const rruleDayCode = JS_DAY_TO_RRULE[dayOfWeek];
+  
+  // Check if the day matches
+  const dayMatches = allowedDays.includes(rruleDayCode);
+  
+  return dayMatches;
 };
+
 const z = (n) => String(n).padStart(2, "0");
 const toLocalInputValue = (iso) => {
   if (!iso) return "";
@@ -429,6 +460,27 @@ export default function EmployeesPunchLogs() {
     { value: "actions", label: "Actions", essential: true, group: "basic" },
   ];
 
+  const columnMapForExport = {
+    id: "Log ID",
+    schedule: "Scheduled",
+    locationRestricted: "Location Required",
+    employee: "Employee",
+    dateTimeIn: "Time In",
+    dateTimeOut: "Time Out",
+    duration: "Duration",
+    coffee: "Coffee Break",
+    lunch: "Lunch Break",
+    ot: "Overtime",
+    otStatus: "OT Status",
+    late: "Late Hours",
+    deviceIn: "Device In",
+    deviceOut: "Device Out",
+    locationIn: "Location In",
+    locationOut: "Location Out",
+    period: "Period Hours",
+    status: "Status",
+  };
+
   // Better default column visibility - show only essential columns by default
   const essentialColumns = columnOptions.filter(c => c.essential).map(c => c.value);
   const [columnVisibility, setColumnVisibility] = useState(essentialColumns);
@@ -608,8 +660,10 @@ export default function EmployeesPunchLogs() {
           const lunchMinsNum = lunchMinutesNum(t.lunchBreak);
           const excessCoffeeMins = Math.max(0, coffeeMinsNum - 30);
           const dateKey = t.timeIn ? t.timeIn.slice(0, 10) : "";
+
           const matchedTemplates = shiftTemplates.filter((s) => templateMatchesDate(s, t.userId, dateKey));
           const isScheduled = matchedTemplates.length > 0;
+          
           const firstSched = matchedTemplates[0];
           let shiftEndLocalStr = "—";
           let shiftName = "—";
@@ -799,341 +853,61 @@ export default function EmployeesPunchLogs() {
     return [header, ...body].map((row) => row.join(",")).join("\r\n");
   };
 
-  const exportCSV = () => {
+  const exportCSV = async () => {
     if (!displayed.length) {
-      toast.message("No rows to export");
+      toast.error("No data to export");
       return;
     }
+    
     setExporting(true);
     
-    // Enhanced CSV with better column selection
-    const csvCols = columnOptions.filter((c) => 
-      columnVisibility.includes(c.value) && 
-      c.value !== "actions" && 
-      c.value !== "locationIn" && 
-      c.value !== "locationOut"
-    );
-    
-    const header = csvCols.map((c) => wrap(c.label));
-    
-    const cell = (r, key) => {
-      switch (key) {
-        case "id":
-          return r.userId.toString().slice(-6); // Last 6 digits only
-        case "schedule":
-          return r.isScheduled ? "Scheduled" : "Unscheduled";
-        case "locationRestricted":
-          return r.isLocRestricted ? "Required" : "None";
-        case "employee":
-          return r.employeeName;
-        case "dateTimeIn":
-          return safeDateTime(r.timeIn);
-        case "dateTimeOut":
-          return safeDateTime(r.timeOut);
-        case "duration":
-          return `${r.duration} hours`;
-        case "coffee":
-          return `${r.coffeeMins} hours`;
-        case "lunch":
-          return `${r.lunchMins} hours`;
-        case "ot":
-          return `${r.otHours} hours`;
-        case "otStatus":
-          return r.otStatus;
-        case "late":
-          return `${r.lateHours} hours`;
-        case "deviceIn":
-          return r.fullDevIn;
-        case "deviceOut":
-          return r.fullDevOut;
-        case "period":
-          return `${r.periodHours} hours`;
-        case "status":
-          return r.status === "active" ? "Active" : "Completed";
-        default:
-          return "";
+    try {
+      const result = await exportEmployeePunchLogsCSV({
+        data: displayed,
+        visibleColumns: columnVisibility,
+        columnMap: columnMapForExport,
+        filters: filters,
+        userTimezone: userTimezone,
+        companyTimezone: companyTimezone,
+      });
+      
+      if (result.success) {
+        toast.success(`${result.filename}`);
       }
-    };
-  
-    const body = displayed.map((r) => csvCols.map((c) => wrap(cell(r, c.value))));
-    const csvContent = [header, ...body].map((row) => row.join(",")).join("\r\n");
-  
-    // Enhanced filename for CSV
-    const today = new Date();
-    const dateStr = today.toISOString().slice(0, 10);
-    const timeStr = today.toTimeString().slice(0, 5).replace(':', '');
-    
-    let filename = `${companyName || "PunchLogs"}_Export_${dateStr}`;
-    
-    if (filters.from && filters.to) {
-      filename += `_${filters.from.replace(/-/g, '')}-${filters.to.replace(/-/g, '')}`;
+    } catch (error) {
+      toast.error(`Export failed: ${error.message}`);
+    } finally {
+      setExporting(false);
     }
-    
-    filename += `_${displayed.length}records_${timeStr}.csv`;
-    
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    toast.success(`CSV exported: ${filename}`);
-    setExporting(false);
   };
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
     if (!displayed.length) {
-      toast.message("No rows to export");
+      toast.error("No data to export");
       return;
     }
+    
     setPdfExporting(true);
     
-    // Enhanced PDF columns with better spacing
-    const pdfCols = [
-      { key: "employeeShort", label: "Employee", width: 35 },
-      { key: "shift", label: "Shift", width: 15 },
-      { key: "dateTimeIn", label: "Time In", width: 25 },
-      { key: "dateTimeOut", label: "Time Out", width: 25 },
-      { key: "duration", label: "Duration", width: 15 },
-      { key: "coffee", label: "Coffee", width: 12 },
-      { key: "lunch", label: "Lunch", width: 12 },
-      { key: "ot", label: "OT", width: 12 },
-      { key: "late", label: "Late", width: 12 },
-      { key: "period", label: "Period", width: 15 },
-    ];
-  
-    const header = pdfCols.map((c) => c.label);
-    
-    // Enhanced cell value function with better formatting
-    const cellValue = (r, k) => {
-      switch (k) {
-        case "employeeShort":
-          // Show last 6 digits of ID + email prefix
-          const idShort = r.userId.toString().slice(-6);
-          const emailPrefix = r.employeeName.split('@')[0];
-          return `${idShort}\n${emailPrefix}`;
-        case "shift":
-          return r.shiftName !== "—" ? r.shiftName : "Unscheduled";
-        case "dateTimeIn":
-          return r.timeIn ? new Date(r.timeIn).toLocaleString('en-US', {
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-          }) : "—";
-        case "dateTimeOut":
-          return r.timeOut ? new Date(r.timeOut).toLocaleString('en-US', {
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-          }) : "—";
-        case "duration":
-          return `${r.duration}h`;
-        case "coffee":
-          return `${r.coffeeMins}h`;
-        case "lunch":
-          return `${r.lunchMins}h`;
-        case "ot":
-          return r.otStatus === "approved" ? `${r.otHours}h` : "0.00h";
-        case "late":
-          return `${r.lateHours}h`;
-        case "period":
-          return `${r.periodHours}h`;
-        default:
-          return "";
-      }
-    };
-  
-    const rows = displayed.filter((r) => r.status === "completed");
-    if (!rows.length) {
-      toast.message("No completed rows to export");
-      setPdfExporting(false);
-      return;
-    }
-  
-    const body = rows.map((r) => pdfCols.map((c) => cellValue(r, c.key)));
-  
-    // Use landscape orientation for better layout
-    const doc = new jsPDF({ 
-      orientation: "landscape", 
-      unit: "mm", 
-      format: "a4" 
-    });
-  
-    // Enhanced header with better formatting
-    doc.setFontSize(16);
-    doc.setFont(undefined, "bold");
-    let y = 20;
-    
-    // Company header
-    doc.text(`${companyName || "Company"} - Punch Logs Report`, 20, y);
-    y += 8;
-    
-    doc.setFontSize(10);
-    doc.setFont(undefined, "normal");
-    
-    // Date range information
-    const hasFrom = Boolean(filters.from);
-    const hasTo = Boolean(filters.to);
-    if (hasFrom || hasTo) {
-      const fmt = (d) => new Date(d).toLocaleDateString('en-US', {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
+    try {
+      const result = await exportEmployeePunchLogsPDF({
+        data: displayed,
+        visibleColumns: columnVisibility,
+        columnMap: columnMapForExport,
+        filters: filters,
+        userTimezone: userTimezone,
+        companyTimezone: companyTimezone,
       });
-      const periodLabel = hasFrom && hasTo 
-        ? `${fmt(filters.from)} to ${fmt(filters.to)}`
-        : hasFrom 
-        ? `From ${fmt(filters.from)}`
-        : `Up to ${fmt(filters.to)}`;
-      doc.text(`Report Period: ${periodLabel}`, 20, y);
-      y += 5;
-    }
-    
-    // Summary information
-    const completedCount = rows.length;
-    const totalActiveCount = displayed.filter(r => r.status === 'active').length;
-    doc.text(`Records: ${completedCount} completed, ${totalActiveCount} active | Total Period Hours: ${totalPeriodHours}`, 20, y);
-    y += 5;
-    
-    // Generation timestamp
-    const timestamp = new Date().toLocaleString('en-US', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-    });
-    doc.text(`Generated: ${timestamp}`, 20, y);
-    y += 10;
-  
-    // Enhanced summary table
-    const summaryHeader = ["Employee ID", "Email", "Total Hours", "Days Worked", "Avg Hours/Day"];
-    const summaryMap = {};
-    
-    rows.forEach((r) => {
-      const uid = r.userId.toString().slice(-6); // Last 6 digits
-      const email = r.employeeName;
-      const hrs = parseFloat(r.periodHours || "0") || 0;
-      const date = r.timeIn ? r.timeIn.slice(0, 10) : "";
       
-      if (!summaryMap[uid]) {
-        summaryMap[uid] = { 
-          id: uid, 
-          email: email.split('@')[0], // Just email prefix
-          total: 0, 
-          days: new Set() 
-        };
+      if (result.success) {
+        toast.success(`${result.filename}`);
       }
-      summaryMap[uid].total += hrs;
-      if (date) summaryMap[uid].days.add(date);
-    });
-  
-    const summaryBody = Object.values(summaryMap).map((s) => [
-      s.id, 
-      s.email, 
-      s.total.toFixed(2), 
-      s.days.size,
-      s.days.size > 0 ? (s.total / s.days.size).toFixed(1) : "0.0"
-    ]);
-  
-    // Summary table with enhanced styling
-    autoTable(doc, {
-      head: [summaryHeader],
-      body: summaryBody,
-      startY: y,
-      styles: { 
-        fontSize: 8,
-        cellPadding: 2,
-        lineColor: [200, 200, 200],
-        lineWidth: 0.1
-      },
-      headStyles: { 
-        fillColor: [255, 165, 0],
-        textColor: [255, 255, 255],
-        fontStyle: "bold"
-      },
-      alternateRowStyles: {
-        fillColor: [245, 245, 245]
-      },
-      margin: { left: 20, right: 20 }
-    });
-  
-    const afterSummaryY = doc.lastAutoTable?.finalY || y;
-    const mainStartY = afterSummaryY + 10;
-  
-    // Main data table with column widths
-    autoTable(doc, {
-      head: [header],
-      body,
-      startY: mainStartY,
-      styles: { 
-        fontSize: 7,
-        cellPadding: 2,
-        lineColor: [200, 200, 200],
-        lineWidth: 0.1,
-        overflow: 'linebreak'
-      },
-      headStyles: { 
-        fillColor: [255, 165, 0],
-        textColor: [255, 255, 255],
-        fontStyle: "bold"
-      },
-      alternateRowStyles: {
-        fillColor: [250, 250, 250]
-      },
-      columnStyles: Object.fromEntries(
-        pdfCols.map((col, index) => [
-          index, 
-          { cellWidth: col.width, halign: index === 0 ? 'left' : 'center' }
-        ])
-      ),
-      margin: { left: 20, right: 20 }
-    });
-  
-    // Enhanced footer
-    const finalY = doc.lastAutoTable?.finalY || mainStartY;
-    doc.setFontSize(8);
-    doc.text(`Report approved by: ${currentUserName || "—"} (${currentUserEmail || "—"})`, 20, finalY + 15);
-    
-    // Page numbering
-    const pageCount = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.width - 30, doc.internal.pageSize.height - 10);
+    } catch (error) {
+      toast.error(`Export failed: ${error.message}`);
+    } finally {
+      setPdfExporting(false);
     }
-  
-    // Enhanced filename with more context
-    const today = new Date();
-    const dateStr = today.toISOString().slice(0, 10);
-    const timeStr = today.toTimeString().slice(0, 5).replace(':', '');
-    
-    let filename = `${companyName || "PunchLogs"}_Report_${dateStr}`;
-    
-    // Add period context to filename
-    if (hasFrom && hasTo) {
-      const fromStr = filters.from.replace(/-/g, '');
-      const toStr = filters.to.replace(/-/g, '');
-      filename += `_${fromStr}-${toStr}`;
-    } else if (hasFrom) {
-      filename += `_from${filters.from.replace(/-/g, '')}`;
-    } else if (hasTo) {
-      filename += `_until${filters.to.replace(/-/g, '')}`;
-    }
-    
-    // Add record count and timestamp
-    filename += `_${completedCount}records_${timeStr}.pdf`;
-  
-    doc.save(filename);
-    toast.success(`PDF exported: ${filename}`);
-    setPdfExporting(false);
-  };  
+  }; 
 
   const refreshAll = async () => {
     setRefreshing(true);
@@ -2022,181 +1796,233 @@ export default function EmployeesPunchLogs() {
                   <TableSkeleton rows={6} cols={columnVisibility.length} />
                 ) : displayed.length ? (
                   <AnimatePresence>
-                    {displayed.map((t, index) => (
-                      <motion.tr
-                        key={t.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2, delay: index * 0.02 }}
-                        className={`border-b transition-all hover:bg-muted/50 ${
-                          expandedRow === t.id ? 'bg-muted/30' : ''
-                        }`}
-                      >
-                        {columnVisibility.includes("id") && (
-                          <TableCell className="font-mono text-xs text-center">
-                            <Badge variant="outline" className="font-mono">
-                              {t.id}
-                            </Badge>
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("schedule") && (
-                          <TableCell className="text-center">
-                            <ScheduleBadge
-                              isScheduled={t.isScheduled}
-                              onClick={() => {
-                                setScheduleList(t.scheduleList);
-                                setSchedDialogOpen(true);
-                              }}
-                            />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("locationRestricted") && (
-                          <TableCell className="text-center">
-                            <LocationBadge
-                              isRestricted={t.isLocRestricted}
-                              onClick={() => {
-                                setLocationDialogList(t.locList);
-                                setLocationDialogOpen(true);
-                              }}
-                            />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("employee") && (
-                          <TableCell className="text-left text-sm font-medium">
-                            <div className="max-w-[200px] truncate" title={t.employeeName}>
-                              {t.employeeName}
-                            </div>
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("dateTimeIn") && (
-                          <TableCell className="text-center">
-                            <DualTimeDisplay 
-                              datetime={t.timeIn} 
-                              userTz={userTimezone}
-                              companyTz={companyTimezone}
-                            />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("dateTimeOut") && (
-                          <TableCell className="text-center">
-                            <DualTimeDisplay 
-                              datetime={t.timeOut} 
-                              userTz={userTimezone}
-                              companyTz={companyTimezone}
-                            />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("duration") && (
-                          <TableCell className="text-center text-sm font-medium">
-                            <TimeDisplayWithTooltip time={t.periodHours} type="duration" />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("coffee") && (
-                          <TableCell className="text-center text-sm">
-                            <div className="flex items-center justify-center gap-1">
-                              <Coffee className="w-3 h-3 text-amber-600" />
-                              <TimeDisplayWithTooltip time={t.coffeeMins} type="coffee" />
-                            </div>
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("lunch") && (
-                          <TableCell className="text-center text-sm">
-                            <TimeDisplayWithTooltip time={t.lunchMins} type="lunch" />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("ot") && (
-                          <TableCell className="text-center text-sm font-medium">
-                            <TimeDisplayWithTooltip 
-                              time={parseFloat(t.otHours) > 0 ? t.otHours : null} 
-                              type="overtime" 
-                            />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("otStatus") && (
-                          <TableCell className="text-center">
-                            <OvertimeBadge
-                              otStatus={t.otStatus}
-                              overtimeRec={t.overtimeRec}
-                              onClick={() => {
-                                if (t.overtimeRec) {
-                                  setOtViewData({ ot: t.overtimeRec, log: t });
-                                  setOtDialogOpen(true);
-                                }
-                              }}
-                            />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("late") && (
-                          <TableCell className="text-center text-sm">
-                            {parseFloat(t.lateHours) > 0 ? (
-                              <TimeDisplayWithTooltip 
-                                time={t.lateHours} 
-                                type="late" 
-                                className="text-red-600 font-medium"
-                              />
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("deviceIn") && (
-                          <TableCell className="text-center">
-                            <DeviceDisplay device={t.fullDevIn} type="in" />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("deviceOut") && (
-                          <TableCell className="text-center">
-                            <DeviceDisplay device={t.fullDevOut} type="out" />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("locationIn") && (
-                          <TableCell className="text-center">
-                            <LocationDisplay location={t.locIn} type="in" />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("locationOut") && (
-                          <TableCell className="text-center">
-                            <LocationDisplay location={t.locOut} type="out" />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("period") && (
-                          <TableCell className="text-center text-sm font-semibold">
-                            <TimeDisplayWithTooltip time={t.periodHours} type="period" />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("status") && (
-                          <TableCell className="text-center">
-                            <StatusBadge status={t.status} />
-                          </TableCell>
-                        )}
-                        {columnVisibility.includes("actions") && (
-                          <TableCell className="text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              {canEdit ? (
-                                <TooltipProvider delayDuration={200}>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => openEditDialog(t)}
-                                        className="h-8 w-8 p-0 hover:bg-orange-50 hover:text-orange-600"
-                                      >
-                                        <Edit3 className="h-4 w-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Edit Time In/Out</TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              ) : (
-                                <span className="text-muted-foreground text-xs">—</span>
-                              )}
-                            </div>
-                          </TableCell>
-                        )}
-                      </motion.tr>
-                    ))}
+                    {displayed.map((t, index) => {
+                      // Helper function to render cell content based on column key
+                      const renderCell = (colKey) => {
+                        switch (colKey) {
+                          case "id":
+                            return (
+                              <TableCell key="id" className="font-mono text-xs text-center">
+                                <Badge variant="outline" className="font-mono">
+                                  {t.id}
+                                </Badge>
+                              </TableCell>
+                            );
+                          
+                          case "schedule":
+                            return (
+                              <TableCell key="schedule" className="text-center">
+                                <ScheduleBadge
+                                  isScheduled={t.isScheduled}
+                                  onClick={() => {
+                                    setScheduleList(t.scheduleList);
+                                    setSchedDialogOpen(true);
+                                  }}
+                                />
+                              </TableCell>
+                            );
+                          
+                          case "locationRestricted":
+                            return (
+                              <TableCell key="locationRestricted" className="text-center">
+                                <LocationBadge
+                                  isRestricted={t.isLocRestricted}
+                                  onClick={() => {
+                                    setLocationDialogList(t.locList);
+                                    setLocationDialogOpen(true);
+                                  }}
+                                />
+                              </TableCell>
+                            );
+                          
+                          case "employee":
+                            return (
+                              <TableCell key="employee" className="text-left text-sm font-medium">
+                                <div className="max-w-[200px] truncate" title={t.employeeName}>
+                                  {t.employeeName}
+                                </div>
+                              </TableCell>
+                            );
+                          
+                          case "dateTimeIn":
+                            return (
+                              <TableCell key="dateTimeIn" className="text-center">
+                                <DualTimeDisplay 
+                                  datetime={t.timeIn} 
+                                  userTz={userTimezone}
+                                  companyTz={companyTimezone}
+                                />
+                              </TableCell>
+                            );
+                          
+                          case "dateTimeOut":
+                            return (
+                              <TableCell key="dateTimeOut" className="text-center">
+                                <DualTimeDisplay 
+                                  datetime={t.timeOut} 
+                                  userTz={userTimezone}
+                                  companyTz={companyTimezone}
+                                />
+                              </TableCell>
+                            );
+                          
+                          case "duration":
+                            return (
+                              <TableCell key="duration" className="text-center text-sm font-medium">
+                                <TimeDisplayWithTooltip time={t.periodHours} type="duration" />
+                              </TableCell>
+                            );
+                          
+                          case "coffee":
+                            return (
+                              <TableCell key="coffee" className="text-center text-sm">
+                                <div className="flex items-center justify-center gap-1">
+                                  <Coffee className="w-3 h-3 text-amber-600" />
+                                  <TimeDisplayWithTooltip time={t.coffeeMins} type="coffee" />
+                                </div>
+                              </TableCell>
+                            );
+                          
+                          case "lunch":
+                            return (
+                              <TableCell key="lunch" className="text-center text-sm">
+                                <TimeDisplayWithTooltip time={t.lunchMins} type="lunch" />
+                              </TableCell>
+                            );
+                          
+                          case "ot":
+                            return (
+                              <TableCell key="ot" className="text-center text-sm font-medium">
+                                <TimeDisplayWithTooltip 
+                                  time={parseFloat(t.otHours) > 0 ? t.otHours : null} 
+                                  type="overtime" 
+                                />
+                              </TableCell>
+                            );
+                          
+                          case "otStatus":
+                            return (
+                              <TableCell key="otStatus" className="text-center">
+                                <OvertimeBadge
+                                  otStatus={t.otStatus}
+                                  overtimeRec={t.overtimeRec}
+                                  onClick={() => {
+                                    if (t.overtimeRec) {
+                                      setOtViewData({ ot: t.overtimeRec, log: t });
+                                      setOtDialogOpen(true);
+                                    }
+                                  }}
+                                />
+                              </TableCell>
+                            );
+                          
+                          case "late":
+                            return (
+                              <TableCell key="late" className="text-center text-sm">
+                                {parseFloat(t.lateHours) > 0 ? (
+                                  <TimeDisplayWithTooltip 
+                                    time={t.lateHours} 
+                                    type="late" 
+                                    className="text-red-600 font-medium"
+                                  />
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                            );
+                          
+                          case "deviceIn":
+                            return (
+                              <TableCell key="deviceIn" className="text-center">
+                                <DeviceDisplay device={t.fullDevIn} type="in" />
+                              </TableCell>
+                            );
+                          
+                          case "deviceOut":
+                            return (
+                              <TableCell key="deviceOut" className="text-center">
+                                <DeviceDisplay device={t.fullDevOut} type="out" />
+                              </TableCell>
+                            );
+                          
+                          case "locationIn":
+                            return (
+                              <TableCell key="locationIn" className="text-center">
+                                <LocationDisplay location={t.locIn} type="in" />
+                              </TableCell>
+                            );
+                          
+                          case "locationOut":
+                            return (
+                              <TableCell key="locationOut" className="text-center">
+                                <LocationDisplay location={t.locOut} type="out" />
+                              </TableCell>
+                            );
+                          
+                          case "period":
+                            return (
+                              <TableCell key="period" className="text-center text-sm font-semibold">
+                                <TimeDisplayWithTooltip time={t.periodHours} type="period" />
+                              </TableCell>
+                            );
+                          
+                          case "status":
+                            return (
+                              <TableCell key="status" className="text-center">
+                                <StatusBadge status={t.status} />
+                              </TableCell>
+                            );
+                          
+                          case "actions":
+                            return (
+                              <TableCell key="actions" className="text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  {canEdit ? (
+                                    <TooltipProvider delayDuration={200}>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => openEditDialog(t)}
+                                            className="h-8 w-8 p-0 hover:bg-orange-50 hover:text-orange-600"
+                                          >
+                                            <Edit3 className="h-4 w-4" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Edit Time In/Out</TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  ) : (
+                                    <span className="text-muted-foreground text-xs">—</span>
+                                  )}
+                                </div>
+                              </TableCell>
+                            );
+                          
+                          default:
+                            return null;
+                        }
+                      };
+
+                      return (
+                        <motion.tr
+                          key={t.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2, delay: index * 0.02 }}
+                          className={`border-b transition-all hover:bg-muted/50 ${
+                            expandedRow === t.id ? 'bg-muted/30' : ''
+                          }`}
+                        >
+                          {/* Render cells in the same order as columnOptions */}
+                          {columnOptions
+                            .filter((col) => columnVisibility.includes(col.value))
+                            .map((col) => renderCell(col.value))}
+                        </motion.tr>
+                      );
+                    })}
                   </AnimatePresence>
                 ) : (
                   <TableRow>

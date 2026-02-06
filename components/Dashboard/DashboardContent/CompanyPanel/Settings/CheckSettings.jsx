@@ -156,6 +156,8 @@ const CheckSettings = () => {
         }),
       });
 
+      console.log(response);
+
       if (!response.ok) throw new Error('Failed to generate test PDF');
 
       const blob = await response.blob();
