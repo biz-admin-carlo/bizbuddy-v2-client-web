@@ -39,16 +39,20 @@ export default function SignInPage() {
         )}`
       );
       const data = await res.json();
-      if (res.status === 404) {
-        setError("No companies found for this email.");
-        setLoading(false);
-        return;
-      }
-      if (res.status !== 200) {
+      
+      if (!res.ok) {
         setError(data.message || "Error checking email");
         setLoading(false);
         return;
       }
+      
+      // Check if there are active accounts
+      if (!data.hasActiveAccounts || data.data.length === 0) {
+        setError("No active accounts found for this email.");
+        setLoading(false);
+        return;
+      }
+      
       setUsers(data.data);
       setStep(2);
     } catch (err) {
@@ -65,23 +69,36 @@ export default function SignInPage() {
 
   const handleSignInWithPassword = async (e) => {
     e.preventDefault();
+    
     if (!formData.email || !formData.password || !selectedCompanyId) {
       setError("Email, password, and company selection are required.");
       return;
     }
+    
     setError("");
     setLoading(true);
+    
     try {
       const signInUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/account/sign-in?email=${encodeURIComponent(
         formData.email.trim().toLowerCase()
       )}&password=${encodeURIComponent(formData.password)}&companyId=${encodeURIComponent(selectedCompanyId)}`;
+      
       const res = await fetch(signInUrl);
       const data = await res.json();
+      
+      // Handle inactive account
+      if (res.status === 403) {
+        setError("Your account is inactive. Please contact your administrator to reactivate your account.");
+        setLoading(false);
+        return;
+      }
+      
       if (res.status !== 200 || !data.data?.token) {
         setError(data.message || "Invalid credentials.");
         setLoading(false);
         return;
       }
+      
       login(data.data.token);
       router.push("/dashboard");
     } catch (err) {

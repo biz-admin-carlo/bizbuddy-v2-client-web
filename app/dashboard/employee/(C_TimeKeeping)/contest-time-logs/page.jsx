@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import useAuthStore from "@/store/useAuthStore";
+import { exportContestLogsCSV, exportContestLogsPDF } from "@/lib/exportUtils";
 import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
@@ -169,36 +170,24 @@ export default function ContestTimeLogs() {
     return { total, pending, approved, rejected };
   }, [contestLogs]);
 
-  // Export to CSV
-  const exportToCSV = () => {
-    if (filteredLogs.length === 0) {
-      toast.error("No data to export");
-      return;
+  const exportToCSV = async () => {
+    if (filteredLogs.length === 0) return toast.error("No data to export");
+    try {
+      const result = await exportContestLogsCSV({ data: filteredLogs });
+      if (result.success) toast.success(`${result.filename}`);
+    } catch (error) {
+      toast.error(`Export failed: ${error.message}`);
     }
+  };
 
-    const headers = ["ID", "Date", "Time In", "Time Out", "Status", "Reason", "Created At"];
-    const csvData = filteredLogs.map(log => [
-      log.id,
-      format(parseISO(log.contestDate || log.createdAt), "yyyy-MM-dd"),
-      log.timeIn || "N/A",
-      log.timeOut || "N/A",
-      log.status || "N/A",
-      log.reason || "N/A",
-      format(parseISO(log.createdAt), "yyyy-MM-dd HH:mm:ss")
-    ]);
-
-    const csv = [headers, ...csvData]
-      .map(row => row.map(cell => `"${cell}"`).join(","))
-      .join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `contest-logs-${format(new Date(), "yyyy-MM-dd")}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-    toast.success("Exported successfully!");
+  const exportToPDF = async () => {
+    if (filteredLogs.length === 0) return toast.error("No data to export");
+    try {
+      const result = await exportContestLogsPDF({ data: filteredLogs });
+      if (result.success) toast.success(`${result.filename}`);
+    } catch (error) {
+      toast.error(`Export failed: ${error.message}`);
+    }
   };
 
   return (
@@ -255,7 +244,17 @@ export default function ContestTimeLogs() {
               disabled={filteredLogs.length === 0}
             >
               <Download className="h-4 w-4" />
-              Export
+              Export CSV
+            </Button>
+            <Button
+              onClick={exportToPDF}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              disabled={filteredLogs.length === 0}
+            >
+              <FileText className="h-4 w-4" />
+              Export PDF
             </Button>
           </div>
         </motion.div>

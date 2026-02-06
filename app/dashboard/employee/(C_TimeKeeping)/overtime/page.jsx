@@ -161,7 +161,7 @@ export default function EmployeeOvertimeRequests() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
-      
+
       if (!response.ok) throw new Error(data.message || "Failed to fetch overtime requests");
       
       setRequests(data.data || []);
@@ -277,74 +277,134 @@ export default function EmployeeOvertimeRequests() {
 
       {/* Detail Dialog */}
       <Dialog open={detailDialog.open} onOpenChange={(open) => !open && setDetailDialog({ open: false, request: null })}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-orange-600" />
-              Overtime Request Details
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600 flex-shrink-0" />
+              <span className="truncate">Overtime Request Details</span>
             </DialogTitle>
           </DialogHeader>
 
           {detailDialog.request && (
-            <div className="space-y-6">
-              {/* Status and Hours */}
-              <div className="flex items-center justify-between">
+            <div className="space-y-4 sm:space-y-6">
+              {/* Status and Hours - Responsive Layout */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pb-4 border-b">
                 <StatusBadge status={detailDialog.request.status} />
-                <div className="text-right">
-                  <div className="text-2xl font-bold">{Number(detailDialog.request.requestedHours).toFixed(2)}h</div>
-                  <div className="text-sm text-muted-foreground">Overtime Hours</div>
+                <div className="text-right w-full sm:w-auto">
+                  <div className="text-xl sm:text-2xl font-bold text-orange-600">
+                    {Number(detailDialog.request.requestedHours).toFixed(2)}h
+                  </div>
+                  <div className="text-xs sm:text-sm text-muted-foreground">Overtime Hours</div>
                 </div>
               </div>
 
-              {/* Request Info */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-sm text-muted-foreground">Request ID</div>
-                  <div className="font-mono text-xs">{detailDialog.request.id}</div>
+              {/* Request Info - Improved Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                <div className="space-y-1">
+                  <div className="text-xs sm:text-sm text-muted-foreground font-medium">Request ID</div>
+                  <div className="font-mono text-xs break-all bg-muted/50 p-2 rounded">
+                    {detailDialog.request.id}
+                  </div>
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">TimeLog ID</div>
-                  <div className="font-mono text-xs">{detailDialog.request.timeLogId}</div>
+                
+                <div className="space-y-1">
+                  <div className="text-xs sm:text-sm text-muted-foreground font-medium">TimeLog ID</div>
+                  <div className="font-mono text-xs break-all bg-muted/50 p-2 rounded">
+                    {detailDialog.request.timeLogId}
+                  </div>
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Submitted</div>
-                  <div className="font-medium">{new Date(detailDialog.request.createdAt).toLocaleDateString()} {new Date(detailDialog.request.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                
+                <div className="space-y-1">
+                  <div className="text-xs sm:text-sm text-muted-foreground font-medium">Submitted</div>
+                  <div className="text-sm font-medium">
+                    {new Date(detailDialog.request.createdAt).toLocaleDateString('en-US', { 
+                      month: 'short', 
+                      day: 'numeric', 
+                      year: 'numeric' 
+                    })}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(detailDialog.request.createdAt).toLocaleTimeString([], { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    })}
+                  </div>
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Last Updated</div>
-                  <div className="font-medium">{new Date(detailDialog.request.updatedAt).toLocaleDateString()} {new Date(detailDialog.request.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                
+                <div className="space-y-1">
+                  <div className="text-xs sm:text-sm text-muted-foreground font-medium">Last Updated</div>
+                  <div className="text-sm font-medium">
+                    {new Date(detailDialog.request.updatedAt).toLocaleDateString('en-US', { 
+                      month: 'short', 
+                      day: 'numeric', 
+                      year: 'numeric' 
+                    })}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(detailDialog.request.updatedAt).toLocaleTimeString([], { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    })}
+                  </div>
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Approver</div>
-                  <div className="font-medium">{detailDialog.request.approver?.email || "Not assigned"}</div>
+
+                <div className="space-y-1">
+                  <div className="text-xs sm:text-sm text-muted-foreground font-medium">Approver</div>
+                  <div className="space-y-0.5">
+                    {detailDialog.request.approver?.profile ? (
+                      <>
+                        <div className="text-sm font-medium break-words">
+                          {detailDialog.request.approver.profile.firstName} {detailDialog.request.approver.profile.lastName}
+                        </div>
+                        <div className="text-xs text-muted-foreground break-all">
+                          {detailDialog.request.approver.email}
+                        </div>
+                      </>
+                    ) : detailDialog.request.approver?.email ? (
+                      <div className="text-sm font-medium break-all">
+                        {detailDialog.request.approver.email}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground italic">
+                        Not assigned
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Late Hours</div>
-                  <div className="font-medium">{detailDialog.request.lateHours ? Number(detailDialog.request.lateHours).toFixed(2) : "0.00"}h</div>
+                
+                <div className="space-y-1">
+                  <div className="text-xs sm:text-sm text-muted-foreground font-medium">Late Hours</div>
+                  <div className="text-sm font-medium">
+                    {detailDialog.request.lateHours ? Number(detailDialog.request.lateHours).toFixed(2) : "0.00"}h
+                  </div>
                 </div>
               </div>
 
-              {/* Reason */}
+              {/* Reason - Improved Layout */}
               {detailDialog.request.requesterReason && (
                 <div className="space-y-2">
-                  <div className="text-sm text-muted-foreground">Reason for Overtime</div>
-                  <div className="bg-muted p-3 rounded-md text-sm">
+                  <div className="text-xs sm:text-sm text-muted-foreground font-medium flex items-center gap-2">
+                    <span className="h-1 w-1 rounded-full bg-orange-500"></span>
+                    Reason for Overtime
+                  </div>
+                  <div className="bg-muted/70 p-3 rounded-md text-xs sm:text-sm leading-relaxed border">
                     {detailDialog.request.requesterReason}
                   </div>
                 </div>
               )}
 
-              {/* Approver Comments */}
+              {/* Approver Comments - Improved Layout */}
               {detailDialog.request.approverComments && (
                 <div className="space-y-2">
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-xs sm:text-sm text-muted-foreground font-medium flex items-center gap-2">
+                    <span className="h-1 w-1 rounded-full bg-orange-500"></span>
                     {detailDialog.request.status === "approved" ? "Approval" : "Rejection"} Comments
                   </div>
-                  <div className={`p-3 rounded-md text-sm border ${
+                  <div className={`p-3 rounded-md text-xs sm:text-sm leading-relaxed border ${
                     detailDialog.request.status === "approved"
-                      ? "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800"
-                      : "bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800"
+                      ? "bg-green-50 border-green-200 text-green-900 dark:bg-green-900/20 dark:border-green-800 dark:text-green-100"
+                      : "bg-red-50 border-red-200 text-red-900 dark:bg-red-900/20 dark:border-red-800 dark:text-red-100"
                   }`}>
                     {detailDialog.request.approverComments}
                   </div>
@@ -353,8 +413,11 @@ export default function EmployeeOvertimeRequests() {
             </div>
           )}
 
-          <DialogFooter>
-            <Button onClick={() => setDetailDialog({ open: false, request: null })}>
+          <DialogFooter className="mt-6">
+            <Button 
+              onClick={() => setDetailDialog({ open: false, request: null })}
+              className="w-full sm:w-auto"
+            >
               Close
             </Button>
           </DialogFooter>

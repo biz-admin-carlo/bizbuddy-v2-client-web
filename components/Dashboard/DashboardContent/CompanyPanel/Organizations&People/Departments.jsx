@@ -8,9 +8,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
 import useAuthStore from "@/store/useAuthStore";
+import { exportDepartmentsCSV, exportDepartmentsPDF } from "@/lib/exportUtils";
 import DataTable from "@/components/common/DataTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,6 +67,14 @@ export default function Departments() {
     { value: "createdAt", label: "Created At" },
     { value: "updatedAt", label: "Updated At" },
   ];
+  const columnMap = {
+    id: "Department ID",
+    name: "Department Name",
+    supervisor: "Supervisor",
+    userCount: "User Count",
+    createdAt: "Created At",
+    updatedAt: "Updated At",
+  };
   const [columnVisibility, setColumnVisibility] = useState(columnOptions.map((o) => o.value));
 
   const supervisors = allUsers.filter((u) => u.role && u.role.toLowerCase() === "supervisor");
@@ -176,89 +183,54 @@ export default function Departments() {
 
   const hasActiveFilters = searchQuery || filters.supervisors.length > 0;
 
-  const companyName = profileData?.company?.name?.replace(/\s+/g, "_") || "Company";
-
-  const buildCSV = (rows) => {
-    const visibleCols = columnOptions.filter((c) => columnVisibility.includes(c.value));
-    const header = visibleCols.map((c) => `"${c.label}"`);
-    const cell = (r, key) => {
-      switch (key) {
-        case "id": return r.id;
-        case "name": return r.name;
-        case "supervisor": return r.supervisorName || "—";
-        case "userCount": return r.totalUsers;
-        case "createdAt": return fmtMMDDYYYY_hhmma(r.createdAt);
-        case "updatedAt": return fmtMMDDYYYY_hhmma(r.updatedAt);
-        default: return "";
-      }
-    };
-    const csvRows = [header.join(",")];
-    rows.forEach((row) => {
-      const values = visibleCols.map((col) => `"${cell(row, col.value)}"`);
-      csvRows.push(values.join(","));
-    });
-    return csvRows.join("\n");
-  };
-
-  const downloadCSV = () => {
+  const downloadCSV = async () => {
+    if (processedDepartments.length === 0) {
+      toast.error("No data to export");
+      return;
+    }
+    
     setExporting(true);
+    
     try {
-      const csvContent = buildCSV(processedDepartments);
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      link.setAttribute("href", url);
-      link.setAttribute("download", `${companyName}_Departments_${new Date().toISOString().slice(0, 10)}.csv`);
-      link.style.visibility = "hidden";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      toast.success("CSV exported successfully");
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to export CSV");
+      const result = await exportDepartmentsCSV({ 
+        data: processedDepartments,
+        visibleColumns: columnVisibility,
+        columnMap: columnMap,
+      });
+      
+      if (result.success) {
+        toast.success(`${result.filename}`);
+      }
+    } catch (error) {
+      toast.error(`Export failed: ${error.message}`);
+    } finally {
+      setExporting(false);
     }
-    setExporting(false);
   };
 
-  const downloadPDF = () => {
-    setPdfExporting(true);
-    try {
-      const doc = new jsPDF();
-      const visibleCols = columnOptions.filter((c) => columnVisibility.includes(c.value));
-      const headers = [visibleCols.map((c) => c.label)];
-      const rows = processedDepartments.map((row) => {
-        return visibleCols.map((col) => {
-          switch (col.value) {
-            case "id": return row.id;
-            case "name": return row.name;
-            case "supervisor": return row.supervisorName || "—";
-            case "userCount": return row.totalUsers;
-            case "createdAt": return fmtMMDDYYYY_hhmma(row.createdAt);
-            case "updatedAt": return fmtMMDDYYYY_hhmma(row.updatedAt);
-            default: return "";
-          }
-        });
-      });
-
-      autoTable(doc, {
-        head: headers,
-        body: rows,
-        startY: 30,
-        styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fillColor: [255, 165, 0] },
-        margin: { top: 30 },
-      });
-
-      doc.setFontSize(16);
-      doc.text(`${companyName} Departments Report`, 14, 20);
-      doc.save(`${companyName}_Departments_${new Date().toISOString().slice(0, 10)}.pdf`);
-      toast.success("PDF exported successfully");
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to export PDF");
+  const downloadPDF = async () => {
+    if (processedDepartments.length === 0) {
+      toast.error("No data to export");
+      return;
     }
-    setPdfExporting(false);
+    
+    setPdfExporting(true);
+    
+    try {
+      const result = await exportDepartmentsPDF({ 
+        data: processedDepartments,
+        visibleColumns: columnVisibility,
+        columnMap: columnMap,
+      });
+      
+      if (result.success) {
+        toast.success(`${result.filename}`);
+      }
+    } catch (error) {
+      toast.error(`Export failed: ${error.message}`);
+    } finally {
+      setPdfExporting(false);
+    }
   };
 
   const handleCreateDepartment = async () => {

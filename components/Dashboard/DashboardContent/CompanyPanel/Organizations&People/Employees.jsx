@@ -14,6 +14,7 @@ import {
   UserPlus,
   Building,
   Mail,
+  User,
   UserCog,
   Download,
   UploadCloud,
@@ -33,9 +34,8 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import Papa from "papaparse";
 import { toast, Toaster } from "sonner";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
 import useAuthStore from "@/store/useAuthStore";
+import { exportEmployeesCSV, exportEmployeesPDF } from "@/lib/exportUtils";
 import DataTable from "@/components/common/DataTable";
 import ColumnSelector from "@/components/common/ColumnSelector";
 import MultiSelect from "@/components/common/MultiSelect";
@@ -137,6 +137,9 @@ export default function ModernEmployees() {
   const [createLoading, setCreateLoading] = useState(false);
   const [showCreatePassword, setShowCreatePassword] = useState(false);
 
+  const [pageSize, setPageSize] = useState(10);
+  const [showAllRows, setShowAllRows] = useState(false);
+
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({
     id: null,
@@ -145,10 +148,17 @@ export default function ModernEmployees() {
     email: "",
     password: "",
     role: "employee",
+    status: "active",
     departmentId: "none",
     employeeId: "",
     hireDate: "",
-    ...blankEmployment,
+    jobTitle: "",
+    employmentStatus: "none",
+    exemptStatus: "none",
+    employmentType: "none",
+    workLocation: "none",
+    probationEndDate: "",
+    timeZone: "",
   });
   const [editLoading, setEditLoading] = useState(false);
 
@@ -213,20 +223,33 @@ export default function ModernEmployees() {
 
   // Transform employees for DataTable
   const processedEmployees = useMemo(() => {
-    return employees.map(emp => ({
-      ...emp,
-      fullName: `${emp.profile?.firstName || ""} ${emp.profile?.lastName || ""}`.trim(),
-      departmentName: emp.department?.name || "No Department Assigned",
-      supervisorEmail: emp.supervisor?.email || "—",
-      hireDate: emp.employmentDetail?.hireDate,
-      jobTitle: emp.employmentDetail?.jobTitle || "—",
-      employmentStatus: emp.employmentDetail?.employmentStatus || "—",
-      exemptStatus: emp.employmentDetail?.exemptStatus || "—",
-      employmentType: emp.employmentDetail?.employmentType || "—",
-      workLocation: emp.employmentDetail?.workLocation || "—",
-      probationEndDate: emp.employmentDetail?.probationEndDate,
-      timeZone: emp.employmentDetail?.timeZone || "—",
-    }));
+    return employees.map(emp => {
+      // Priority: Direct supervisor > Department supervisor > None
+      const directSupervisor = emp.employmentDetail?.supervisor;
+      const deptSupervisor = emp.department?.supervisor;
+      const effectiveSupervisor = directSupervisor || deptSupervisor;
+      
+      const supervisorName = effectiveSupervisor?.profile 
+        ? `${effectiveSupervisor.profile.firstName} ${effectiveSupervisor.profile.lastName}`.trim()
+        : null;
+      
+      return {
+        ...emp,
+        fullName: `${emp.profile?.firstName || ""} ${emp.profile?.lastName || ""}`.trim(),
+        departmentName: emp.department?.name || "No Department Assigned",
+        supervisorEmail: effectiveSupervisor?.email || "—",
+        supervisorName: supervisorName || "—",
+        supervisorType: directSupervisor ? "direct" : deptSupervisor ? "department" : "none",
+        hireDate: emp.hireDate,
+        jobTitle: emp.employmentDetail?.jobTitle || "—",
+        employmentStatus: emp.employmentDetail?.employmentStatus || "—",
+        exemptStatus: emp.employmentDetail?.exemptStatus || "—",
+        employmentType: emp.employmentDetail?.employmentType || "—",
+        workLocation: emp.employmentDetail?.workLocation || "—",
+        probationEndDate: emp.employmentDetail?.probationEndDate,
+        timeZone: emp.employmentDetail?.timeZone || "—",
+      };
+    });
   }, [employees]);
 
   // DataTable columns
@@ -240,7 +263,7 @@ export default function ModernEmployees() {
             <BadgeIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           </div>
           <div>
-            <div className="font-medium">{row.employmentDetail?.employeeId || "—"}</div>
+            <div className="font-medium">{row.employeeId || "—"}</div> 
             <div className="text-xs text-muted-foreground font-mono">{row.id}</div>
           </div>
         </div>
@@ -475,14 +498,14 @@ export default function ModernEmployees() {
       role: employee.role || "employee",
       status: employee.status || "active",
       departmentId: employee.department?.id || "none",
-      employeeId: employee.employmentDetail?.employeeId || "",
-      hireDate: employee.employmentDetail?.hireDate || "",
+      employeeId: employee.employeeId || "",
+      hireDate: employee.hireDate ? employee.hireDate.split('T')[0] : "",
       jobTitle: employee.employmentDetail?.jobTitle || "",
       employmentStatus: employee.employmentDetail?.employmentStatus || "none",
       exemptStatus: employee.employmentDetail?.exemptStatus || "none",
       employmentType: employee.employmentDetail?.employmentType || "none",
       workLocation: employee.employmentDetail?.workLocation || "none",
-      probationEndDate: employee.employmentDetail?.probationEndDate || "",
+      probationEndDate: employee.employmentDetail?.probationEndDate ? employee.employmentDetail.probationEndDate.split('T')[0] : "",
       timeZone: employee.employmentDetail?.timeZone || "",
     });
     setShowEditModal(true);
@@ -566,79 +589,54 @@ export default function ModernEmployees() {
   };
 
   // Export functions (preserving original logic)
-  const exportCSV = () => {
-    setExporting(true);
-    try {
-      const headers = visibleCols.map(col => headerMap[col] || col);
-      const rows = processedEmployees.map(emp => 
-        visibleCols.map(col => {
-          switch (col) {
-            case "name": return emp.fullName;
-            case "department": return emp.departmentName;
-            case "supervisor": return emp.supervisorEmail;
-            case "hireDate": return emp.hireDate ? fmtMMDDYYYY(emp.hireDate) : "—";
-            case "probationEndDate": return emp.probationEndDate ? fmtMMDDYYYY(emp.probationEndDate) : "—";
-            case "createdAt": return fmt(emp.createdAt);
-            case "updatedAt": return fmt(emp.updatedAt);
-            default: return emp[col] || "—";
-          }
-        })
-      );
-
-      const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(",")).join("\n");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `employees_${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success("CSV exported successfully");
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to export CSV");
+  const downloadCSV = async () => {
+    if (processedEmployees.length === 0) {
+      toast.error("No data to export");
+      return;
     }
-    setExporting(false);
+    
+    setExporting(true);
+    
+    try {
+      const result = await exportEmployeesCSV({ 
+        data: processedEmployees,
+        visibleColumns: visibleCols,
+        columnMap: headerMap,
+      });
+      
+      if (result.success) {
+        toast.success(`${result.filename}`);
+      }
+    } catch (error) {
+      toast.error(`Export failed: ${error.message}`);
+    } finally {
+      setExporting(false);
+    }
   };
 
-  const exportPDF = () => {
-    setPdfExporting(true);
-    try {
-      const doc = new jsPDF({ orientation: "landscape" });
-      const headers = [visibleCols.map(col => headerMap[col] || col)];
-      const rows = processedEmployees.map(emp => 
-        visibleCols.map(col => {
-          switch (col) {
-            case "name": return emp.fullName;
-            case "department": return emp.departmentName;
-            case "supervisor": return emp.supervisorEmail;
-            case "hireDate": return emp.hireDate ? fmtMMDDYYYY(emp.hireDate) : "—";
-            case "probationEndDate": return emp.probationEndDate ? fmtMMDDYYYY(emp.probationEndDate) : "—";
-            case "createdAt": return fmt(emp.createdAt);
-            case "updatedAt": return fmt(emp.updatedAt);
-            default: return emp[col] || "—";
-          }
-        })
-      );
-
-      autoTable(doc, {
-        head: headers,
-        body: rows,
-        startY: 30,
-        styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fillColor: [255, 165, 0] },
-        margin: { top: 30 },
-      });
-
-      doc.setFontSize(16);
-      doc.text("Company Employees Report", 14, 20);
-      doc.save(`employees_${new Date().toISOString().slice(0, 10)}.pdf`);
-      toast.success("PDF exported successfully");
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to export PDF");
+  const downloadPDF = async () => {
+    if (processedEmployees.length === 0) {
+      toast.error("No data to export");
+      return;
     }
-    setPdfExporting(false);
+    
+    setPdfExporting(true);
+    
+    try {
+      const result = await exportEmployeesPDF({ 
+        data: processedEmployees,
+        visibleColumns: visibleCols,
+        columnMap: headerMap,
+      });
+      
+      if (result.success) {
+        toast.success(`${result.filename}`);
+      }
+    } catch (error) {
+      toast.error(`Export failed: ${error.message}`);
+    } finally {
+      setPdfExporting(false);
+    }
   };
 
   // Import functions (preserving original logic)
@@ -801,19 +799,19 @@ export default function ModernEmployees() {
         {/* Advanced Controls */}
         <Card className="bg-orange-50/50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800">
           <CardContent className="p-4">
-            <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-              {/* Column Visibility */}
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              {/* Left side - Column & Export controls */}
+              <div className="flex items-center gap-2 flex-wrap">
                 <ColumnSelector
                   options={columnOptions}
                   visible={visibleCols}
-                  onChange={setVisibleCols}
+                  setVisible={setVisibleCols}
                 />
                 
                 {/* Export Options */}
                 <Button
                   variant="outline"
-                  onClick={exportCSV}
+                  onClick={downloadCSV}
                   disabled={exporting}
                   className="border-orange-200 text-orange-600 hover:bg-orange-50"
                 >
@@ -823,13 +821,43 @@ export default function ModernEmployees() {
 
                 <Button
                   variant="outline"
-                  onClick={exportPDF}
+                  onClick={downloadPDF}
                   disabled={pdfExporting}
                   className="border-orange-200 text-orange-600 hover:bg-orange-50"
                 >
                   <FileText className="h-4 w-4 mr-2" />
                   {pdfExporting ? "Exporting..." : "PDF"}
                 </Button>
+              </div>
+
+              {/* Right side - Page size selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground whitespace-nowrap">Rows per page:</span>
+                <Select 
+                  value={showAllRows ? "all" : pageSize.toString()} 
+                  onValueChange={(value) => {
+                    if (value === "all") {
+                      setShowAllRows(true);
+                    } else {
+                      setShowAllRows(false);
+                      setPageSize(parseInt(value));
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-[100px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                    <SelectItem value="all">All ({processedEmployees.length})</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="text-xs text-muted-foreground italic">
+                  Exports include all {processedEmployees.length} rows
+                </div>
               </div>
             </div>
           </CardContent>
@@ -852,7 +880,7 @@ export default function ModernEmployees() {
               actions={actions}
               searchPlaceholder="Search employees by name, email, or ID..."
               onRowClick={(employee) => openDetailsModal(employee)}
-              pageSize={10}
+              pageSize={showAllRows ? processedEmployees.length : pageSize}
             />
           </CardContent>
         </Card>
@@ -1064,7 +1092,7 @@ export default function ModernEmployees() {
 
         {/* Edit Employee Modal */}
         <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -1076,166 +1104,206 @@ export default function ModernEmployees() {
               <DialogDescription>Update employee information and employment details</DialogDescription>
             </DialogHeader>
             
-            <div className="grid gap-6 py-4">
-              {/* Basic Info */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium">Basic Information</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">First Name <span className="text-orange-500">*</span></label>
-                    <Input
-                      value={editForm.firstName}
-                      onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
-                    />
+            <ScrollArea className="max-h-[65vh] pr-4">
+              <div className="grid gap-6 py-4">
+                {/* Basic Information */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium flex items-center gap-2">
+                    <User className="h-5 w-5 text-blue-600" />
+                    Basic Information
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">First Name <span className="text-orange-500">*</span></label>
+                      <Input
+                        value={editForm.firstName}
+                        onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Last Name <span className="text-orange-500">*</span></label>
+                      <Input
+                        value={editForm.lastName}
+                        onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Last Name <span className="text-orange-500">*</span></label>
-                    <Input
-                      value={editForm.lastName}
-                      onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Email <span className="text-orange-500">*</span></label>
+                      <Input
+                        type="email"
+                        value={editForm.email}
+                        onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">New Password (optional)</label>
+                      <Input
+                        type="password"
+                        value={editForm.password}
+                        onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                        placeholder="Leave blank to keep current"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Role</label>
+                      <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="employee">Employee</SelectItem>
+                          <SelectItem value="supervisor">Supervisor</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Department</label>
+                      <Select value={editForm.departmentId} onValueChange={(v) => setEditForm({ ...editForm, departmentId: v })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No Department</SelectItem>
+                          {departments.map((dept) => (
+                            <SelectItem key={dept.id} value={dept.id}>
+                              {dept.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Status</label>
+                      <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+
+                {/* Employment Details */}
+                <div className="space-y-4 pt-4 border-t">
+                  <h3 className="text-lg font-medium flex items-center gap-2">
+                    <Briefcase className="h-5 w-5 text-purple-600" />
+                    Employment Details
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Employee ID</label>
+                      <Input
+                        value={editForm.employeeId}
+                        onChange={(e) => setEditForm({ ...editForm, employeeId: e.target.value })}
+                        placeholder="e.g., EMP001"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Hire Date</label>
+                      <Input
+                        type="date"
+                        value={editForm.hireDate}
+                        onChange={(e) => setEditForm({ ...editForm, hireDate: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Job Title</label>
+                      <Input
+                        value={editForm.jobTitle}
+                        onChange={(e) => setEditForm({ ...editForm, jobTitle: e.target.value })}
+                        placeholder="e.g., Software Engineer"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Employment Status</label>
+                      <Select value={editForm.employmentStatus} onValueChange={(v) => setEditForm({ ...editForm, employmentStatus: v })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          <SelectItem value="full_time">Full-time</SelectItem>
+                          <SelectItem value="part_time">Part-time</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Exempt Status</label>
+                      <Select value={editForm.exemptStatus} onValueChange={(v) => setEditForm({ ...editForm, exemptStatus: v })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          <SelectItem value="exempt">Exempt</SelectItem>
+                          <SelectItem value="non_exempt">Non-exempt</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Employment Type</label>
+                      <Select value={editForm.employmentType} onValueChange={(v) => setEditForm({ ...editForm, employmentType: v })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          <SelectItem value="employee_W2">W-2 Employee</SelectItem>
+                          <SelectItem value="contractor_1099">1099 Contractor</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Work Location</label>
+                      <Select value={editForm.workLocation} onValueChange={(v) => setEditForm({ ...editForm, workLocation: v })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          <SelectItem value="onsite">On-site</SelectItem>
+                          <SelectItem value="remote">Remote</SelectItem>
+                          <SelectItem value="hybrid">Hybrid</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Probation End Date</label>
+                      <Input
+                        type="date"
+                        value={editForm.probationEndDate}
+                        onChange={(e) => setEditForm({ ...editForm, probationEndDate: e.target.value })}
+                      />
+                    </div>
+                  </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Email <span className="text-orange-500">*</span></label>
+                    <label className="text-sm font-medium">Time Zone</label>
                     <Input
-                      type="email"
-                      value={editForm.email}
-                      onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                      value={editForm.timeZone}
+                      onChange={(e) => setEditForm({ ...editForm, timeZone: e.target.value })}
+                      placeholder="e.g., America/Los_Angeles"
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">New Password (optional)</label>
-                    <Input
-                      type="password"
-                      value={editForm.password}
-                      onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
-                      placeholder="Leave blank to keep current"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Role</label>
-                    <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="employee">Employee</SelectItem>
-                        <SelectItem value="supervisor">Supervisor</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Department</label>
-                    <Select value={editForm.departmentId} onValueChange={(v) => setEditForm({ ...editForm, departmentId: v })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No Department</SelectItem>
-                        {departments.map((dept) => (
-                          <SelectItem key={dept.id} value={dept.id}>
-                            {dept.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Status</label>
-                    <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="inactive">Inactive</SelectItem>
-                      </SelectContent>
-                    </Select>
                   </div>
                 </div>
               </div>
+            </ScrollArea>
 
-              {/* Employment Details */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium">Employment Details</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Employee ID</label>
-                    <Input
-                      value={editForm.employeeId}
-                      onChange={(e) => setEditForm({ ...editForm, employeeId: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Hire Date</label>
-                    <Input
-                      type="date"
-                      value={editForm.hireDate}
-                      onChange={(e) => setEditForm({ ...editForm, hireDate: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Job Title</label>
-                    <Input
-                      value={editForm.jobTitle}
-                      onChange={(e) => setEditForm({ ...editForm, jobTitle: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Employment Status</label>
-                    <Select value={editForm.employmentStatus} onValueChange={(v) => setEditForm({ ...editForm, employmentStatus: v })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        <SelectItem value="full_time">Full-time</SelectItem>
-                        <SelectItem value="part_time">Part-time</SelectItem>
-                        <SelectItem value="contract">Contract</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Work Location</label>
-                    <Select value={editForm.workLocation} onValueChange={(v) => setEditForm({ ...editForm, workLocation: v })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        <SelectItem value="onsite">On-site</SelectItem>
-                        <SelectItem value="remote">Remote</SelectItem>
-                        <SelectItem value="hybrid">Hybrid</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Employment Type</label>
-                    <Select value={editForm.employmentType} onValueChange={(v) => setEditForm({ ...editForm, employmentType: v })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        <SelectItem value="employee_W2">W-2 Employee</SelectItem>
-                        <SelectItem value="contractor_1099">1099 Contractor</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <DialogFooter>
+            <DialogFooter className="mt-4">
               <Button variant="outline" onClick={() => setShowEditModal(false)}>
                 Cancel
               </Button>
@@ -1307,7 +1375,7 @@ export default function ModernEmployees() {
 
         {/* Employee Details Modal */}
         <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-3xl">
             <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -1316,38 +1384,66 @@ export default function ModernEmployees() {
               </DialogTitle>
             </DialogHeader>
             {selectedEmployee && (
-              <ScrollArea className="max-h-[60vh]">
-                <div className="space-y-6">
-                  {/* Basic Info */}
+              <ScrollArea className="max-h-[70vh]">
+                <div className="space-y-6 pr-4">
+                  {/* Account Information */}
                   <div className="space-y-3">
-                    <h3 className="text-lg font-medium">Basic Information</h3>
+                    <h3 className="text-lg font-medium flex items-center gap-2">
+                      <User className="h-5 w-5 text-blue-600" />
+                      Account Information
+                    </h3>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-muted-foreground">Full Name:</span>
                         <div className="font-medium">{selectedEmployee.fullName || "—"}</div>
                       </div>
                       <div>
+                        <span className="text-muted-foreground">Username:</span>
+                        <div className="font-medium font-mono text-xs">{selectedEmployee.username || "—"}</div>
+                      </div>
+                      <div>
                         <span className="text-muted-foreground">Email:</span>
                         <div className="font-medium">{selectedEmployee.email}</div>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Role:</span>
-                        <div className="font-medium capitalize">{selectedEmployee.role}</div>
+                        <span className="text-muted-foreground">Phone Number:</span>
+                        <div className="font-medium">{selectedEmployee.profile?.phoneNumber || "—"}</div>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Department:</span>
-                        <div className="font-medium">{selectedEmployee.departmentName}</div>
+                        <span className="text-muted-foreground">Role:</span>
+                        <div>
+                          <Badge variant="secondary" className="capitalize">
+                            {selectedEmployee.role}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Status:</span>
+                        <div>
+                          <Badge 
+                            variant="secondary" 
+                            className={selectedEmployee.status === "active" 
+                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" 
+                              : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                            }
+                          >
+                            {selectedEmployee.status}
+                          </Badge>
+                        </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Employment Details */}
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-medium">Employment Details</h3>
+                  <div className="space-y-3 pt-4 border-t">
+                    <h3 className="text-lg font-medium flex items-center gap-2">
+                      <Briefcase className="h-5 w-5 text-purple-600" />
+                      Employment Details
+                    </h3>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-muted-foreground">Employee ID:</span>
-                        <div className="font-medium">{selectedEmployee.employmentDetail?.employeeId || "—"}</div>
+                        <div className="font-medium font-mono">{selectedEmployee.employeeId || "—"}</div>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Hire Date:</span>
@@ -1360,24 +1456,159 @@ export default function ModernEmployees() {
                         <div className="font-medium">{selectedEmployee.jobTitle}</div>
                       </div>
                       <div>
+                        <span className="text-muted-foreground">Department:</span>
+                        <div className="font-medium">{selectedEmployee.departmentName}</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Supervisor:</span>
+                        <div className="font-medium">
+                          {(() => {
+                            const directSupervisor = selectedEmployee.employmentDetail?.supervisor;
+                            const deptSupervisor = selectedEmployee.department?.supervisor;
+                            const effectiveSupervisor = directSupervisor || deptSupervisor;
+                            
+                            if (!effectiveSupervisor) return "—";
+                            
+                            const name = effectiveSupervisor.profile 
+                              ? `${effectiveSupervisor.profile.firstName} ${effectiveSupervisor.profile.lastName}`.trim()
+                              : effectiveSupervisor.email;
+                            
+                            return (
+                              <div className="space-y-1">
+                                <div>{name}</div>
+                                <div className="text-xs text-muted-foreground">{effectiveSupervisor.email}</div>
+                                {!directSupervisor && deptSupervisor && (
+                                  <Badge variant="outline" className="text-xs">
+                                    <Building className="h-3 w-3 mr-1" />
+                                    Department Supervisor
+                                  </Badge>
+                                )}
+                                {directSupervisor && (
+                                  <Badge variant="outline" className="text-xs">
+                                    <User className="h-3 w-3 mr-1" />
+                                    Direct Supervisor
+                                  </Badge>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                      <div>
                         <span className="text-muted-foreground">Employment Status:</span>
                         <div className="font-medium capitalize">{selectedEmployee.employmentStatus?.replace("_", " ")}</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Exempt Status:</span>
+                        <div className="font-medium capitalize">{selectedEmployee.exemptStatus?.replace("_", " ")}</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Employment Type:</span>
+                        <div className="font-medium">{selectedEmployee.employmentType?.replace("_", " ")}</div>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Work Location:</span>
                         <div className="font-medium capitalize">{selectedEmployee.workLocation}</div>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Employment Type:</span>
-                        <div className="font-medium">{selectedEmployee.employmentType?.replace("_", " ")}</div>
+                        <span className="text-muted-foreground">Work State:</span>
+                        <div className="font-medium">{selectedEmployee.employmentDetail?.workState || "—"}</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Time Zone:</span>
+                        <div className="font-medium">{selectedEmployee.timeZone}</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Probation End Date:</span>
+                        <div className="font-medium">
+                          {selectedEmployee.probationEndDate 
+                            ? new Date(selectedEmployee.probationEndDate).toLocaleDateString() 
+                            : "—"}
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* System Info */}
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-medium">System Information</h3>
+                  {/* Personal Information */}
+                  {(selectedEmployee.profile?.dateOfBirth || 
+                    selectedEmployee.profile?.addressLine || 
+                    selectedEmployee.profile?.ssnItin) && (
+                    <div className="space-y-3 pt-4 border-t">
+                      <h3 className="text-lg font-medium flex items-center gap-2">
+                        <UserCheck className="h-5 w-5 text-green-600" />
+                        Personal Information
+                      </h3>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        {selectedEmployee.profile?.dateOfBirth && (
+                          <div>
+                            <span className="text-muted-foreground">Date of Birth:</span>
+                            <div className="font-medium">
+                              {new Date(selectedEmployee.profile.dateOfBirth).toLocaleDateString()}
+                            </div>
+                          </div>
+                        )}
+                        {selectedEmployee.profile?.ssnItin && (
+                          <div>
+                            <span className="text-muted-foreground">SSN/ITIN:</span>
+                            <div className="font-medium font-mono">***-**-{selectedEmployee.profile.ssnItin.slice(-4)}</div>
+                          </div>
+                        )}
+                        {selectedEmployee.profile?.addressLine && (
+                          <div className="col-span-2">
+                            <span className="text-muted-foreground">Address:</span>
+                            <div className="font-medium">
+                              {selectedEmployee.profile.addressLine}
+                              {selectedEmployee.profile?.city && `, ${selectedEmployee.profile.city}`}
+                              {selectedEmployee.profile?.state && `, ${selectedEmployee.profile.state}`}
+                              {selectedEmployee.profile?.postalCode && ` ${selectedEmployee.profile.postalCode}`}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Emergency Contact */}
+                  {(selectedEmployee.profile?.emergencyContactName || 
+                    selectedEmployee.profile?.emergencyContactPhone) && (
+                    <div className="space-y-3 pt-4 border-t">
+                      <h3 className="text-lg font-medium flex items-center gap-2">
+                        <AlertCircle className="h-5 w-5 text-red-600" />
+                        Emergency Contact
+                      </h3>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        {selectedEmployee.profile?.emergencyContactName && (
+                          <div>
+                            <span className="text-muted-foreground">Contact Name:</span>
+                            <div className="font-medium">{selectedEmployee.profile.emergencyContactName}</div>
+                          </div>
+                        )}
+                        {selectedEmployee.profile?.emergencyContactPhone && (
+                          <div>
+                            <span className="text-muted-foreground">Contact Phone:</span>
+                            <div className="font-medium">{selectedEmployee.profile.emergencyContactPhone}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* System Information */}
+                  <div className="space-y-3 pt-4 border-t">
+                    <h3 className="text-lg font-medium flex items-center gap-2">
+                      <Clock className="h-5 w-5 text-gray-600" />
+                      System Information
+                    </h3>
                     <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">User ID:</span>
+                        <div className="font-medium font-mono text-xs break-all">{selectedEmployee.id}</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Company:</span>
+                        <div className="font-medium">{selectedEmployee.company?.name || "—"}</div>
+                        <div className="font-mono text-xs text-muted-foreground">{selectedEmployee.company?.id || "—"}</div>
+                      </div>
                       <div>
                         <span className="text-muted-foreground">Created:</span>
                         <div className="font-medium">{fmt(selectedEmployee.createdAt)}</div>

@@ -1221,7 +1221,7 @@ export default function EmployeeCutoff() {
                                     {details.scheduledHours}h
                                     </Badge>
                                 </div>
-                                <div className="text-xs text-purple-700 dark:text-purple-300">
+                                <div className="text-xs text-purple-700 dark:text-black">
                                     <span className="font-medium">Scheduled:</span>{" "}
                                     {formatDateTime(schedule.scheduledStart)} →{" "}
                                     {formatDateTime(schedule.scheduledEnd)}
