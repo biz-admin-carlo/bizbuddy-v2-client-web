@@ -55,10 +55,14 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatInTimeZone, toZonedTime, fromZonedTime } from 'date-fns-tz';
+import { format } from 'date-fns';
 
 const toUtcIso = (hhmm) => {
+  // Create naive time directly in UTC - no timezone conversion
   const [h, m] = hhmm.split(":").map(Number);
-  return new Date(Date.UTC(1970, 0, 1, h, m)).toISOString();
+  const date = new Date(Date.UTC(1970, 0, 1, h, m, 0)); // Use UTC directly
+  return date.toISOString();
 };
 
 const fmtClock = (iso) =>
@@ -240,6 +244,7 @@ export default function Shifts() {
     startTime: "08:00",
     endTime: "17:00",
     differentialMultiplier: "1.0",
+    timeZone: "",
   });
 
   const [showEdit, setShowEdit] = useState(false);
@@ -249,6 +254,7 @@ export default function Shifts() {
     startTime: "",
     endTime: "",
     differentialMultiplier: "1.0",
+    timeZone: "",
   });
 
   const [showDelete, setShowDelete] = useState(false);
@@ -385,22 +391,21 @@ export default function Shifts() {
     try {
       const shiftIds = Array.from(selectedShifts);
       
-      // Sample JSON body that will be sent to the API
       const payload = {
         shiftIds: shiftIds
       };
-            
-      const response = await fetch(`${API}/api/shifts/bulk-delete`, {
-        method: "DELETE",
+              
+      const response = await fetch(`${API}/api/shifts/delete-many`, { 
+        method: "POST", 
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
-
+  
       const data = await response.json();
-
+  
       if (response.ok) {
         toast.success(data.message || `Successfully deleted ${shiftIds.length} shift template${shiftIds.length > 1 ? 's' : ''}`);
         setShifts(prev => prev.filter(s => !selectedShifts.has(s.id)));
@@ -483,9 +488,10 @@ export default function Shifts() {
     try {
       const payload = {
         shiftName: createForm.shiftName.trim(),
-        startTime: toUtcIso(createForm.startTime),
-        endTime: toUtcIso(createForm.endTime),
+        startTime: createForm.startTime,
+        endTime: createForm.endTime,
         differentialMultiplier: parseFloat(createForm.differentialMultiplier),
+        timeZone: companyTimezone,
       };
       const r = await fetch(`${API}/api/shifts/create`, {
         method: "POST",
@@ -521,9 +527,10 @@ export default function Shifts() {
     try {
       const payload = {
         shiftName: editForm.shiftName.trim(),
-        startTime: toUtcIso(editForm.startTime),
-        endTime: toUtcIso(editForm.endTime),
+        startTime: editForm.startTime,
+        endTime: editForm.endTime,
         differentialMultiplier: parseFloat(editForm.differentialMultiplier),
+        timeZone: companyTimezone,
       };
       const r = await fetch(`${API}/api/shifts/${editForm.id}`, {
         method: "PUT",
@@ -1060,7 +1067,7 @@ export default function Shifts() {
                     <div className="flex items-center justify-center">
                       <Checkbox
                         checked={isAllSelected}
-                        indeterminate={isSomeSelected}
+                        indeterminate={isSomeSelected || undefined}
                         onCheckedChange={handleSelectAll}
                         aria-label="Select all shifts on this page"
                       />

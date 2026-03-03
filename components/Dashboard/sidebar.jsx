@@ -7,13 +7,13 @@ import useAuthStore from "@/store/useAuthStore";
 import { useEffect, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { DoorClosedIcon as CloseIcon, Lock, ChevronDown, Building2, User, Pin, PinOff } from "lucide-react";
+import { X, Lock, ChevronDown, Building2, User, Pin, PinOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
-// ✅ BASE Employee Panel (without Payroll - we'll add it dynamically based on role)
+// ✅ UPDATED: Schedule moved out of Time Keeping into its own section
 const EmployeePanelItems = [
   {
     id: "overview",
@@ -37,9 +37,15 @@ const EmployeePanelItems = [
     children: [
       { id: "employee/punch", label: "Punch" },
       { id: "employee/punch-logs", label: "Punch logs" },
-      { id: "employee/schedule", label: "Schedule" },
       { id: "employee/overtime", label: "Overtime" },
       { id: "employee/contest-time-logs", label: "Contest Time Logs" },
+    ],
+  },
+  {
+    id: "schedule",
+    label: "Schedule",
+    children: [
+      { id: "employee/schedule", label: "My Schedule" },
     ],
   },
   {
@@ -92,10 +98,11 @@ const CompanyPanelItems = [
     id: "punch-logs",
     label: "Requests & Logs",
     children: [
+      { id: "company/employee-schedules", label: "Employee Schedule" },
       { id: "company/punch-logs", label: "Employees Punch logs" },
-      { id: "company/overtime-requests", label: "Employees Overtime Requests" },
-      { id: "company/leave-requests", label: "Employees Leave Requests" },
       { id: "company/contest-requests", label: "Employee Requests" },
+      { id: "company/leave-requests", label: "Employees Leave Requests" },
+      { id: "company/overtime-requests", label: "Employees Overtime Requests" },
       { id: "company/cutoff-periods", label: "Employee Cutoff" },
     ],
   },
@@ -139,6 +146,7 @@ const FREE_ALLOWED = new Set([
   "employee/overtime",
   "employee/punch-logs",
   "employee/contest-requests",
+  "employee/schedule", // ✅ Schedule is free
   "employee/payslip", // ✅ NEW: Free for employees
   "employee/payroll", // ✅ Payroll Management (for admins)
   "company/punch-logs",
@@ -197,6 +205,15 @@ function applyPlanLock(groups, plan) {
 function SidebarSkeleton() {
   return (
     <div className="flex flex-col h-full animate-pulse">
+      {/* Logo Skeleton */}
+      <div className="flex items-center justify-between p-3 sm:p-4 border-b border-neutral-200 dark:border-neutral-700">
+        <Skeleton className="h-8 w-28" />
+        <div className="flex gap-2">
+          <Skeleton className="w-10 h-10 rounded-full" />
+          <Skeleton className="w-10 h-10 rounded-full" />
+        </div>
+      </div>
+      {/* User Info Skeleton */}
       <div className="flex flex-col items-center p-3 sm:p-4 lg:p-6 border-b border-neutral-200 dark:border-neutral-700">
         <Skeleton className="w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-full mb-2 sm:mb-3" />
         <Skeleton className="h-3 sm:h-4 w-24 sm:w-32 mb-1 sm:mb-2" />
@@ -349,37 +366,115 @@ function SidebarUserInfo({ profileData, plan }) {
     <motion.div
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="p-2 sm:p-3 lg:p-4 border-b border-neutral-200 dark:border-neutral-700 bg-gradient-to-br from-white to-neutral-50 dark:from-neutral-900 dark:to-neutral-800"
+      className="p-3 sm:p-4 lg:p-5 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900"
     >
-      <div className="flex flex-col items-center text-center">
-        <motion.div whileHover={{ scale: 1.05 }} className="relative mb-2">
-          <Avatar className="w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 border-2 border-white dark:border-neutral-700 shadow-lg">
-            <AvatarImage src={prof.avatarUrl || "/placeholder.svg"} alt={name} />
-            <AvatarFallback className="bg-gradient-to-br from-orange-500 to-orange-600 text-white font-semibold text-sm sm:text-base lg:text-lg">
-              {initials.toUpperCase() || "?"}
-            </AvatarFallback>
-          </Avatar>
-        </motion.div>
-        <div className="mb-1 sm:mb-2 w-full">
-          <h3 className="font-semibold text-sm sm:text-base text-neutral-800 dark:text-neutral-100 truncate px-1">{name}</h3>
-          <p className="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400 capitalize flex items-center justify-center gap-1">
-            <User className="w-2.5 h-2.5 sm:w-3 sm:h-3 flex-shrink-0" />
-            <span className="truncate">{usr.role}</span>
-          </p>
-        </div>
-        <div className="w-full flex justify-between items-center gap-2">
-          <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-neutral-600 dark:text-neutral-300 min-w-0 flex-1">
-            <Building2 className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-            <span className="truncate">{comp.name || "No Company"}</span>
+      <div className="flex flex-col space-y-3">
+        {/* Top Row - Avatar and Company */}
+        <div className="flex items-start justify-between gap-3">
+          {/* Avatar - Matching Navbar Style */}
+          <motion.div 
+            whileHover={{ scale: 1.05 }} 
+            className="flex-shrink-0"
+          >
+            <div className="relative">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-lg border-2 border-white dark:border-neutral-800">
+                <span className="text-white font-bold text-lg sm:text-xl">
+                  {initials.toUpperCase() || "?"}
+                </span>
+              </div>
+              {/* Online Status Indicator */}
+              <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 border-2 border-white dark:border-neutral-900 rounded-full"></div>
+            </div>
+          </motion.div>
+
+          {/* Company Info */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <Building2 className="w-4 h-4 text-neutral-500 dark:text-neutral-400 flex-shrink-0" />
+              <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400 truncate">
+                {comp.name || "No Company"}
+              </span>
+            </div>
+            <Badge className="capitalize text-[10px] sm:text-xs px-2 py-0.5 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border-orange-200 dark:border-orange-800">
+              {plan} Plan
+            </Badge>
           </div>
-          <Badge className="capitalize text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 flex-shrink-0 whitespace-nowrap">
-            {plan} Plan
-          </Badge>
+        </div>
+
+        {/* Bottom Row - User Details */}
+        <div className="space-y-1 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+          <h3 className="text-sm sm:text-base font-semibold text-neutral-900 dark:text-neutral-100 truncate">
+            {name}
+          </h3>
+          <div className="flex items-center gap-2">
+            <User className="w-3 h-3 text-neutral-400 flex-shrink-0" />
+            <span className="text-xs text-neutral-500 dark:text-neutral-400 capitalize truncate">
+              {usr.role}
+            </span>
+          </div>
         </div>
       </div>
     </motion.div>
   );
 }
+
+// ✅ NEW: Sidebar Header with Logo
+function SidebarHeader({ isSidebarPinned, togglePin, closeSidebar }) {
+  return (
+    <div className="flex items-center justify-between p-3 sm:p-4 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
+      {/* Logo */}
+      <Link href="/" className="flex items-center">
+        <motion.img 
+          src="/logo.png" 
+          alt="BizBuddy" 
+          className="h-8 sm:h-9 w-auto"
+          whileHover={{ scale: 1.05 }}
+          transition={{ duration: 0.2 }}
+        />
+      </Link>
+
+      {/* Pin & Close Buttons */}
+      <TooltipProvider delayDuration={200}>
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={togglePin}
+                className="flex items-center justify-center p-2 sm:p-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-all duration-200"
+              >
+                {isSidebarPinned ? (
+                  <PinOff className="w-4 h-4 text-orange-600" />
+                ) : (
+                  <Pin className="w-4 h-4 text-neutral-600 dark:text-neutral-300" />
+                )}
+              </motion.button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {isSidebarPinned ? "Unpin sidebar" : "Pin sidebar"}
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={closeSidebar}
+                className="flex items-center justify-center p-2 sm:p-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-200 dark:hover:border-red-800 transition-all duration-200 group"
+              >
+                <X className="w-4 h-4 text-neutral-600 dark:text-neutral-300 group-hover:text-red-500" />
+              </motion.button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Close sidebar</TooltipContent>
+          </Tooltip>
+        </div>
+      </TooltipProvider>
+    </div>
+  );
+}
+
 
 export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, isSidebarPinned, togglePin }) {
   const { token } = useAuthStore();
@@ -436,6 +531,7 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
 
   return (
     <>
+      {/* Backdrop for mobile */}
       <AnimatePresence>
         {isSidebarOpen && (
           <motion.div
@@ -447,53 +543,30 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
           />
         )}
       </AnimatePresence>
+
+      {/* Sidebar Panel */}
       <motion.div
         initial={{ x: "-100%" }}
         animate={{ x: isSidebarOpen ? 0 : "-100%" }}
         transition={{ type: "spring", damping: 25, stiffness: 200 }}
         className="fixed top-0 left-0 z-50 h-screen w-[300px] sm:w-[320px] md:w-[340px] lg:w-[320px] xl:w-[340px] max-w-[85vw] bg-gradient-to-b from-white via-neutral-50 to-white dark:from-neutral-900 dark:via-neutral-800 dark:to-neutral-900 border-r border-neutral-200 dark:border-neutral-700 shadow-2xl"
       >
-        <TooltipProvider delayDuration={200}>
-          <div className="absolute top-3 sm:top-4 right-3 sm:right-4 z-10 flex items-center gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={togglePin}
-                  className="flex items-center justify-center p-2.5 sm:p-3 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 w-10 h-10 sm:w-11 sm:h-11"
-                >
-                  {isSidebarPinned ? (
-                    <PinOff className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" />
-                  ) : (
-                    <Pin className="w-4 h-4 sm:w-5 sm:h-5 text-neutral-600 dark:text-neutral-300" />
-                  )}
-                </motion.button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">{isSidebarPinned ? "Unpin sidebar" : "Pin sidebar"}</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <motion.button
-                  whileHover={{ scale: 1.1, rotate: 90 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={closeSidebar}
-                  className="flex items-center justify-center p-2.5 sm:p-3 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 w-10 h-10 sm:w-11 sm:h-11"
-                >
-                  <CloseIcon className="w-4 h-4 sm:w-5 sm:h-5 text-neutral-600 dark:text-neutral-300" />
-                </motion.button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Close sidebar</TooltipContent>
-            </Tooltip>
-          </div>
-        </TooltipProvider>
-
         <div className="flex flex-col h-full overflow-hidden">
           {loading || !profileData ? (
             <SidebarSkeleton />
           ) : (
             <>
+              {/* ✅ NEW: Logo Header */}
+              <SidebarHeader 
+                isSidebarPinned={isSidebarPinned}
+                togglePin={togglePin}
+                closeSidebar={closeSidebar}
+              />
+
+              {/* User Info */}
               <SidebarUserInfo profileData={profileData} plan={plan} />
+
+              {/* Navigation Items */}
               <div className="flex-1 overflow-y-auto px-2 sm:px-3 lg:px-4 py-3 sm:py-4 lg:py-6 space-y-3 sm:space-y-4 lg:space-y-6 scrollbar-thin scrollbar-thumb-neutral-300 dark:scrollbar-thumb-neutral-600">
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
                   <h2 className="mb-1 sm:mb-2 px-1 sm:px-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1 sm:gap-2">
@@ -576,32 +649,6 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
                     </ul>
                   </motion.div>
                 )}
-
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                  <h2 className="mb-1 sm:mb-2 px-1 sm:px-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1 sm:gap-2">
-                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-orange-500 rounded-full flex-shrink-0"></div>
-                    <span className="truncate">Referral Panel</span>
-                  </h2>
-                  <ul className="space-y-0.5 sm:space-y-1">
-                    {referral.map((g, index) => (
-                      <motion.div
-                        key={g.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.4 + index * 0.05 }}
-                      >
-                        <CollapsibleNavItem
-                          item={g}
-                          currentPath={pathname}
-                          onNavigate={navigate}
-                          expanded={openDropdown === g.id}
-                          onToggle={toggle}
-                          pendingContestCount={pendingContestCount}
-                        />
-                      </motion.div>
-                    ))}
-                  </ul>
-                </motion.div>
               </div>
             </>
           )}

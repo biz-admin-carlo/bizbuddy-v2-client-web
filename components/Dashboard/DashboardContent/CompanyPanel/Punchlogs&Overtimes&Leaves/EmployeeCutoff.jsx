@@ -25,6 +25,10 @@ import {
   Coffee,
   Utensils,
   Loader2,
+  Building2,
+  Settings,
+  Play,
+  Zap,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -59,10 +63,23 @@ import useAuthStore from "@/store/useAuthStore";
 export default function EmployeeCutoff() {
   const { token } = useAuthStore();
 
-  // State management
+  // ========== NEW: Department State ==========
+  const [departments, setDepartments] = useState([]);
+  const [selectedDepartment, setSelectedDepartment] = useState("all");
+  const [departmentSettings, setDepartmentSettings] = useState([]);
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [configForm, setConfigForm] = useState({
+    departmentId: "",
+    frequency: "bi-weekly",
+    startDate: "",
+    paymentOffsetDays: 5,
+  });
+  const [isGenerating, setIsGenerating] = useState({});
+
+  // ========== Existing State ==========
   const [cutoffPeriods, setCutoffPeriods] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingApprovals, setIsLoadingApprovals] = useState(false); 
+  const [isLoadingApprovals, setIsLoadingApprovals] = useState(false);
   const [stats, setStats] = useState({
     total: 0,
     open: 0,
@@ -74,6 +91,7 @@ export default function EmployeeCutoff() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
+  const [generateConfig, setGenerateConfig] = useState({});
 
   // Form data
   const [formData, setFormData] = useState({
@@ -81,6 +99,7 @@ export default function EmployeeCutoff() {
     periodEnd: "",
     paymentDate: "",
     frequency: "bi-weekly",
+    departmentId: "",
   });
 
   // Selected cutoff and approvals
@@ -97,7 +116,7 @@ export default function EmployeeCutoff() {
   const [filterOvertime, setFilterOvertime] = useState(false);
   const [filterNoSchedule, setFilterNoSchedule] = useState(false);
   const [sortBy, setSortBy] = useState("date");
-  const [approvalStatus, setApprovalStatus] = useState("pending"); 
+  const [approvalStatus, setApprovalStatus] = useState("pending");
   const [loadingActions, setLoadingActions] = useState({});
   const [isBulkLoading, setIsBulkLoading] = useState(false);
 
@@ -105,28 +124,74 @@ export default function EmployeeCutoff() {
   const [searchPeriod, setSearchPeriod] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  // Fetch cutoff periods
+  // ========== NEW: Fetch Departments ==========
+  const fetchDepartments = async () => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/departments`, 
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setDepartments(data.data || []); 
+      }
+    } catch (error) {
+      console.error("Error fetching departments:", error);
+    }
+  };
+
+  // ========== NEW: Fetch Department Settings ==========
+  const fetchDepartmentSettings = async () => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff/cutoff-settings/departments`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setDepartmentSettings(data.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching department settings:", error);
+    }
+  };
+
+  // ========== Fetch Cutoff Periods (UPDATED with department filter) ==========
   const fetchCutoffPeriods = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
+      
+      // ✅ Filter by selected department
+      const url = selectedDepartment === "all" || selectedDepartment === "none"
+        ? `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods`
+        : `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods?departmentId=${selectedDepartment}`;
+  
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+  
       if (response.ok) {
         const data = await response.json();
-        setCutoffPeriods(data.data || []);
-
+        let periods = data.data || [];
+        
+        // ✅ Filter for "No Department" tab
+        if (selectedDepartment === "none") {
+          periods = periods.filter(p => !p.departmentId);
+        }
+        
+        setCutoffPeriods(periods);
+  
         const stats = {
-          total: data.data.length,
-          open: data.data.filter((p) => p.status === "open").length,
-          locked: data.data.filter((p) => p.status === "locked").length,
-          processed: data.data.filter((p) => p.status === "processed").length,
+          total: periods.length,
+          open: periods.filter((p) => p.status === "open").length,
+          locked: periods.filter((p) => p.status === "locked").length,
+          processed: periods.filter((p) => p.status === "processed").length,
         };
         setStats(stats);
       }
@@ -138,11 +203,187 @@ export default function EmployeeCutoff() {
     }
   };
 
+  // Initial load
   useEffect(() => {
-    fetchCutoffPeriods();
+    fetchDepartments();
+    fetchDepartmentSettings();
   }, [token]);
 
-  // Create cutoff period
+  // Reload when department changes
+  useEffect(() => {
+    if (token) {
+      fetchCutoffPeriods();
+    }
+  }, [token, selectedDepartment]);
+
+  // ========== NEW: Save Department Configuration ==========
+  const handleSaveConfig = async () => {
+    if (!configForm.departmentId || !configForm.startDate) {
+      toast.error("Please select department and start date");
+      return;
+    }
+  
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff/cutoff-settings/departments`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(configForm),
+        }
+      );
+  
+      if (response.ok) {
+        const data = await response.json();
+        toast.success(data.message || "Configuration saved");
+        setIsConfigModalOpen(false);
+        setConfigForm({
+          departmentId: "",
+          frequency: "bi-weekly",
+          startDate: "",
+          paymentOffsetDays: 5,
+        });
+        fetchDepartmentSettings();
+      } else {
+        const error = await response.json();
+        toast.error(error.message || "Failed to save settings");
+      }
+    } catch (error) {
+      console.error("Error saving config:", error);
+      toast.error("Failed to save settings");
+    }
+  };
+
+  // ========== NEW: Auto-Generate Cutoff Periods ==========
+  const handleGeneratePeriods = async (departmentId, mode) => {
+    setIsGenerating(prev => ({ ...prev, [departmentId]: true }));
+    
+    try {
+      const config = generateConfig[departmentId] || {};
+      let payload = { departmentId };
+      
+      switch (mode) {
+        case 'future':
+          // Generate next 3 months (future only)
+          payload = {
+            ...payload,
+            months: 3,
+            includeHistorical: false
+          };
+          break;
+          
+        case 'historical':
+          // Backfill from Jan 1, 2026 to today
+          payload = {
+            ...payload,
+            fromDate: '2026-01-01',
+            toDate: new Date().toISOString().split('T')[0],
+            includeHistorical: true
+          };
+          break;
+          
+        case 'range':
+          // Custom date range
+          if (!config.fromDate || !config.toDate) {
+            toast.error('Please select both from and to dates');
+            setIsGenerating(prev => ({ ...prev, [departmentId]: false }));
+            return;
+          }
+          payload = {
+            ...payload,
+            fromDate: config.fromDate,
+            toDate: config.toDate,
+            includeHistorical: true
+          };
+          break;
+      }
+      
+      console.log('[📅 Generating periods]', payload);
+      
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff/cutoff-periods/generate`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+  
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Show detailed success message
+        let message = data.message;
+        if (data.data.historical > 0) {
+          message += ` (${data.data.historical} historical, ${data.data.future} future)`;
+        }
+        
+        toast.success(message);
+        fetchCutoffPeriods(); // Reload the table
+      } else {
+        const error = await response.json();
+        toast.error(error.message || "Failed to generate periods");
+      }
+    } catch (error) {
+      console.error('Error generating periods:', error);
+      toast.error("Failed to generate periods");
+    } finally {
+      setIsGenerating(prev => ({ ...prev, [departmentId]: false }));
+    }
+  };
+
+  // ========== NEW: Generate for ALL Departments ==========
+  const handleGenerateAllDepartments = async () => {
+    const confirmed = confirm(
+      'Generate cutoff periods for ALL departments?\n\n' +
+      'This will create periods based on each department\'s settings.'
+    );
+    
+    if (!confirmed) return;
+    
+    setIsGenerating(prev => ({ ...prev, 'all': true }));
+    
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff/cutoff-periods/generate-all`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            months: 3,
+            includeHistorical: false
+          }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        toast.success(
+          `Generated ${data.data.totalCreated} periods across ${data.data.departments} departments`
+        );
+        fetchCutoffPeriods();
+      } else {
+        const error = await response.json();
+        toast.error(error.message || "Failed to generate periods");
+      }
+    } catch (error) {
+      console.error('Error generating all departments:', error);
+      toast.error("Failed to generate periods for all departments");
+    } finally {
+      setIsGenerating(prev => ({ ...prev, 'all': false }));
+    }
+  };
+
+  // ========== Create Manual Cutoff (EXISTING - now with department) ==========
   const handleCreateCutoff = async () => {
     try {
       const response = await fetch(
@@ -153,7 +394,10 @@ export default function EmployeeCutoff() {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(formData),
+          body: JSON.stringify({
+            ...formData,
+            departmentId: formData.departmentId === "none" ? null : formData.departmentId,
+          }),
         }
       );
 
@@ -165,6 +409,7 @@ export default function EmployeeCutoff() {
           periodEnd: "",
           paymentDate: "",
           frequency: "bi-weekly",
+          departmentId: "",
         });
         fetchCutoffPeriods();
       } else {
@@ -177,6 +422,7 @@ export default function EmployeeCutoff() {
     }
   };
 
+  // ========== View Approvals (UPDATED - uses new endpoint) ==========
   const handleViewApprovals = async (cutoff, status = "pending") => {
     try {
       setSelectedCutoff(cutoff);
@@ -186,10 +432,11 @@ export default function EmployeeCutoff() {
       setIsLoadingApprovals(true);
       setApprovalStatus(status);
   
-      // ✅ DYNAMIC ENDPOINT based on status
-      const endpoint = status === "pending" 
-        ? `/api/cutoff-periods/${cutoff.id}/approvals/pending`
-        : `/api/cutoff-periods/${cutoff.id}/approvals?status=${status}`;
+      // ✅ NEW ENDPOINT
+      const endpoint =
+        status === "pending"
+          ? `/api/cutoff/cutoff-periods/${cutoff.id}/approvals/pending`
+          : `/api/cutoff/cutoff-periods/${cutoff.id}/approvals?status=${status}`;
   
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}${endpoint}`,
@@ -213,7 +460,7 @@ export default function EmployeeCutoff() {
     }
   };
 
-  // View summary
+  // ========== View Summary (EXISTING) ==========
   const handleViewSummary = async (cutoff) => {
     try {
       setSelectedCutoff(cutoff);
@@ -239,50 +486,51 @@ export default function EmployeeCutoff() {
     }
   };
 
-  // Bulk approve/reject
-    const handleBulkAction = async (action) => {
+  // ========== Bulk Actions (UPDATED - uses new endpoint) ==========
+  const handleBulkAction = async (action) => {
     if (selectedApprovals.length === 0) {
-        toast.error("Please select at least one time log");
-        return;
+      toast.error("Please select at least one time log");
+      return;
     }
-
-    setIsBulkLoading(true); 
+  
+    setIsBulkLoading(true);
     try {
-        const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods/${selectedCutoff.id}/approvals/bulk`,
+      // ✅ NEW ENDPOINT
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff/cutoff-periods/${selectedCutoff.id}/approvals/bulk`,
         {
-            method: "PATCH",
-            headers: {
+          method: "PATCH",
+          headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
+          },
+          body: JSON.stringify({
             timeLogIds: selectedApprovals,
             action,
-            }),
+          }),
         }
-        );
-
-        if (response.ok) {
+      );
+  
+      if (response.ok) {
         toast.success(
-            `${selectedApprovals.length} time log(s) ${action}d successfully`
+          `${selectedApprovals.length} time log(s) ${action}d successfully`
         );
         setSelectedApprovals([]);
         handleViewApprovals(selectedCutoff, approvalStatus);
         fetchCutoffPeriods();
-        } else {
+      } else {
         const error = await response.json();
         toast.error(error.message || `Failed to ${action}`);
-        }
+      }
     } catch (error) {
-        console.error(`Error ${action}ing:`, error);
-        toast.error(`Failed to ${action}`);
+      console.error(`Error ${action}ing:`, error);
+      toast.error(`Failed to ${action}`);
     } finally {
-        setIsBulkLoading(false);
+      setIsBulkLoading(false);
     }
-    };
+  };
 
-  // Toggle selection
+  // ========== Toggle Selection (EXISTING) ==========
   const toggleSelection = (timeLogId) => {
     setSelectedApprovals((prev) =>
       prev.includes(timeLogId)
@@ -291,7 +539,7 @@ export default function EmployeeCutoff() {
     );
   };
 
-  // Update cutoff status
+  // ========== Update Status (EXISTING) ==========
   const handleUpdateStatus = async (cutoffId, newStatus) => {
     try {
       const response = await fetch(
@@ -319,7 +567,7 @@ export default function EmployeeCutoff() {
     }
   };
 
-  // Delete cutoff
+  // ========== Delete (EXISTING) ==========
   const handleDelete = async (cutoffId) => {
     if (!confirm("Are you sure you want to delete this cutoff period?")) return;
 
@@ -347,7 +595,7 @@ export default function EmployeeCutoff() {
     }
   };
 
-  // Helper: Format date/time
+  // ========== Helper Functions (EXISTING) ==========
   const formatDateTime = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleString("en-US", {
@@ -359,7 +607,6 @@ export default function EmployeeCutoff() {
     });
   };
 
-  // Helper: Format date only
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", {
@@ -369,12 +616,11 @@ export default function EmployeeCutoff() {
     });
   };
 
-  // ✅ UPDATED: Get approval details with new payroll summary
   const getApprovalDetails = (approval) => {
     const schedule = approval.schedule;
     const calculated = approval.calculatedData;
-    const payroll = approval.payrollSummary; // ✅ NEW
-    const breakData = approval.breakData; // ✅ NEW
+    const payroll = approval.payrollSummary;
+    const breakData = approval.breakData;
 
     const isLate =
       calculated?.lateMinutes > 0 && calculated?.lateStatus === "beyond_grace";
@@ -390,34 +636,45 @@ export default function EmployeeCutoff() {
 
     const scheduledHours = schedule?.scheduledHours || 0;
     const actualHours = calculated?.actualHours || 0;
-    const payableHours = payroll?.payableRegularHours || 
-                        schedule?.payableHours || 
-                        (scheduledHours === 0 ? actualHours : 0); // ✅ Use actual if no schedule
-    
+    const payableHours =
+      payroll?.payableRegularHours ||
+      schedule?.payableHours ||
+      (scheduledHours === 0 ? actualHours : 0);
+
     const approvedOT = calculated?.approvedOTHours || 0;
-    const totalPayable = payroll?.totalPayableHours || 
-                        (payableHours + approvedOT);
+    const totalPayable = payroll?.totalPayableHours || payableHours + approvedOT;
 
     return {
-        hasSchedule: !!schedule,
-        scheduledHours,
-        payableHours,
-        actualHours,
-        variance: calculated?.variance || 0,
-        approvedOT,
-        hasOT: calculated?.hasApprovedOT || false,
-        isLate,
-        leftEarly,
-        lateMinutes: calculated?.lateMinutes || 0,
-        earlyMinutes: calculated?.earlyMinutes || 0,
-        lateStatus: calculated?.lateStatus,
-        varianceColor,
-        totalPayable,
-        breakData,
+      hasSchedule: !!schedule,
+      scheduledHours,
+      payableHours,
+      actualHours,
+      variance: calculated?.variance || 0,
+      approvedOT,
+      hasOT: calculated?.hasApprovedOT || false,
+      isLate,
+      leftEarly,
+      lateMinutes: calculated?.lateMinutes || 0,
+      earlyMinutes: calculated?.earlyMinutes || 0,
+      lateStatus: calculated?.lateStatus,
+      varianceColor,
+      totalPayable,
+      breakData,
     };
   };
 
-  // Filter and sort approvals
+  // ========== NEW: Helper Functions ==========
+  const getDepartmentName = (departmentId) => {
+    if (!departmentId) return "No Department";
+    const dept = departments.find((d) => d.id === departmentId);
+    return dept?.name || "Unknown";
+  };
+  
+  const getDepartmentSetting = (departmentId) => {
+    return departmentSettings.find((s) => s.departmentId === departmentId);
+  };
+
+  // ========== Filter Approvals (EXISTING) ==========
   const getFilteredAndSortedApprovals = useMemo(() => {
     let filtered = approvals.filter((approval) => {
       const user = approval.timeLog.user;
@@ -438,14 +695,22 @@ export default function EmployeeCutoff() {
       const matchesNoSchedule = !filterNoSchedule || !details.hasSchedule;
 
       return (
-        matchesSearch && matchesLate && matchesEarly && matchesOT && matchesNoSchedule
+        matchesSearch &&
+        matchesLate &&
+        matchesEarly &&
+        matchesOT &&
+        matchesNoSchedule
       );
     });
 
     filtered.sort((a, b) => {
       if (sortBy === "name") {
-        const nameA = `${a.timeLog.user.profile?.firstName || a.timeLog.user.username}`;
-        const nameB = `${b.timeLog.user.profile?.firstName || b.timeLog.user.username}`;
+        const nameA = `${
+          a.timeLog.user.profile?.firstName || a.timeLog.user.username
+        }`;
+        const nameB = `${
+          b.timeLog.user.profile?.firstName || b.timeLog.user.username
+        }`;
         return nameA.localeCompare(nameB);
       } else if (sortBy === "hours") {
         const hoursA = getApprovalDetails(a).actualHours;
@@ -461,19 +726,30 @@ export default function EmployeeCutoff() {
     });
 
     return filtered;
-  }, [approvals, searchEmployee, filterLate, filterEarly, filterOvertime, filterNoSchedule, sortBy]);
+  }, [
+    approvals,
+    searchEmployee,
+    filterLate,
+    filterEarly,
+    filterOvertime,
+    filterNoSchedule,
+    sortBy,
+  ]);
 
-  // Filter periods
+  // ========== Filter Periods (UPDATED with department) ==========
   const filteredPeriods = cutoffPeriods.filter((period) => {
     const matchesSearch =
       searchPeriod === "" ||
-      period.frequency.toLowerCase().includes(searchPeriod.toLowerCase());
+      period.frequency.toLowerCase().includes(searchPeriod.toLowerCase()) ||
+      getDepartmentName(period.departmentId)
+        .toLowerCase()
+        .includes(searchPeriod.toLowerCase());
     const matchesStatus =
       statusFilter === "all" || period.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  // Get active filter count
+  // ========== Active Filter Count (EXISTING) ==========
   const activeFilterCount = [
     filterLate,
     filterEarly,
@@ -481,28 +757,67 @@ export default function EmployeeCutoff() {
     filterNoSchedule,
   ].filter(Boolean).length;
 
+  // ========== NEW: Department Stats ==========
+  const departmentStats = useMemo(() => {
+    const stats = {};
+    
+    departments.forEach((dept) => {
+      const deptPeriods = cutoffPeriods.filter((p) => p.departmentId === dept.id);
+      stats[dept.id] = {
+        total: deptPeriods.length,
+        open: deptPeriods.filter((p) => p.status === "open").length,
+        pending: deptPeriods.reduce(
+          (sum, p) => sum + (p.approvalStats?.pending || 0),
+          0
+        ),
+      };
+    });
+  
+    const noDeptPeriods = cutoffPeriods.filter((p) => !p.departmentId);
+    stats["none"] = {
+      total: noDeptPeriods.length,
+      open: noDeptPeriods.filter((p) => p.status === "open").length,
+      pending: noDeptPeriods.reduce(
+        (sum, p) => sum + (p.approvalStats?.pending || 0),
+        0
+      ),
+    };
+  
+    return stats;
+  }, [cutoffPeriods, departments]);
+
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-neutral-800 dark:text-neutral-200">
-            Employee Cutoff
+            Department Cutoff Management
           </h1>
           <p className="text-neutral-600 dark:text-neutral-400 mt-1">
-            Manage and review payroll cutoff periods
+            Automated payroll cutoff periods per department
           </p>
         </div>
-        <Button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="bg-orange-500 hover:bg-orange-600"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Create Cutoff Period
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setIsConfigModalOpen(true)}
+            className="gap-2"
+          >
+            <Settings className="w-4 h-4" />
+            Configure
+          </Button>
+          <Button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="bg-orange-500 hover:bg-orange-600 gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Manual Cutoff
+          </Button>
+        </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards (EXISTING) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <Card>
@@ -581,14 +896,383 @@ export default function EmployeeCutoff() {
         </motion.div>
       </div>
 
-      {/* Cutoff Periods Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Building2 className="w-5 h-5" />
+            Departments
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* Tab Buttons */}
+          <div className="flex flex-wrap gap-2 mb-6">
+            {/* All Departments */}
+            <Button
+              variant={selectedDepartment === "all" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedDepartment("all")}
+              className={`gap-2 ${
+                selectedDepartment === "all"
+                  ? "bg-orange-500 hover:bg-orange-600"
+                  : ""
+              }`}
+            >
+              <Building2 className="w-4 h-4" />
+              All Departments
+              <Badge variant="secondary" className="ml-1">
+                {cutoffPeriods.length}
+              </Badge>
+            </Button>
+
+            {/* Department Tabs */}
+            {departments.map((dept) => {
+              const setting = getDepartmentSetting(dept.id);
+              const stats = departmentStats[dept.id] || {};
+
+              return (
+                <Button
+                  key={dept.id}
+                  variant={selectedDepartment === dept.id ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedDepartment(dept.id)}
+                  className={`gap-2 relative ${
+                    selectedDepartment === dept.id
+                      ? "bg-orange-500 hover:bg-orange-600"
+                      : ""
+                  }`}
+                >
+                  {dept.name}
+                  <Badge variant="secondary" className="ml-1">
+                    {stats.total || 0}
+                  </Badge>
+                  {stats.pending > 0 && (
+                    <Badge className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center bg-red-500 text-white text-xs">
+                      {stats.pending}
+                    </Badge>
+                  )}
+                  {setting && (
+                    <Badge variant="outline" className="text-xs ml-1">
+                      {setting.frequency}
+                    </Badge>
+                  )}
+                </Button>
+              );
+            })}
+
+            {/* No Department */}
+            <Button
+              variant={selectedDepartment === "none" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedDepartment("none")}
+              className={`gap-2 ${
+                selectedDepartment === "none"
+                  ? "bg-orange-500 hover:bg-orange-600"
+                  : ""
+              }`}
+            >
+              <AlertCircle className="w-4 h-4" />
+              No Department
+              <Badge variant="secondary" className="ml-1">
+                {departmentStats["none"]?.total || 0}
+              </Badge>
+            </Button>
+          </div>
+
+          {/* ========== DEPARTMENT CONFIGURATION CARDS ========== */}
+          {selectedDepartment !== "all" && selectedDepartment !== "none" && (
+            <>
+              {(() => {
+                const setting = getDepartmentSetting(selectedDepartment);
+                const dept = departments.find((d) => d.id === selectedDepartment);
+
+                if (!setting) {
+                  return (
+                    <Card className="border-2 border-dashed">
+                      <CardContent className="pt-6">
+                        <div className="text-center py-8">
+                          <Settings className="w-12 h-12 mx-auto text-neutral-300 mb-4" />
+                          <h3 className="font-semibold text-lg mb-2">
+                            No configuration found
+                          </h3>
+                          <p className="text-neutral-600 dark:text-neutral-400 mb-4">
+                            Set up automatic cutoff generation for {dept?.name}
+                          </p>
+                          <Button
+                            onClick={() => {
+                              setConfigForm({
+                                ...configForm,
+                                departmentId: selectedDepartment,
+                              });
+                              setIsConfigModalOpen(true);
+                            }}
+                            className="bg-orange-500 hover:bg-orange-600"
+                          >
+                            <Settings className="w-4 h-4 mr-2" />
+                            Configure Now
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Config Info */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm">Configuration</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div>
+                          <Label className="text-xs text-neutral-500">
+                            Frequency
+                          </Label>
+                          <p className="font-semibold capitalize">
+                            {setting.frequency}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-neutral-500">
+                            Start Date
+                          </Label>
+                          <p className="font-semibold">
+                            {formatDate(setting.startDate)}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-neutral-500">
+                            Payment Offset
+                          </Label>
+                          <p className="font-semibold">
+                            {setting.paymentOffsetDays} days
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Quick Actions */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm">Quick Actions</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {/* ✅ NEW: Mode Selector */}
+                        <Select
+                          value={generateConfig[selectedDepartment]?.mode || 'future'}
+                          onValueChange={(value) => 
+                            setGenerateConfig({
+                              ...generateConfig,
+                              [selectedDepartment]: {
+                                ...(generateConfig[selectedDepartment] || {}),
+                                mode: value
+                              }
+                            })
+                          }
+                        >
+                          <SelectTrigger className="text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="future">📅 Next 3 Months (Future Only)</SelectItem>
+                            <SelectItem value="historical">⏮️ Jan 2026 - Today (Backfill)</SelectItem>
+                            <SelectItem value="range">📆 Custom Date Range</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        {/* ✅ FUTURE MODE (Default) */}
+                        {(!generateConfig[selectedDepartment] || generateConfig[selectedDepartment]?.mode === 'future') && (
+                          <Button
+                            size="sm"
+                            className="w-full bg-green-500 hover:bg-green-600"
+                            onClick={() => handleGeneratePeriods(selectedDepartment, 'future')}
+                            disabled={isGenerating[selectedDepartment]}
+                          >
+                            {isGenerating[selectedDepartment] ? (
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                              <Zap className="w-4 h-4 mr-2" />
+                            )}
+                            Generate Next 3 Months
+                          </Button>
+                        )}
+
+                        {/* ✅ HISTORICAL MODE (Backfill) */}
+                        {generateConfig[selectedDepartment]?.mode === 'historical' && (
+                          <div className="space-y-2">
+                            <div className="border border-amber-200 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-3 flex gap-2">
+                              <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                              <div className="text-amber-800 dark:text-amber-200 text-xs">
+                                <strong>Backfill Mode:</strong> Generates all cutoff periods from <strong>January 1, 2026</strong> to <strong>today</strong>.
+                                <br />
+                                <span className="text-xs">Past periods will be marked as "processed".</span>
+                              </div>
+                            </div>
+                            <Button
+                              size="sm"
+                              className="w-full bg-blue-500 hover:bg-blue-600"
+                              onClick={() => handleGeneratePeriods(selectedDepartment, 'historical')}
+                              disabled={isGenerating[selectedDepartment]}
+                            >
+                              {isGenerating[selectedDepartment] ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              ) : (
+                                <Calendar className="w-4 h-4 mr-2" />
+                              )}
+                              Backfill Jan 2026 - Today
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* ✅ CUSTOM RANGE MODE */}
+                        {generateConfig[selectedDepartment]?.mode === 'range' && (
+                          <div className="space-y-2">
+                            <div>
+                              <Label className="text-xs">From Date</Label>
+                              <Input
+                                type="date"
+                                value={generateConfig[selectedDepartment]?.fromDate || ''}
+                                onChange={(e) => 
+                                  setGenerateConfig({
+                                    ...generateConfig,
+                                    [selectedDepartment]: {
+                                      ...generateConfig[selectedDepartment],
+                                      fromDate: e.target.value
+                                    }
+                                  })
+                                }
+                                className="text-xs"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs">To Date</Label>
+                              <Input
+                                type="date"
+                                value={generateConfig[selectedDepartment]?.toDate || ''}
+                                max={new Date().toISOString().split('T')[0]}
+                                onChange={(e) => 
+                                  setGenerateConfig({
+                                    ...generateConfig,
+                                    [selectedDepartment]: {
+                                      ...generateConfig[selectedDepartment],
+                                      toDate: e.target.value
+                                    }
+                                  })
+                                }
+                                className="text-xs"
+                              />
+                            </div>
+                            <Button
+                              size="sm"
+                              className="w-full bg-purple-500 hover:bg-purple-600"
+                              onClick={() => handleGeneratePeriods(selectedDepartment, 'range')}
+                              disabled={
+                                !generateConfig[selectedDepartment]?.fromDate || 
+                                !generateConfig[selectedDepartment]?.toDate || 
+                                isGenerating[selectedDepartment]
+                              }
+                            >
+                              {isGenerating[selectedDepartment] ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              ) : (
+                                <Calendar className="w-4 h-4 mr-2" />
+                              )}
+                              Generate Custom Range
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* Edit Settings Button */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => {
+                            const setting = getDepartmentSetting(selectedDepartment);
+                            if (setting) {
+                              setConfigForm({
+                                departmentId: setting.departmentId,
+                                frequency: setting.frequency,
+                                startDate: setting.startDate.split("T")[0],
+                                paymentOffsetDays: setting.paymentOffsetDays,
+                              });
+                              setIsConfigModalOpen(true);
+                            }
+                          }}
+                        >
+                          <Settings className="w-4 h-4 mr-2" />
+                          Edit Settings
+                        </Button>
+                      </CardContent>
+                    </Card>
+
+                    {/* Next Periods Preview */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm">Upcoming Periods</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2 text-sm">
+                          {cutoffPeriods
+                            .filter(
+                              (p) =>
+                                p.departmentId === selectedDepartment &&
+                                new Date(p.periodStart) >= new Date()
+                            )
+                            .slice(0, 3)
+                            .map((period) => (
+                              <div
+                                key={period.id}
+                                className="flex items-center justify-between p-2 bg-neutral-50 dark:bg-neutral-800 rounded"
+                              >
+                                <div>
+                                  <div className="font-medium text-xs">
+                                    {formatDate(period.periodStart)} -{" "}
+                                    {formatDate(period.periodEnd)}
+                                  </div>
+                                  <div className="text-xs text-neutral-500">
+                                    Pay: {formatDate(period.paymentDate)}
+                                  </div>
+                                </div>
+                                <Badge
+                                  className={
+                                    period.status === "open"
+                                      ? "bg-green-100 text-green-700"
+                                      : ""
+                                  }
+                                >
+                                  {period.status}
+                                </Badge>
+                              </div>
+                            ))}
+                          {cutoffPeriods.filter(
+                            (p) =>
+                              p.departmentId === selectedDepartment &&
+                              new Date(p.periodStart) >= new Date()
+                          ).length === 0 && (
+                            <p className="text-neutral-500 text-center py-4 text-xs">
+                              No upcoming periods
+                            </p>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                );
+              })()}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ========== Cutoff Periods Table (UPDATED with Department column) ========== */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Cutoff Periods</CardTitle>
             <div className="flex items-center gap-2">
               <Input
-                placeholder="Search by frequency..."
+                placeholder="Search by department or frequency..."
                 value={searchPeriod}
                 onChange={(e) => setSearchPeriod(e.target.value)}
                 className="w-64"
@@ -627,6 +1311,9 @@ export default function EmployeeCutoff() {
                 <thead>
                   <tr className="border-b">
                     <th className="text-left p-3 text-sm font-medium text-neutral-600 dark:text-neutral-400">
+                      Department
+                    </th>
+                    <th className="text-left p-3 text-sm font-medium text-neutral-600 dark:text-neutral-400">
                       Period
                     </th>
                     <th className="text-left p-3 text-sm font-medium text-neutral-600 dark:text-neutral-400">
@@ -655,6 +1342,18 @@ export default function EmployeeCutoff() {
                       transition={{ delay: index * 0.05 }}
                       className="border-b hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
                     >
+                      {/* ✅ NEW: Department Column */}
+                      <td className="p-3">
+                        <Badge variant="outline" className="gap-1">
+                          <Building2 className="w-3 h-3" />
+                          {getDepartmentName(period.departmentId)}
+                        </Badge>
+                        {period.isAutoGenerated && (
+                          <Badge className="ml-2 bg-blue-100 text-blue-700 text-xs">
+                            Auto
+                          </Badge>
+                        )}
+                      </td>
                       <td className="p-3">
                         <div className="text-sm font-medium text-neutral-800 dark:text-neutral-200">
                           {formatDate(period.periodStart)} -{" "}
@@ -775,17 +1474,145 @@ export default function EmployeeCutoff() {
         </CardContent>
       </Card>
 
-      {/* Create Cutoff Modal */}
-      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-        <DialogContent>
+      {/* ========== NEW: Configuration Modal ========== */}
+      <Dialog open={isConfigModalOpen} onOpenChange={setIsConfigModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Create Cutoff Period</DialogTitle>
+            <DialogTitle>Configure Department Cutoff</DialogTitle>
             <DialogDescription>
-              Set up a new payroll cutoff period for employee time tracking
+              Set up automatic cutoff period generation for a department
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
+            <div>
+              <Label>Department</Label>
+              <Select
+                value={configForm.departmentId}
+                onValueChange={(value) =>
+                  setConfigForm({ ...configForm, departmentId: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select department" />
+                </SelectTrigger>
+                <SelectContent>
+                  {departments.map((dept) => (
+                    <SelectItem key={dept.id} value={dept.id}>
+                      {dept.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Payment Frequency</Label>
+              <Select
+                value={configForm.frequency}
+                onValueChange={(value) =>
+                  setConfigForm({ ...configForm, frequency: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bi-weekly">
+                    Bi-Weekly (Every 2 weeks)
+                  </SelectItem>
+                  <SelectItem value="bi-monthly">
+                    Bi-Monthly (Twice a month)
+                  </SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Starting Date</Label>
+              <Input
+                type="date"
+                value={configForm.startDate}
+                onChange={(e) =>
+                  setConfigForm({ ...configForm, startDate: e.target.value })
+                }
+              />
+              <p className="text-xs text-neutral-500 mt-1">
+                Reference date for generating periods
+              </p>
+            </div>
+
+            <div>
+              <Label>Payment Offset (days after cutoff ends)</Label>
+              <Input
+                type="number"
+                min="1"
+                max="30"
+                value={configForm.paymentOffsetDays}
+                onChange={(e) =>
+                  setConfigForm({
+                    ...configForm,
+                    paymentOffsetDays: parseInt(e.target.value),
+                  })
+                }
+              />
+              <p className="text-xs text-neutral-500 mt-1">
+                Example: Cutoff ends Jan 15 + 5 days offset = Payment on Jan 20
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setIsConfigModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveConfig}
+                className="bg-orange-500 hover:bg-orange-600"
+              >
+                Save Configuration
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ========== Create Manual Cutoff Modal (UPDATED with department) ========== */}
+      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Manual Cutoff Period</DialogTitle>
+            <DialogDescription>
+              Manually create a cutoff period for a specific department
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label>Department (Optional)</Label>
+              <Select
+                value={formData.departmentId}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, departmentId: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select department (or leave blank)" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="none">No Department (Company-wide)</SelectItem>
+                    {departments.map((dept) => (
+                    <SelectItem key={dept.id} value={dept.id}>
+                      {dept.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div>
               <Label>Period Start Date</Label>
               <Input
@@ -831,15 +1658,22 @@ export default function EmployeeCutoff() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="bi-weekly">Bi-Weekly (Every 2 weeks)</SelectItem>
-                  <SelectItem value="bi-monthly">Bi-Monthly (Twice a month)</SelectItem>
+                  <SelectItem value="bi-weekly">
+                    Bi-Weekly (Every 2 weeks)
+                  </SelectItem>
+                  <SelectItem value="bi-monthly">
+                    Bi-Monthly (Twice a month)
+                  </SelectItem>
                   <SelectItem value="monthly">Monthly</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setIsCreateModalOpen(false)}
+              >
                 Cancel
               </Button>
               <Button
@@ -852,9 +1686,9 @@ export default function EmployeeCutoff() {
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* ENHANCED APPROVAL MODAL - WITH BREAKS + LOADING */}
-      <Dialog open={isApprovalModalOpen} onOpenChange={setIsApprovalModalOpen}>
+      
+       {/* ENHANCED APPROVAL MODAL - WITH BREAKS + LOADING */}
+       <Dialog open={isApprovalModalOpen} onOpenChange={setIsApprovalModalOpen}>
         <DialogContent className="sm:max-w-[1100px] max-h-[90vh] overflow-hidden flex flex-col">
 
         <DialogHeader className="pb-3">
@@ -976,7 +1810,6 @@ export default function EmployeeCutoff() {
             </div>
           ) : (
             // Continue with existing content...
-            // [Rest of the approval modal content goes here - I'll add in next part due to length]
             <div className="flex-1 overflow-hidden flex flex-col">
               {/* Filters remain the same */}
               <div className="space-y-3 pb-4 border-b">
@@ -1721,6 +2554,8 @@ export default function EmployeeCutoff() {
           )}
         </DialogContent>
       </Dialog>
+
+
     </div>
   );
 }

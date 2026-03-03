@@ -1,46 +1,34 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, BellDot, X, Check, Clock, CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { Bell, BellDot, X, Check, Clock, AlertCircle, Info } from 'lucide-react';
 import { notificationApi } from '@/lib/notificationApi';
 import socketService from '@/lib/socketService';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+
+// Notification type configuration
+const NOTIFICATION_CONFIG = {
+  MISSED_CLOCK_IN: { title: 'Missed Clock-In', emoji: '⏰' },
+  MISSED_CLOCK_OUT: { title: 'Missed Clock-Out', emoji: '🕐' },
+  DAILY_CLOCK_IN_REPORT: { title: 'Morning Report', emoji: '☀️' },
+  DAILY_CLOCK_OUT_REPORT: { title: 'Evening Report', emoji: '🌙' },
+  DEFAULT: { title: 'Notification', emoji: '🔔' }
+};
+
+// Time formatter
+const formatTimeAgo = (date) => {
+  const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+  if (seconds < 60) return 'Just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+  return new Date(date).toLocaleDateString();
+};
 
 function NotificationItem({ notification, onMarkAsRead, onRemove }) {
-  const getIcon = () => {
-    switch (notification.notificationCode) {
-      case 'MISSED_CLOCK_IN':
-        return <AlertCircle className="w-4 h-4 text-orange-500" />;
-      case 'MISSED_CLOCK_OUT':
-        return <AlertCircle className="w-4 h-4 text-orange-500" />;
-      case 'DAILY_CLOCK_IN_REPORT':
-        return <Info className="w-4 h-4 text-blue-500" />;
-      case 'DAILY_CLOCK_OUT_REPORT':
-        return <Info className="w-4 h-4 text-blue-500" />;
-      default:
-        return <CheckCircle className="w-4 h-4 text-green-500" />;
-    }
-  };
-
-  const getEmoji = () => {
-    switch (notification.notificationCode) {
-      case 'MISSED_CLOCK_IN': return '⏰';
-      case 'MISSED_CLOCK_OUT': return '🕐';
-      case 'DAILY_CLOCK_IN_REPORT': return '☀️';
-      case 'DAILY_CLOCK_OUT_REPORT': return '🌙';
-      default: return '🔔';
-    }
-  };
-
-  const timeAgo = (date) => {
-    const seconds = Math.floor((new Date() - new Date(date)) / 1000);
-    if (seconds < 60) return 'Just now';
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-    if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
-    return new Date(date).toLocaleDateString();
-  };
+  const config = NOTIFICATION_CONFIG[notification.notificationCode] || NOTIFICATION_CONFIG.DEFAULT;
 
   return (
     <motion.div
@@ -52,9 +40,8 @@ function NotificationItem({ notification, onMarkAsRead, onRemove }) {
                   ${!notification.seen ? 'bg-orange-50/50 dark:bg-orange-950/20' : ''}`}
     >
       <div className="flex items-start space-x-3">
-        <div className="flex-shrink-0 mt-1 text-2xl">
-          {getEmoji()}
-        </div>
+        <div className="flex-shrink-0 mt-1 text-2xl">{config.emoji}</div>
+        
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1">
             <h4 className={`text-sm font-medium ${
@@ -62,15 +49,13 @@ function NotificationItem({ notification, onMarkAsRead, onRemove }) {
                 ? 'text-neutral-900 dark:text-neutral-100' 
                 : 'text-neutral-700 dark:text-neutral-300'
             }`}>
-              {notification.notificationCode === 'MISSED_CLOCK_IN' && 'Missed Clock-In'}
-              {notification.notificationCode === 'MISSED_CLOCK_OUT' && 'Missed Clock-Out'}
-              {notification.notificationCode === 'DAILY_CLOCK_IN_REPORT' && 'Morning Report'}
-              {notification.notificationCode === 'DAILY_CLOCK_OUT_REPORT' && 'Evening Report'}
+              {config.title}
             </h4>
             {!notification.seen && (
-              <div className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0" />
+              <div className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0 animate-pulse" />
             )}
           </div>
+          
           <p className={`text-sm ${
             !notification.seen 
               ? 'text-neutral-600 dark:text-neutral-400' 
@@ -78,29 +63,31 @@ function NotificationItem({ notification, onMarkAsRead, onRemove }) {
           }`}>
             {notification.message}
           </p>
+          
           <div className="flex items-center justify-between mt-2">
             <span className="text-xs text-neutral-400 dark:text-neutral-500 flex items-center">
               <Clock className="w-3 h-3 mr-1" />
-              {timeAgo(notification.createdAt)}
+              {formatTimeAgo(notification.createdAt)}
             </span>
+            
             <div className="flex items-center space-x-1">
               {!notification.seen && (
                 <button
                   onClick={() => onMarkAsRead(notification.id)}
-                  className="p-1 rounded text-orange-600 hover:text-orange-700 
+                  className="p-1.5 rounded-md text-orange-600 hover:text-orange-700 
                            hover:bg-orange-100 dark:hover:bg-orange-900 transition-colors"
                   title="Mark as read"
                 >
-                  <Check className="w-3 h-3" />
+                  <Check className="w-3.5 h-3.5" />
                 </button>
               )}
               <button
                 onClick={() => onRemove(notification.id)}
-                className="p-1 rounded text-neutral-400 hover:text-red-500 
+                className="p-1.5 rounded-md text-neutral-400 hover:text-red-500 
                          hover:bg-red-100 dark:hover:bg-red-900 transition-colors"
-                title="Remove notification"
+                title="Remove"
               >
-                <X className="w-3 h-3" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -125,14 +112,14 @@ function NotificationPanel({ notifications, onMarkAsRead, onRemove, onMarkAllAsR
                  overflow-hidden z-50"
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700">
+      <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 bg-gradient-to-r from-orange-50 to-transparent dark:from-orange-950/20">
         <div>
           <h3 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
             Notifications
           </h3>
           {unreadCount > 0 && (
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              {unreadCount} new notification{unreadCount > 1 ? 's' : ''}
+            <p className="text-sm text-orange-600 dark:text-orange-400 font-medium">
+              {unreadCount} new
             </p>
           )}
         </div>
@@ -140,16 +127,15 @@ function NotificationPanel({ notifications, onMarkAsRead, onRemove, onMarkAllAsR
           {unreadCount > 0 && (
             <button
               onClick={onMarkAllAsRead}
-              className="text-xs px-3 py-1 bg-orange-100 dark:bg-orange-900 
-                       text-orange-700 dark:text-orange-300 rounded-full
-                       hover:bg-orange-200 dark:hover:bg-orange-800 transition-colors"
+              className="text-xs px-3 py-1.5 bg-orange-500 text-white rounded-full
+                       hover:bg-orange-600 transition-colors font-medium shadow-sm"
             >
               Mark all read
             </button>
           )}
           <button
             onClick={onClose}
-            className="p-1 rounded-full text-neutral-400 hover:text-neutral-600 
+            className="p-1.5 rounded-full text-neutral-400 hover:text-neutral-600 
                      hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
           >
             <X className="w-4 h-4" />
@@ -193,9 +179,9 @@ function NotificationPanel({ notifications, onMarkAsRead, onRemove, onMarkAllAsR
               router.push('/dashboard/notifications');
             }}
             className="block w-full text-center text-sm text-orange-600 dark:text-orange-400 
-                     hover:text-orange-700 dark:hover:text-orange-300 transition-colors"
+                     hover:text-orange-700 dark:hover:text-orange-300 transition-colors font-medium"
           >
-            View all notifications
+            View all notifications →
           </button>
         </div>
       )}
@@ -211,20 +197,20 @@ export default function NotificationBell() {
   const buttonRef = useRef(null);
   const panelRef = useRef(null);
 
-  const hasNotifications = unreadCount > 0;
-
   // Fetch unread count
-  const fetchUnreadCount = async () => {
+  const fetchUnreadCount = useCallback(async () => {
     try {
       const { data } = await notificationApi.getUnreadCount();
       setUnreadCount(data.data.count);
     } catch (error) {
       console.error('Error fetching unread count:', error);
     }
-  };
+  }, []);
 
   // Fetch recent notifications
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
+    if (loading) return;
+    
     setLoading(true);
     try {
       const { data } = await notificationApi.getNotifications({ limit: 10 });
@@ -234,81 +220,112 @@ export default function NotificationBell() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [loading]);
 
-  // Mark notification as seen
-  const handleMarkAsRead = async (id) => {
+  // Mark notification as read
+  const handleMarkAsRead = useCallback(async (id) => {
     try {
       await notificationApi.markAsSeen(id);
-      setNotifications(prev =>
-        prev.map(n => n.id === id ? { ...n, seen: true } : n)
-      );
+      
+      // Optimistic update
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, seen: true } : n));
       setUnreadCount(prev => Math.max(0, prev - 1));
+      
+      toast.success('Marked as read');
     } catch (error) {
-      console.error('Error marking as seen:', error);
+      console.error('Error marking as read:', error);
+      toast.error('Failed to mark as read');
+      
+      // Revert on error
+      fetchNotifications();
+      fetchUnreadCount();
     }
-  };
+  }, [fetchNotifications, fetchUnreadCount]);
 
   // Remove notification
-  const handleRemove = async (id) => {
+  const handleRemove = useCallback(async (id) => {
     try {
-      await notificationApi.deleteNotification(id);
-      setNotifications(prev => prev.filter(n => n.id !== id));
       const wasUnread = notifications.find(n => n.id === id)?.seen === false;
+      
+      await notificationApi.deleteNotification(id);
+      
+      // Optimistic update
+      setNotifications(prev => prev.filter(n => n.id !== id));
       if (wasUnread) {
         setUnreadCount(prev => Math.max(0, prev - 1));
       }
+      
+      toast.success('Notification removed');
     } catch (error) {
       console.error('Error removing notification:', error);
+      toast.error('Failed to remove notification');
+      
+      // Revert on error
+      fetchNotifications();
+      fetchUnreadCount();
     }
-  };
+  }, [notifications, fetchNotifications, fetchUnreadCount]);
 
   // Mark all as read
-  const handleMarkAllAsRead = async () => {
+  const handleMarkAllAsRead = useCallback(async () => {
     try {
       await notificationApi.markAllAsSeen();
+      
+      // Optimistic update
       setNotifications(prev => prev.map(n => ({ ...n, seen: true })));
       setUnreadCount(0);
+      
+      toast.success('All marked as read');
     } catch (error) {
       console.error('Error marking all as read:', error);
+      toast.error('Failed to mark all as read');
+      
+      // Revert on error
+      fetchNotifications();
+      fetchUnreadCount();
     }
-  };
+  }, [fetchNotifications, fetchUnreadCount]);
 
   // Socket.io listeners
   useEffect(() => {
     fetchUnreadCount();
 
-    // Listen for new notifications
-    socketService.on('notification', (notification) => {
+    const handleNewNotification = (notification) => {
       console.log('🔔 New notification:', notification);
+      
+      // Update state
       setUnreadCount(prev => prev + 1);
       setNotifications(prev => [notification, ...prev].slice(0, 10));
       
       // Browser notification
       if (typeof window !== 'undefined' && Notification.permission === 'granted') {
-        new Notification('BizBuddy Notification', {
+        new Notification('BizBuddy', {
           body: notification.message,
           icon: '/favicon.ico',
           badge: '/favicon.ico',
         });
       }
-    });
+    };
+
+    socketService.on('notification', handleNewNotification);
 
     return () => {
-      socketService.off('notification');
+      socketService.off('notification', handleNewNotification);
     };
-  }, []);
+  }, [fetchUnreadCount]);
 
   // Load notifications when dropdown opens
   useEffect(() => {
-    if (isOpen && !loading && notifications.length === 0) {
+    if (isOpen && notifications.length === 0) {
       fetchNotifications();
     }
-  }, [isOpen]);
+  }, [isOpen, notifications.length, fetchNotifications]);
 
   // Close panel when clicking outside
   useEffect(() => {
-    function handleClickOutside(event) {
+    if (!isOpen) return;
+
+    const handleClickOutside = (event) => {
       if (
         panelRef.current && 
         !panelRef.current.contains(event.target) &&
@@ -317,35 +334,25 @@ export default function NotificationBell() {
       ) {
         setIsOpen(false);
       }
-    }
+    };
 
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isOpen]);
-
-  // Close panel when pressing Escape
-  useEffect(() => {
-    function handleEscape(event) {
+    const handleEscape = (event) => {
       if (event.key === 'Escape') {
         setIsOpen(false);
       }
-    }
+    };
 
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      return () => document.removeEventListener('keydown', handleEscape);
-    }
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, [isOpen]);
 
-  const handleToggle = () => {
-    setIsOpen(!isOpen);
-  };
-
-  const handleClose = () => {
-    setIsOpen(false);
-  };
+  const hasUnread = unreadCount > 0;
+  const displayCount = unreadCount > 99 ? '99+' : unreadCount;
 
   return (
     <div className="relative">
@@ -353,25 +360,28 @@ export default function NotificationBell() {
         ref={buttonRef}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        onClick={handleToggle}
+        onClick={() => setIsOpen(!isOpen)}
         className={`relative p-2 rounded-xl transition-all duration-200 ${
           isOpen
             ? 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950'
             : 'text-neutral-600 dark:text-neutral-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950'
         }`}
         aria-label="Notifications"
+        aria-expanded={isOpen}
       >
-        {hasNotifications ? <BellDot className="w-5 h-5" /> : <Bell className="w-5 h-5" />}
-        {hasNotifications && (
+        {hasUnread ? <BellDot className="w-5 h-5" /> : <Bell className="w-5 h-5" />}
+        
+        {hasUnread && (
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-gradient-to-r from-[#FF8C42] to-[#FF5757]
+            className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5
+                     bg-gradient-to-r from-orange-500 to-red-500
                      rounded-full border-2 border-white dark:border-neutral-900
-                     flex items-center justify-center"
+                     flex items-center justify-center shadow-lg"
           >
-            <span className="text-xs font-medium text-white leading-none">
-              {unreadCount > 99 ? '99+' : unreadCount}
+            <span className="text-xs font-bold text-white leading-none">
+              {displayCount}
             </span>
           </motion.div>
         )}
@@ -385,7 +395,7 @@ export default function NotificationBell() {
               onMarkAsRead={handleMarkAsRead}
               onRemove={handleRemove}
               onMarkAllAsRead={handleMarkAllAsRead}
-              onClose={handleClose}
+              onClose={() => setIsOpen(false)}
             />
           </div>
         )}

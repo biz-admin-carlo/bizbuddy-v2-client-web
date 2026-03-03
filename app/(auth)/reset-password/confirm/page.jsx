@@ -26,12 +26,12 @@ function ResetPasswordConfirmContent() {
 
   // Verify token on component mount
   useEffect(() => {
-    if (!token) {
+    if (token === null) return;    
+    if (token === "") {
       setStep("error");
       setError("Invalid reset link. Please request a new password reset.");
       return;
     }
-
     verifyToken();
   }, [token]);
 

@@ -39,20 +39,19 @@ export default function SignInPage() {
         )}`
       );
       const data = await res.json();
-      
+
       if (!res.ok) {
         setError(data.message || "Error checking email");
         setLoading(false);
         return;
       }
-      
-      // Check if there are active accounts
+
       if (!data.hasActiveAccounts || data.data.length === 0) {
         setError("No active accounts found for this email.");
         setLoading(false);
         return;
       }
-      
+
       setUsers(data.data);
       setStep(2);
     } catch (err) {
@@ -69,36 +68,35 @@ export default function SignInPage() {
 
   const handleSignInWithPassword = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.email || !formData.password || !selectedCompanyId) {
       setError("Email, password, and company selection are required.");
       return;
     }
-    
+
     setError("");
     setLoading(true);
-    
+
     try {
       const signInUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/account/sign-in?email=${encodeURIComponent(
         formData.email.trim().toLowerCase()
       )}&password=${encodeURIComponent(formData.password)}&companyId=${encodeURIComponent(selectedCompanyId)}`;
-      
+
       const res = await fetch(signInUrl);
       const data = await res.json();
-      
-      // Handle inactive account
+
       if (res.status === 403) {
         setError("Your account is inactive. Please contact your administrator to reactivate your account.");
         setLoading(false);
         return;
       }
-      
+
       if (res.status !== 200 || !data.data?.token) {
         setError(data.message || "Invalid credentials.");
         setLoading(false);
         return;
       }
-      
+
       login(data.data.token);
       router.push("/dashboard");
     } catch (err) {
@@ -106,6 +104,12 @@ export default function SignInPage() {
       setError("Something went wrong.");
     }
     setLoading(false);
+  };
+
+  const handleForgotPassword = () => {
+    // Pass the email as a query param so the reset page can pre-fill it
+    const params = new URLSearchParams({ email: formData.email.trim().toLowerCase() });
+    router.push(`/reset-password?${params.toString()}`);
   };
 
   const getRoleIcon = (role) => {
@@ -219,12 +223,7 @@ export default function SignInPage() {
             </button>
             {error && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 mr-2 flex-shrink-0"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                   <path
                     fillRule="evenodd"
                     d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
@@ -253,6 +252,7 @@ export default function SignInPage() {
             </div>
           </motion.form>
         )}
+
         {step === 2 && (
           <motion.div
             className="max-w-md mx-auto bg-white dark:bg-neutral-800 p-8 rounded-2xl shadow-lg border border-neutral-100 dark:border-neutral-700 space-y-6"
@@ -323,13 +323,12 @@ export default function SignInPage() {
             {selectedCompanyId && (
               <motion.form
                 onSubmit={handleSignInWithPassword}
-                className="space-y-6"
+                className="space-y-4"
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ duration: 0.3 }}
               >
                 <div className="relative">
-                  {" "}
                   <label htmlFor="password" className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                     Password
                   </label>
@@ -340,18 +339,30 @@ export default function SignInPage() {
                     placeholder="Enter your password"
                     value={formData.password}
                     onChange={handleChange}
-                    className="w-full p-3 pr-10 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 outline-none focus:ring-2 focus:ring-orange-500/50 transition-all duration-200" // Add pr-10
+                    className="w-full p-3 pr-10 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 outline-none focus:ring-2 focus:ring-orange-500/50 transition-all duration-200"
                     required
                   />
                   <button
                     type="button"
                     onClick={togglePasswordVisibility}
-                    className="absolute right-3  transform translate-y-1/2 text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200" // Adjust top for centering
+                    className="absolute right-3 transform translate-y-1/2 text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
                     aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? <EyeOff className="h-6 w-6" /> : <Eye className="h-6 w-6" />}
                   </button>
                 </div>
+
+                {/* Forgot Password Link */}
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    className="text-sm text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 hover:underline transition-colors duration-200"
+                  >
+                    Forgot your password?
+                  </button>
+                </div>
+
                 <button
                   type="submit"
                   disabled={loading}
@@ -394,12 +405,7 @@ export default function SignInPage() {
 
             {error && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 mr-2 flex-shrink-0"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                   <path
                     fillRule="evenodd"
                     d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
