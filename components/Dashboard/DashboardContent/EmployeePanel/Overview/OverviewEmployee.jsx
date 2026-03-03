@@ -345,7 +345,7 @@ export default function OverviewEmployee() {
             </div>
             <div className="flex-1">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
-                Welcome to Biz Buddy! 👋
+                Welcome to Biz Buddy!
               </h3>
               <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
                 Start tracking your time to see your analytics here. Once you log your first session, 

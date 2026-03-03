@@ -54,10 +54,13 @@ const getUserTimezone = () => {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 };
 
-const formatTimeInTimezone = (dateString, timezone, formatStr = 'HH:mm') => {
+const formatNaiveTime = (dateString) => {
   try {
-    if (!dateString || !timezone) return 'N/A';
-    return formatInTimeZone(new Date(dateString), timezone, formatStr);
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    const hours = date.getUTCHours().toString().padStart(2, '0');
+    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
   } catch (error) {
     console.error('Error formatting time:', error);
     return 'Invalid';
@@ -330,16 +333,16 @@ function ShiftCard({ shift, index, compact = false, showLocalTime = false }) {
   const userTimezone = getUserTimezone();
   const isDifferentTimezone = timezone !== userTimezone;
 
-  const startTime = formatTimeInTimezone(shift.shift.startTime, timezone, 'HH:mm');
-  const endTime = formatTimeInTimezone(shift.shift.endTime, timezone, 'HH:mm');
+  const startTime = formatNaiveTime(shift.shift.startTime, timezone, 'HH:mm');
+  const endTime = formatNaiveTime(shift.shift.endTime, timezone, 'HH:mm');
   const duration = hoursBetween(shift.shift.startTime, shift.shift.endTime, timezone);
 
   // Calculate local time if needed
   const localStartTime = showLocalTime && isDifferentTimezone 
-    ? formatTimeInTimezone(shift.shift.startTime, userTimezone, 'HH:mm')
+    ? formatNaiveTime(shift.shift.startTime, userTimezone, 'HH:mm')
     : null;
   const localEndTime = showLocalTime && isDifferentTimezone
-    ? formatTimeInTimezone(shift.shift.endTime, userTimezone, 'HH:mm')
+    ? formatNaiveTime(shift.shift.endTime, userTimezone, 'HH:mm')
     : null;
 
   if (compact) {
@@ -851,10 +854,10 @@ export default function ModernSchedule() {
                                 <TimezoneBadge timezone={timezone} compact />
                               </TableCell>
                               <TableCell className="font-mono text-sm">
-                                {formatTimeInTimezone(shift.shift.startTime, timezone, 'HH:mm')}
+                                {formatNaiveTime(shift.shift.startTime, timezone, 'HH:mm')}
                               </TableCell>
                               <TableCell className="font-mono text-sm">
-                                {formatTimeInTimezone(shift.shift.endTime, timezone, 'HH:mm')}
+                                {formatNaiveTime(shift.shift.endTime, timezone, 'HH:mm')}
                               </TableCell>
                               {showLocalTime && hasMultipleTimezones && (
                                 <TableCell className="text-sm">
@@ -862,9 +865,9 @@ export default function ModernSchedule() {
                                     <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
                                       <MapPin className="h-3 w-3" />
                                       <span className="font-mono">
-                                        {formatTimeInTimezone(shift.shift.startTime, userTimezone, 'HH:mm')}
+                                        {formatNaiveTime(shift.shift.startTime, userTimezone, 'HH:mm')}
                                         {' - '}
-                                        {formatTimeInTimezone(shift.shift.endTime, userTimezone, 'HH:mm')}
+                                        {formatNaiveTime(shift.shift.endTime, userTimezone, 'HH:mm')}
                                       </span>
                                     </div>
                                   ) : (

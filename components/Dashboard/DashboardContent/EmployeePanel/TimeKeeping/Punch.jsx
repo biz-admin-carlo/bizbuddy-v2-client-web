@@ -23,6 +23,11 @@ import {
   Play,
   Pause,
   Activity,
+  Building2,
+  Car,
+  UserCheck,
+  CalendarX,
+  Info,
 } from "lucide-react";
 
 import LocationGuard from "@/components/common/LocationGuard";
@@ -33,8 +38,12 @@ import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
 const fmt = (t = 0) =>
-  [Math.floor(t / 3600), Math.floor((t % 3600) / 60), Math.floor(t % 60)].map((n) => String(n).padStart(2, "0")).join(":");
+  [Math.floor(t / 3600), Math.floor((t % 3600) / 60), Math.floor(t % 60)]
+    .map((n) => String(n).padStart(2, "0"))
+    .join(":");
 
 const getDeviceInfo = () =>
   typeof window === "undefined"
@@ -52,39 +61,107 @@ const getDeviceInfo = () =>
 function fetchLocation() {
   return new Promise((resolve) => {
     if (!("geolocation" in navigator)) return resolve({ latitude: null, longitude: null });
-
     navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        resolve({
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-        }),
+      (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
       () => resolve({ latitude: null, longitude: null }),
       { enableHighAccuracy: true, timeout: 8000 }
     );
   });
 }
 
+// ── Punch type constants ───────────────────────────────────────────────────────
+const PUNCH_TYPES = {
+  REGULAR:       "REGULAR",
+  DRIVER_AIDE:   "DRIVER_AIDE",    // actual Driver employee — full day
+  DRIVER_AIDE_AM:"DRIVER_AIDE_AM", // non-driver covered AM slot (early clock-in)
+  DRIVER_AIDE_PM:"DRIVER_AIDE_PM", // non-driver covered PM slot (late clock-out)
+};
+
+// How many minutes early/late triggers the driver-aide confirmation modal.
+// Hardcoded for now — will be moved to company/department settings later.
+const DRIVER_AIDE_THRESHOLD_MINUTES = 45;
+
+// ── Badge label/colour helpers ─────────────────────────────────────────────────
+const PUNCH_TYPE_LABELS = {
+  [PUNCH_TYPES.REGULAR]:        { label: "Regular",        icon: UserCheck, color: "purple" },
+  [PUNCH_TYPES.DRIVER_AIDE]:    { label: "Driver / Aide",  icon: Car,       color: "blue"   },
+  [PUNCH_TYPES.DRIVER_AIDE_AM]: { label: "Driver AM",      icon: Car,       color: "blue"   },
+  [PUNCH_TYPES.DRIVER_AIDE_PM]: { label: "Driver PM",      icon: Car,       color: "blue"   },
+};
+
+const BADGE_COLOR_CLASSES = {
+  blue:   "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800",
+  purple: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800",
+};
+
+// ── Main component ─────────────────────────────────────────────────────────────
 export default function Punch() {
   const { token } = useAuthStore();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [isTimedIn, setIsTimedIn] = useState(false);
-  const [timeInAt, setTimeInAt] = useState(null);
-  const [elapsed, setElapsed] = useState(0);
-  const [coffeeActive, setCoffeeActive] = useState(false);
-  const [coffeeStart, setCoffeeStart] = useState(null);
-  const [coffeeElapsed, setCoffeeElapsed] = useState(0);
-  const [coffeeCount, setCoffeeCount] = useState(0);
-  const [lunchActive, setLunchActive] = useState(false);
-  const [lunchStart, setLunchStart] = useState(null);
-  const [lunchElapsed, setLunchElapsed] = useState(0);
-  const [location, setLocation] = useState({ latitude: null, longitude: null });
-  const [locationLoading, setLocationLoading] = useState(true);
-  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-  const [confirmAction, setConfirmAction] = useState(null);
 
+  // Session
+  const [loading, setLoading]         = useState(false);
+  const [refreshing, setRefreshing]   = useState(false);
+  const [isTimedIn, setIsTimedIn]     = useState(false);
+  const [timeInAt, setTimeInAt]       = useState(null);
+  const [elapsed, setElapsed]         = useState(0);
+
+  // Breaks
+  const [coffeeActive, setCoffeeActive]   = useState(false);
+  const [coffeeStart, setCoffeeStart]     = useState(null);
+  const [coffeeElapsed, setCoffeeElapsed] = useState(0);
+  const [coffeeCount, setCoffeeCount]     = useState(0);
+  const [lunchActive, setLunchActive]     = useState(false);
+  const [lunchStart, setLunchStart]       = useState(null);
+  const [lunchElapsed, setLunchElapsed]   = useState(0);
+
+  // Location
+  const [location, setLocation]               = useState({ latitude: null, longitude: null });
+  const [locationLoading, setLocationLoading] = useState(true);
+
+  // Employee info
+  const [employeeInfo, setEmployeeInfo]               = useState({ companyId: null, companyName: null, jobTitle: null });
+  const [employeeInfoLoading, setEmployeeInfoLoading] = useState(true);
+
+  // Today's scheduled shift — fetched on mount alongside employee info
+  // { shiftName, scheduledStartMs, scheduledEndMs } | null
+  const [todayShift, setTodayShift]               = useState(undefined);
+  const [todayShiftLoading, setTodayShiftLoading] = useState(true);
+  console.log(todayShift);
+
+  // Punch type state
+  const [punchTypeModalOpen, setPunchTypeModalOpen] = useState(false);
+  const [selectedPunchType, setSelectedPunchType]   = useState(null);
+  const [activePunchType, setActivePunchType]       = useState(null);
+  // Context stored so the punch type modal knows which scenario triggered it
+  // "timein_early" | "timeout_late" | null
+  const [punchTypeContext, setPunchTypeContext]     = useState(null);
+
+  // No-schedule info modal (all companies)
+  const [noScheduleModalOpen, setNoScheduleModalOpen] = useState(false);
+  // Stores the pending action to resume after dismissing the no-schedule modal
+  // "timein" | "timeout"
+  const [pendingActionAfterModal, setPendingActionAfterModal] = useState(null);
+
+  // Confirmation dialog
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [confirmAction, setConfirmAction]         = useState(null);
+
+  // ── Derived flags ────────────────────────────────────────────────────────────
+  const DAYCARE_COMPANY_IDS = (process.env.NEXT_PUBLIC_DAYCARE_COMPANY_IDS || "")
+  .split(",")
+  .map((id) => id.trim())
+  .filter(Boolean);
+
+  const isDayCare = DAYCARE_COMPANY_IDS.includes(employeeInfo.companyId);
+
+  // Strict match — "driver" only (case-insensitive). "Driver Aide", "Aide" etc. are NOT drivers.
+  const isDriver = employeeInfo.jobTitle?.toLowerCase() === "driver";
+
+  // Non-driver DayCare employee — the only group that sees the AM/PM modal
+  const isDayCareNonDriver = isDayCare && !isDriver;
+
+  // ── Location on mount ────────────────────────────────────────────────────────
   useEffect(() => {
     setLocationLoading(true);
     fetchLocation().then((loc) => {
@@ -93,6 +170,42 @@ export default function Punch() {
     });
   }, []);
 
+  // ── Employee info + today's shift on mount ────────────────────────────────────
+  useEffect(() => {
+    if (!token) return;
+    setEmployeeInfoLoading(true);
+    setTodayShiftLoading(true);
+
+    Promise.all([
+      fetch(`${API_URL}/api/account/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((r) => r.json()),
+      fetch(`${API_URL}/api/employment-details/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((r) => r.json()),
+      fetch(`${API_URL}/api/timelogs/today-shift`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((r) => r.json()),
+    ])
+      .then(([profileRes, employmentRes, shiftRes]) => {
+        setEmployeeInfo({
+          companyId:   profileRes?.data?.company?.id   || null,
+          companyName: profileRes?.data?.company?.name || null,
+          jobTitle:    employmentRes?.data?.jobTitle   || null,
+        });
+        // null = no shift today, object = shift found
+        setTodayShift(shiftRes?.data ?? null);
+      })
+      .catch(() => {
+        setTodayShift(null);
+      })
+      .finally(() => {
+        setEmployeeInfoLoading(false);
+        setTodayShiftLoading(false);
+      });
+  }, [token]);
+
+  // ── Active log hydration ──────────────────────────────────────────────────────
   const fetchActiveLog = async () => {
     if (!token) return;
     try {
@@ -107,6 +220,7 @@ export default function Punch() {
           const ti = +new Date(active.timeIn);
           setTimeInAt(ti);
           setElapsed(Math.floor((Date.now() - ti) / 1000));
+          setActivePunchType(active.punchType ?? PUNCH_TYPES.REGULAR);
 
           if (active.coffeeBreaks?.length) {
             const last = active.coffeeBreaks.at(-1);
@@ -118,7 +232,7 @@ export default function Punch() {
               setCoffeeElapsed(Math.floor((Date.now() - cs) / 1000));
             }
           }
-          if (active.lunchBreak && active.lunchBreak.start && !active.lunchBreak.end) {
+          if (active.lunchBreak?.start && !active.lunchBreak?.end) {
             setLunchActive(true);
             const ls = +new Date(active.lunchBreak.start);
             setLunchStart(ls);
@@ -135,13 +249,14 @@ export default function Punch() {
     fetchActiveLog();
   }, [token]);
 
+  // ── Tick interval ─────────────────────────────────────────────────────────────
   const intervalRef = useRef(null);
   useEffect(() => {
     if (isTimedIn) {
       intervalRef.current = setInterval(() => {
-        if (timeInAt) setElapsed(Math.floor((Date.now() - timeInAt) / 1000));
-        if (coffeeActive && coffeeStart) setCoffeeElapsed(Math.floor((Date.now() - coffeeStart) / 1000));
-        if (lunchActive && lunchStart) setLunchElapsed(Math.floor((Date.now() - lunchStart) / 1000));
+        if (timeInAt)                       setElapsed(Math.floor((Date.now() - timeInAt) / 1000));
+        if (coffeeActive && coffeeStart)    setCoffeeElapsed(Math.floor((Date.now() - coffeeStart) / 1000));
+        if (lunchActive  && lunchStart)     setLunchElapsed(Math.floor((Date.now() - lunchStart) / 1000));
       }, 1000);
     } else {
       clearInterval(intervalRef.current);
@@ -149,22 +264,25 @@ export default function Punch() {
     return () => clearInterval(intervalRef.current);
   }, [isTimedIn, coffeeActive, lunchActive, timeInAt, coffeeStart, lunchStart]);
 
+  // ── Reset all session state ───────────────────────────────────────────────────
   const resetAll = () => {
     setIsTimedIn(false);
     setTimeInAt(null);
     setElapsed(0);
-
     setCoffeeActive(false);
     setCoffeeStart(null);
     setCoffeeElapsed(0);
     setCoffeeCount(0);
-
     setLunchActive(false);
     setLunchStart(null);
     setLunchElapsed(0);
+    setActivePunchType(null);
+    setSelectedPunchType(null);
+    setPunchTypeContext(null);
   };
 
-  async function doCall(endpoint) {
+  // ── Shared API caller ─────────────────────────────────────────────────────────
+  async function doCall(endpoint, extraBody = {}) {
     setLoading(true);
     setLocationLoading(true);
     const loc = await fetchLocation();
@@ -189,14 +307,14 @@ export default function Punch() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          deviceInfo: getDeviceInfo(),
-          location: loc,
+          deviceInfo:     getDeviceInfo(),
+          location:       loc,
           localTimestamp: new Date().toISOString(),
+          ...extraBody,
         }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.message || "Request failed");
-
       toast.message(d.message || "Success", {
         icon: <Check className="h-5 w-5 text-orange-500" />,
       });
@@ -212,7 +330,30 @@ export default function Punch() {
     }
   }
 
-  const handlePunch = async () => {
+  // ── Schedule threshold helpers ────────────────────────────────────────────────
+
+  // Returns how many minutes before the scheduled start the employee is punching in.
+  // Positive = early, negative = on-time or late.
+  const minutesEarlyForTimeIn = () => {
+    if (!todayShift?.scheduledStartMs) return 0;
+    return (todayShift.scheduledStartMs - Date.now()) / 60000;
+  };
+
+  // Returns how many minutes past the scheduled end the employee is punching out.
+  // Positive = late, negative = on-time or early.
+  const minutesLateForTimeOut = () => {
+    if (!todayShift?.scheduledEndMs) return 0;
+    return (Date.now() - todayShift.scheduledEndMs) / 60000;
+  };
+
+  const formatShiftTime = (ms) => {
+    if (!ms) return "--:--";
+    return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  // ── Core punch handler ────────────────────────────────────────────────────────
+  const handlePunch = () => {
+    // Guard: can't time out while a break is active
     if (isTimedIn && (coffeeActive || lunchActive)) {
       toast.message("End active break first.", {
         description: "You need to end your current break before timing out.",
@@ -221,27 +362,116 @@ export default function Punch() {
       return;
     }
 
-    setConfirmAction(isTimedIn ? "timeout" : "timein");
+    const action = isTimedIn ? "timeout" : "timein";
+
+    // ── No schedule today — show info modal for ALL companies ──────────────────
+    // todayShift === null means loaded and confirmed empty.
+    // todayShift === undefined means still loading — skip check to avoid flicker.
+    if (!isTimedIn && todayShift === null && !todayShiftLoading) {
+      setPendingActionAfterModal(action);
+      setNoScheduleModalOpen(true);
+      return;
+    }
+
+    proceedWithPunch(action);
+  };
+
+  // Called after dismissing the no-schedule modal, or directly from handlePunch
+  // when a schedule exists.
+  const proceedWithPunch = (action) => {
+    if (action === "timein") {
+      handleTimeInLogic();
+    } else {
+      handleTimeOutLogic();
+    }
+  };
+
+  // ── Time-in routing ───────────────────────────────────────────────────────────
+  const handleTimeInLogic = () => {
+    // Actual Driver → always DRIVER_AIDE, no modal, straight to confirmation
+    if (isDayCare && isDriver) {
+      setSelectedPunchType(PUNCH_TYPES.DRIVER_AIDE);
+      setConfirmAction("timein");
+      setConfirmDialogOpen(true);
+      return;
+    }
+
+    // DayCare non-driver + 45+ min early → show AM driver-aide modal
+    if (isDayCareNonDriver && minutesEarlyForTimeIn() >= DRIVER_AIDE_THRESHOLD_MINUTES) {
+      setSelectedPunchType(null);
+      setPunchTypeContext("timein_early");
+      setPunchTypeModalOpen(true);
+      return;
+    }
+
+    // All other cases → REGULAR, straight to confirmation
+    setSelectedPunchType(PUNCH_TYPES.REGULAR);
+    setConfirmAction("timein");
     setConfirmDialogOpen(true);
   };
 
+  // ── Time-out routing ──────────────────────────────────────────────────────────
+  const handleTimeOutLogic = () => {
+    // DayCare non-driver + 45+ min late → show PM driver-aide modal
+    if (isDayCareNonDriver && minutesLateForTimeOut() >= DRIVER_AIDE_THRESHOLD_MINUTES) {
+      setSelectedPunchType(null);
+      setPunchTypeContext("timeout_late");
+      setPunchTypeModalOpen(true);
+      return;
+    }
+
+    // All other time-outs → straight to confirmation, no punchType update needed
+    setConfirmAction("timeout");
+    setConfirmDialogOpen(true);
+  };
+
+  // ── Punch type modal confirm ──────────────────────────────────────────────────
+  const handlePunchTypeConfirm = () => {
+    if (!selectedPunchType) return;
+    setPunchTypeModalOpen(false);
+
+    if (punchTypeContext === "timein_early") {
+      setConfirmAction("timein");
+    } else {
+      // timeout_late
+      setConfirmAction("timeout");
+    }
+    setConfirmDialogOpen(true);
+  };
+
+  // ── Confirmation dialog confirm ───────────────────────────────────────────────
   const confirmPunch = async () => {
-    const ok = await doCall(confirmAction === "timeout" ? "/time-out" : "/time-in");
+    const isTimeIn = confirmAction === "timein";
+
+    // For time-in: send selectedPunchType if set (covers DRIVER_AIDE and DRIVER_AIDE_AM)
+    // For time-out: send selectedPunchType only if it's DRIVER_AIDE_PM (updating the log)
+    const extraBody = {};
+    if (isTimeIn && selectedPunchType) {
+      extraBody.punchType = selectedPunchType;
+    } else if (!isTimeIn && selectedPunchType === PUNCH_TYPES.DRIVER_AIDE_PM) {
+      extraBody.punchType = selectedPunchType;
+    }
+
+    const ok = await doCall(isTimeIn ? "/time-in" : "/time-out", extraBody);
     if (!ok) return;
 
-    if (confirmAction === "timein") {
+    if (isTimeIn) {
       const now = Date.now();
       setIsTimedIn(true);
       setTimeInAt(now);
       setElapsed(0);
+      setActivePunchType(selectedPunchType ?? PUNCH_TYPES.REGULAR);
     } else {
       resetAll();
     }
 
     setConfirmDialogOpen(false);
     setConfirmAction(null);
+    setSelectedPunchType(null);
+    setPunchTypeContext(null);
   };
 
+  // ── Break handlers ────────────────────────────────────────────────────────────
   const handleCoffee = async () => {
     if (!isTimedIn) {
       toast.message("You must be timed-in.", {
@@ -250,7 +480,6 @@ export default function Punch() {
       });
       return;
     }
-
     if (!coffeeActive && coffeeCount >= 2) {
       toast.message("Coffee-break limit reached.", {
         description: "You've already taken your allowed coffee breaks for today.",
@@ -258,19 +487,16 @@ export default function Punch() {
       });
       return;
     }
-
     const ok = await doCall(coffeeActive ? "/coffee-break/end" : "/coffee-break/start");
     if (!ok) return;
-
     if (coffeeActive) {
       setCoffeeActive(false);
       setCoffeeStart(null);
       setCoffeeElapsed(0);
       setCoffeeCount((c) => c + 1);
     } else {
-      const now = Date.now();
       setCoffeeActive(true);
-      setCoffeeStart(now);
+      setCoffeeStart(Date.now());
       setCoffeeElapsed(0);
     }
   };
@@ -283,7 +509,6 @@ export default function Punch() {
       });
       return;
     }
-
     if (!lunchActive && lunchElapsed > 0) {
       toast.message("Lunch break already taken.", {
         description: "You've already taken your lunch break for today.",
@@ -291,18 +516,15 @@ export default function Punch() {
       });
       return;
     }
-
     const ok = await doCall(lunchActive ? "/lunch-break/end" : "/lunch-break/start");
     if (!ok) return;
-
     if (lunchActive) {
       setLunchActive(false);
       setLunchStart(null);
       setLunchElapsed(0);
     } else {
-      const now = Date.now();
       setLunchActive(true);
-      setLunchStart(now);
+      setLunchStart(Date.now());
       setLunchElapsed(0);
     }
   };
@@ -314,25 +536,40 @@ export default function Punch() {
 
   const formatTimeDisplay = (timestamp) => {
     if (!timestamp) return "--:--";
-    return new Date(timestamp).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
+
   const coffeeProgress = (coffeeCount / 2) * 100;
 
+  // ── Punch type modal copy ─────────────────────────────────────────────────────
+  const punchTypeModalTitle = punchTypeContext === "timein_early"
+    ? "Early Clock-In Detected"
+    : "Late Clock-Out Detected";
+
+  const punchTypeModalDesc = punchTypeContext === "timein_early"
+    ? `You are clocking in ${Math.round(minutesEarlyForTimeIn())} minutes before your scheduled start${todayShift?.shiftName ? ` (${todayShift.shiftName} — ${formatShiftTime(todayShift.scheduledStartMs)})` : ""}. Are you covering a Driver/Aide AM slot?`
+    : `You are clocking out ${Math.round(minutesLateForTimeOut())} minutes after your scheduled end${todayShift?.shiftName ? ` (${todayShift.shiftName} — ${formatShiftTime(todayShift.scheduledEndMs)})` : ""}. Did you cover a Driver/Aide PM slot?`;
+
+  // Which punch type to assign for each option depending on context
+  const driverAidePunchType = punchTypeContext === "timein_early"
+    ? PUNCH_TYPES.DRIVER_AIDE_AM
+    : PUNCH_TYPES.DRIVER_AIDE_PM;
+
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <LocationGuard>
       <TooltipProvider delayDuration={300}>
         <div className="max-w-5xl mx-auto p-4 lg:px-8 space-y-8">
           <Toaster position="top-center" />
+
+          {/* Header */}
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-2"
           >
             <div>
-              <h2 className="text-3xl md:text-4xl font-bold tracking-tight flex items-center gap-3 ">
+              <h2 className="text-3xl md:text-4xl font-bold tracking-tight flex items-center gap-3">
                 <div className="p-2 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg">
                   <Clock className="h-8 w-8" />
                 </div>
@@ -340,15 +577,17 @@ export default function Punch() {
               </h2>
             </div>
             <div className="flex gap-3 items-center">
-              <Button variant="outline" className="flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-black" asChild>
+              <Button
+                variant="outline"
+                className="flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-black"
+                asChild
+              >
                 <Link href="/dashboard/employee/punch-logs">
                   <Timer className="h-4 w-4" />
                   Punch logs
                 </Link>
               </Button>
-
               <IconBtn
-                className="outline-none flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-black"
                 icon={RefreshCw}
                 tooltip="Refresh"
                 spinning={refreshing}
@@ -357,15 +596,14 @@ export default function Punch() {
             </div>
           </motion.div>
 
+          {/* Session Card */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
             <Card className="border-2 shadow-xl overflow-hidden bg-gradient-to-br from-white to-neutral-50 dark:from-neutral-900 dark:to-neutral-800">
-              <div
-                className={`h-2 w-full ${
-                  isTimedIn
-                    ? "bg-orange-500"
-                    : "bg-gradient-to-r from-neutral-300 to-neutral-400 dark:from-neutral-600 dark:to-neutral-700"
-                }`}
-              />
+              <div className={`h-2 w-full ${
+                isTimedIn
+                  ? "bg-orange-500"
+                  : "bg-gradient-to-r from-neutral-300 to-neutral-400 dark:from-neutral-600 dark:to-neutral-700"
+              }`} />
 
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center justify-between">
@@ -383,61 +621,117 @@ export default function Punch() {
                     </motion.div>
                     <div>
                       <span className="text-2xl font-bold">{isTimedIn ? "On the Clock" : "Off the Clock"}</span>
-                      {timeInAt && <p className="text-sm text-muted-foreground">Started at {formatTimeDisplay(timeInAt)}</p>}
+                      {timeInAt && (
+                        <p className="text-sm text-muted-foreground">Started at {formatTimeDisplay(timeInAt)}</p>
+                      )}
                     </div>
                   </div>
 
-                  <AnimatePresence>
-                    {locationLoading ? (
-                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                        <Badge variant="outline" className="animate-pulse">
-                          <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Locating...
-                        </Badge>
-                      </motion.div>
-                    ) : location.latitude ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Company + Role badge (DayCare only) */}
+                    {isDayCare && (
                       <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800 cursor-help">
-                              <MapPin className="h-3 w-3 mr-1" /> Location Active
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>GPS location is active and working</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </motion.div>
-                    ) : (
-                      <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Badge className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 cursor-help">
-                              <AlertCircle className="h-3 w-3 mr-1" /> Location Required
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Enable location services to punch in/out</p>
-                          </TooltipContent>
-                        </Tooltip>
+                        {employeeInfoLoading ? (
+                          <Badge variant="outline" className="animate-pulse">
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Loading...
+                          </Badge>
+                        ) : (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800 cursor-help gap-1">
+                                <Building2 className="h-3 w-3" />
+                                {employeeInfo.companyName}
+                                {employeeInfo.jobTitle && (
+                                  <>
+                                    <span className="text-green-400 dark:text-green-500">·</span>
+                                    {employeeInfo.jobTitle}
+                                  </>
+                                )}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{employeeInfo.companyName} — {employeeInfo.jobTitle}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
                       </motion.div>
                     )}
-                  </AnimatePresence>
+
+                    {/* Active punch type badge — visible only while timed in for DayCare */}
+                    <AnimatePresence>
+                      {isTimedIn && activePunchType && isDayCare && (() => {
+                        const meta = PUNCH_TYPE_LABELS[activePunchType] ?? PUNCH_TYPE_LABELS[PUNCH_TYPES.REGULAR];
+                        const Icon = meta.icon;
+                        return (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                          >
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge className={`${BADGE_COLOR_CLASSES[meta.color]} cursor-help gap-1`}>
+                                  <Icon className="h-3 w-3" /> {meta.label}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Clocked in as {meta.label}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </motion.div>
+                        );
+                      })()}
+                    </AnimatePresence>
+
+                    {/* Location badge */}
+                    <AnimatePresence>
+                      {locationLoading ? (
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                          <Badge variant="outline" className="animate-pulse">
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Locating...
+                          </Badge>
+                        </motion.div>
+                      ) : location.latitude ? (
+                        <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800 cursor-help">
+                                <MapPin className="h-3 w-3 mr-1" /> Location Active
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent><p>GPS location is active and working</p></TooltipContent>
+                          </Tooltip>
+                        </motion.div>
+                      ) : (
+                        <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 cursor-help">
+                                <AlertCircle className="h-3 w-3 mr-1" /> Location Required
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Enable location services to punch in/out</p></TooltipContent>
+                          </Tooltip>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </CardTitle>
               </CardHeader>
 
               <CardContent className="space-y-8 pt-0">
                 <div className="flex items-center justify-between p-6 rounded-2xl bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-950 dark:to-orange-900 border border-orange-200 dark:border-orange-800">
                   <div className="flex items-center gap-4">
-                    <Badge
-                      className={`px-4 py-2 text-sm font-semibold ${
-                        isTimedIn
-                          ? "bg-orange-500 text-white shadow-md"
-                          : "bg-gradient-to-r from-neutral-500 to-neutral-600 text-white"
-                      }`}
-                    >
+                    <Badge className={`px-4 py-2 text-sm font-semibold ${
+                      isTimedIn
+                        ? "bg-orange-500 text-white shadow-md"
+                        : "bg-gradient-to-r from-neutral-500 to-neutral-600 text-white"
+                    }`}>
                       {isTimedIn ? "ACTIVE SESSION" : "NO ACTIVE SESSION"}
                     </Badge>
-                    {timeInAt && <span className="text-sm text-muted-foreground">Started at {formatTimeDisplay(timeInAt)}</span>}
+                    {timeInAt && (
+                      <span className="text-sm text-muted-foreground">Started at {formatTimeDisplay(timeInAt)}</span>
+                    )}
                   </div>
                   {isTimedIn && (
                     <motion.div
@@ -487,13 +781,9 @@ export default function Punch() {
                     {loading ? (
                       <Loader2 className="h-6 w-6 animate-spin mr-3" />
                     ) : isTimedIn ? (
-                      <>
-                        <LogOut className="h-6 w-6 mr-3" /> TIME OUT
-                      </>
+                      <><LogOut className="h-6 w-6 mr-3" /> TIME OUT</>
                     ) : (
-                      <>
-                        <LogIn className="h-6 w-6 mr-3" /> TIME IN
-                      </>
+                      <><LogIn className="h-6 w-6 mr-3" /> TIME IN</>
                     )}
                   </Button>
                 </motion.div>
@@ -528,9 +818,7 @@ export default function Punch() {
                           </motion.div>
                         </TooltipTrigger>
                         {!coffeeActive && coffeeCount >= 2 && (
-                          <TooltipContent>
-                            <p>You've reached your coffee break limit (2/2)</p>
-                          </TooltipContent>
+                          <TooltipContent><p>You've reached your coffee break limit (2/2)</p></TooltipContent>
                         )}
                       </Tooltip>
 
@@ -556,9 +844,7 @@ export default function Punch() {
                           </motion.div>
                         </TooltipTrigger>
                         {!lunchActive && lunchElapsed > 0 && (
-                          <TooltipContent>
-                            <p>You've already taken your lunch break today</p>
-                          </TooltipContent>
+                          <TooltipContent><p>You've already taken your lunch break today</p></TooltipContent>
                         )}
                       </Tooltip>
                     </motion.div>
@@ -568,6 +854,7 @@ export default function Punch() {
             </Card>
           </motion.div>
 
+          {/* Today's Summary */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             <Card className="border-2 shadow-lg bg-gradient-to-br from-white to-neutral-50 dark:from-neutral-900 dark:to-neutral-800">
               <div className="h-1 w-full bg-orange-500" />
@@ -581,24 +868,199 @@ export default function Punch() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <SummaryItem label="Work Time" value={fmt(elapsed)} icon={<Timer className="h-5 w-5" />} color="blue" />
-                  <SummaryItem
-                    label="Coffee Breaks"
-                    value={`${coffeeCount}/2`}
-                    icon={<Coffee className="h-5 w-5" />}
-                    color="orange"
-                  />
-                  <SummaryItem
-                    label="Lunch Break"
-                    value={lunchElapsed > 0 ? "Taken" : "Not Taken"}
-                    icon={<Sandwich className="h-5 w-5" />}
-                    color="orange"
-                  />
+                  <SummaryItem label="Work Time"     value={fmt(elapsed)}                              icon={<Timer className="h-5 w-5" />}    color="blue"   />
+                  <SummaryItem label="Coffee Breaks" value={`${coffeeCount}/2`}                        icon={<Coffee className="h-5 w-5" />}   color="orange" />
+                  <SummaryItem label="Lunch Break"   value={lunchElapsed > 0 ? "Taken" : "Not Taken"} icon={<Sandwich className="h-5 w-5" />} color="orange" />
                 </div>
               </CardContent>
             </Card>
           </motion.div>
 
+          {/* ════════════════════════════════════════════════════════════════════
+              NO SCHEDULE TODAY — Info modal (all companies)
+              Gentle reminder, non-blocking. Employee can still punch in.
+          ════════════════════════════════════════════════════════════════════ */}
+          <Dialog open={noScheduleModalOpen} onOpenChange={setNoScheduleModalOpen}>
+            <DialogContent
+              className="sm:max-w-md border-2 bg-gradient-to-br from-white to-yellow-50 dark:from-neutral-900 dark:to-yellow-950"
+              onInteractOutside={(e) => e.preventDefault()}
+            >
+              <div className="h-2 w-full bg-yellow-500 -mt-6 mb-4 rounded-t-lg" />
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-yellow-500 text-white">
+                    <CalendarX className="h-5 w-5" />
+                  </div>
+                  No Schedule Today
+                </DialogTitle>
+                <DialogDescription>
+                  The system did not find a scheduled shift for you today.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="p-4 rounded-xl bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
+                <div className="flex items-start gap-3">
+                  <Info className="h-5 w-5 text-yellow-600 mt-0.5 shrink-0" />
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    You can still clock in, but this session will not be linked to any scheduled shift.
+                    If you believe this is a mistake, please contact your supervisor.
+                  </p>
+                </div>
+              </div>
+
+              <DialogFooter className="gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setNoScheduleModalOpen(false);
+                    setPendingActionAfterModal(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="bg-orange-500 hover:bg-orange-600 text-white"
+                  onClick={() => {
+                    setNoScheduleModalOpen(false);
+                    const action = pendingActionAfterModal;
+                    setPendingActionAfterModal(null);
+                    proceedWithPunch(action);
+                  }}
+                >
+                  <LogIn className="h-4 w-4 mr-2" />
+                  Clock In Anyway
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* ════════════════════════════════════════════════════════════════════
+              PUNCH TYPE MODAL — DayCare non-driver, early clock-in or late clock-out
+              Cannot be dismissed by clicking outside.
+          ════════════════════════════════════════════════════════════════════ */}
+          <Dialog open={punchTypeModalOpen} onOpenChange={(open) => {
+            if (!open) {
+              setPunchTypeModalOpen(false);
+              setSelectedPunchType(null);
+              setPunchTypeContext(null);
+            }
+          }}>
+            <DialogContent
+              className="sm:max-w-md border-2 bg-gradient-to-br from-white to-orange-50 dark:from-neutral-900 dark:to-orange-950"
+              onInteractOutside={(e) => e.preventDefault()}
+            >
+              <div className="h-2 w-full bg-orange-500 -mt-6 mb-4 rounded-t-lg" />
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-orange-500 text-white">
+                    {punchTypeContext === "timein_early" ? <LogIn className="h-5 w-5" /> : <LogOut className="h-5 w-5" />}
+                  </div>
+                  {punchTypeModalTitle}
+                </DialogTitle>
+                <DialogDescription>{punchTypeModalDesc}</DialogDescription>
+              </DialogHeader>
+
+              <div className="grid grid-cols-2 gap-4 py-2">
+                {/* Regular option */}
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => setSelectedPunchType(PUNCH_TYPES.REGULAR)}
+                  className={`relative flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border-2 transition-all cursor-pointer ${
+                    selectedPunchType === PUNCH_TYPES.REGULAR
+                      ? "border-purple-500 bg-purple-50 dark:bg-purple-950 shadow-md"
+                      : "border-neutral-200 dark:border-neutral-700 hover:border-purple-300 hover:bg-purple-50/50 dark:hover:bg-purple-950/30"
+                  }`}
+                >
+                  <div className={`p-3 rounded-xl ${
+                    selectedPunchType === PUNCH_TYPES.REGULAR
+                      ? "bg-purple-500 text-white"
+                      : "bg-neutral-100 dark:bg-neutral-800 text-neutral-500"
+                  }`}>
+                    <UserCheck className="h-7 w-7" />
+                  </div>
+                  <div className="text-center">
+                    <p className={`font-bold text-sm ${
+                      selectedPunchType === PUNCH_TYPES.REGULAR
+                        ? "text-purple-700 dark:text-purple-300"
+                        : "text-neutral-700 dark:text-neutral-300"
+                    }`}>Regular</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {punchTypeContext === "timein_early" ? "Just clocking in early" : "Just clocking out late"}
+                    </p>
+                  </div>
+                  {selectedPunchType === PUNCH_TYPES.REGULAR && (
+                    <div className="absolute top-2 right-2">
+                      <Check className="h-4 w-4 text-purple-500" />
+                    </div>
+                  )}
+                </motion.button>
+
+                {/* Driver / Aide option */}
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => setSelectedPunchType(driverAidePunchType)}
+                  className={`relative flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border-2 transition-all cursor-pointer ${
+                    selectedPunchType === driverAidePunchType
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-950 shadow-md"
+                      : "border-neutral-200 dark:border-neutral-700 hover:border-blue-300 hover:bg-blue-50/50 dark:hover:bg-blue-950/30"
+                  }`}
+                >
+                  <div className={`p-3 rounded-xl ${
+                    selectedPunchType === driverAidePunchType
+                      ? "bg-blue-500 text-white"
+                      : "bg-neutral-100 dark:bg-neutral-800 text-neutral-500"
+                  }`}>
+                    <Car className="h-7 w-7" />
+                  </div>
+                  <div className="text-center">
+                    <p className={`font-bold text-sm ${
+                      selectedPunchType === driverAidePunchType
+                        ? "text-blue-700 dark:text-blue-300"
+                        : "text-neutral-700 dark:text-neutral-300"
+                    }`}>
+                      {punchTypeContext === "timein_early" ? "Driver / Aide AM" : "Driver / Aide PM"}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {punchTypeContext === "timein_early" ? "Covering AM transport slot" : "Covering PM transport slot"}
+                    </p>
+                  </div>
+                  {selectedPunchType === driverAidePunchType && (
+                    <div className="absolute top-2 right-2">
+                      <Check className="h-4 w-4 text-blue-500" />
+                    </div>
+                  )}
+                </motion.button>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setPunchTypeModalOpen(false);
+                    setSelectedPunchType(null);
+                    setPunchTypeContext(null);
+                  }}
+                  disabled={loading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handlePunchTypeConfirm}
+                  disabled={!selectedPunchType || loading}
+                  className="bg-orange-500 hover:bg-orange-600 text-white"
+                >
+                  <Check className="h-4 w-4 mr-2" />
+                  Continue
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* ════════════════════════════════════════════════════════════════════
+              CONFIRMATION DIALOG
+          ════════════════════════════════════════════════════════════════════ */}
           <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
             <DialogContent className="sm:max-w-md border-2 bg-gradient-to-br from-white to-orange-50 dark:from-neutral-900 dark:to-orange-950">
               <div className="h-2 w-full bg-orange-500 -mt-6 mb-4 rounded-t-lg" />
@@ -616,6 +1078,31 @@ export default function Punch() {
                 </DialogDescription>
               </DialogHeader>
 
+              {/* Punch type recap — shown when a type was explicitly selected */}
+              {selectedPunchType && (() => {
+                const meta = PUNCH_TYPE_LABELS[selectedPunchType] ?? PUNCH_TYPE_LABELS[PUNCH_TYPES.REGULAR];
+                const Icon = meta.icon;
+                const isDriver = meta.color === "blue";
+                return (
+                  <div className={`p-4 rounded-xl border ${
+                    isDriver
+                      ? "bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800"
+                      : "bg-purple-50 dark:bg-purple-950 border-purple-200 dark:border-purple-800"
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg text-white ${isDriver ? "bg-blue-500" : "bg-purple-500"}`}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">Punch Type</p>
+                        <p className="text-sm text-muted-foreground">{meta.label}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Current time */}
               <div className="p-4 rounded-xl bg-orange-100 dark:bg-orange-900 border border-orange-300 dark:border-orange-700">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-orange-500 text-white">
@@ -646,25 +1133,22 @@ export default function Punch() {
                   {loading ? (
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
                   ) : confirmAction === "timein" ? (
-                    <>
-                      <LogIn className="h-4 w-4 mr-2" />
-                      Confirm Time In
-                    </>
+                    <><LogIn className="h-4 w-4 mr-2" /> Confirm Time In</>
                   ) : (
-                    <>
-                      <LogOut className="h-4 w-4 mr-2" />
-                      Confirm Time Out
-                    </>
+                    <><LogOut className="h-4 w-4 mr-2" /> Confirm Time Out</>
                   )}
                 </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
         </div>
       </TooltipProvider>
     </LocationGuard>
   );
 }
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
 
 function Metric({ icon, label, value, active, progress, progressLabel, disabled }) {
   return (
@@ -672,31 +1156,29 @@ function Metric({ icon, label, value, active, progress, progressLabel, disabled 
       whileHover={{ scale: disabled ? 1 : 1.02 }}
       className={`rounded-2xl border-2 p-6 transition-all shadow-lg ${disabled ? "opacity-60" : ""} ${
         active
-          ? `bg-orange-500 text-white shadow-xl`
+          ? "bg-orange-500 text-white shadow-xl"
           : "bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 hover:shadow-xl"
       }`}
     >
       <div className="flex items-center gap-3 mb-4">
-        <div
-          className={`p-3 rounded-xl ${
-            active
-              ? "bg-white/20 text-white"
-              : "bg-gradient-to-r from-neutral-100 to-neutral-200 text-neutral-600 dark:from-neutral-800 dark:to-neutral-700 dark:text-neutral-400"
-          }`}
-        >
+        <div className={`p-3 rounded-xl ${
+          active
+            ? "bg-white/20 text-white"
+            : "bg-gradient-to-r from-neutral-100 to-neutral-200 text-neutral-600 dark:from-neutral-800 dark:to-neutral-700 dark:text-neutral-400"
+        }`}>
           {icon}
         </div>
         <div className="flex-1">
-          <p className={`text-sm font-medium ${active ? "text-white/90" : "text-neutral-600 dark:text-neutral-400"}`}>{label}</p>
+          <p className={`text-sm font-medium ${active ? "text-white/90" : "text-neutral-600 dark:text-neutral-400"}`}>
+            {label}
+          </p>
         </div>
         {active && <Badge className="bg-white/20 text-white border-white/30 text-xs">Active</Badge>}
       </div>
 
-      <div
-        className={`font-mono text-3xl font-bold text-center my-4 ${
-          active ? "text-white" : "text-neutral-800 dark:text-neutral-200"
-        }`}
-      >
+      <div className={`font-mono text-3xl font-bold text-center my-4 ${
+        active ? "text-white" : "text-neutral-800 dark:text-neutral-200"
+      }`}>
         {value}
       </div>
 
@@ -709,7 +1191,9 @@ function Metric({ icon, label, value, active, progress, progressLabel, disabled 
           <Progress
             value={progress}
             className={`h-2 ${
-              active ? "[&>div]:bg-white/80 bg-white/20" : "[&>div]:bg-orange-500 bg-neutral-200 dark:bg-neutral-700"
+              active
+                ? "[&>div]:bg-white/80 bg-white/20"
+                : "[&>div]:bg-orange-500 bg-neutral-200 dark:bg-neutral-700"
             }`}
           />
         </div>
@@ -720,11 +1204,9 @@ function Metric({ icon, label, value, active, progress, progressLabel, disabled 
 
 function SummaryItem({ label, value, icon, color }) {
   const colorClasses = {
-    blue: "bg-orange-500",
-    orange: "bg-orange-500",
+    blue:   "bg-orange-500",
     orange: "bg-orange-500",
   };
-
   return (
     <div className="text-center p-4 rounded-xl bg-gradient-to-br from-neutral-50 to-neutral-100 dark:from-neutral-800 dark:to-neutral-700 border border-neutral-200 dark:border-neutral-600">
       <div className={`inline-flex p-3 rounded-xl ${colorClasses[color]} text-white mb-3`}>{icon}</div>
