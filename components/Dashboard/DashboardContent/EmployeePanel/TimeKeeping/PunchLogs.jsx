@@ -28,6 +28,8 @@ import {
   AlarmClockPlus,
   Car,
   UserCheck,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -268,6 +270,8 @@ export default function PunchLogs() {
   const [otReason,      setOtReason]      = useState("");
   const [otHoursEdit,   setOtHoursEdit]   = useState("");
   const [otSubmitting,  setOtSubmitting]  = useState(false);
+  const [otBasis,          setOtBasis]          = useState("daily");
+  const [dailyOtThreshold, setDailyOtThreshold] = useState(8);
 
   const [contestDialogOpen,         setContestDialogOpen]         = useState(false);
   const [contestLogId,              setContestLogId]              = useState("");
@@ -375,6 +379,9 @@ export default function PunchLogs() {
         const raw = j.data?.minimumLunchMinutes;
         setMinLunchMins(raw === null ? 0 : raw ?? 60);
         if (j.data?.id) setCompanyId(j.data.id);
+        // ── G-3: OT threshold ──────────────────────────────────
+        setOtBasis(j.data?.otBasis ?? "daily");
+        setDailyOtThreshold(parseFloat(j.data?.dailyOtThresholdHours ?? 8));
       }
     } catch { setDefaultHours(8); setMinLunchMins(60); }
   }, [API_URL, token]);
@@ -518,8 +525,9 @@ export default function PunchLogs() {
 
   // ── FIX 2: logsWithSchedule — correct AM/PM/full-day hours formulas ──────────
   const logsWithSchedule = useMemo(() => {
-    const defaultShiftMins = defaultHours * 60;
-    const unschedCap = Math.max(0, defaultShiftMins - minLunchMins);
+    const isDailyBasis  = otBasis === "daily";
+    const otCapMins     = isDailyBasis ? dailyOtThreshold * 60 : defaultHours * 60;
+    const unschedCap    = Math.max(0, otCapMins - minLunchMins);
     const sourceData = viewMode === "smart" ? smartLogs : logs;
 
     return sourceData.map((log) => {
@@ -532,7 +540,7 @@ export default function PunchLogs() {
         : (log._lunchNum || 0);
       const netMins          = Math.max(0, grossMins - lunchMinsVal - excessCoffeeMins);
       const inside           = Math.min(netMins, unschedCap);
-      const rawOtMins        = Math.max(0, netMins - unschedCap);
+      const rawOtMins        = isDailyBasis ? Math.max(0, netMins - unschedCap) : 0;
 
       const fullDevIn  = getDevice(log, "in");
       const fullDevOut = getDevice(log, "out");
@@ -556,23 +564,25 @@ export default function PunchLogs() {
       let regularHoursForLog = null;
       let totalHours         = null;
 
+      const DRIVER_AIDE_REGULAR_HOURS = 5.5;
+
       if (isDA) {
-        // Full driver day: AM (fixed) + Regular (derived) + PM (fixed + OT)
-        driverAideAMHours  = DRIVER_AIDE_AM_HOURS;
-        driverAidePMHours  = DRIVER_AIDE_PM_HOURS + approvedOTHours;
-        regularHoursForLog = Math.max(0, netMins / 60 - DRIVER_AIDE_AM_HOURS - DRIVER_AIDE_PM_HOURS);
+        // Full day: AM fixed + Regular fixed + PM derived
+        driverAideAMHours  = DRIVER_AIDE_AM_HOURS;                              // 1.25 fixed
+        regularHoursForLog = DRIVER_AIDE_REGULAR_HOURS;                         // 5.5  fixed
+        driverAidePMHours  = Math.max(0, netMins / 60 - DRIVER_AIDE_AM_HOURS - DRIVER_AIDE_REGULAR_HOURS) + approvedOTHours;
         totalHours         = +(driverAideAMHours + regularHoursForLog + driverAidePMHours).toFixed(2);
       } else if (isDA_AM) {
-        // Clocked in early — covered AM slot before regular shift. No PM segment.
-        driverAideAMHours  = DRIVER_AIDE_AM_HOURS;
+        // AM fixed + Regular derived (no PM)
+        driverAideAMHours  = DRIVER_AIDE_AM_HOURS;                              // 1.25 fixed
+        regularHoursForLog = Math.max(0, netMins / 60 - DRIVER_AIDE_AM_HOURS); // derived
         driverAidePMHours  = 0;
-        regularHoursForLog = Math.max(0, netMins / 60 - DRIVER_AIDE_AM_HOURS);
         totalHours         = +(driverAideAMHours + regularHoursForLog).toFixed(2);
       } else if (isDA_PM) {
-        // Clocked out late — covered PM slot after regular shift. No AM segment.
+        // Regular fixed + PM derived (no AM)
         driverAideAMHours  = 0;
-        driverAidePMHours  = DRIVER_AIDE_PM_HOURS + approvedOTHours;
-        regularHoursForLog = Math.max(0, netMins / 60 - DRIVER_AIDE_PM_HOURS);
+        regularHoursForLog = DRIVER_AIDE_REGULAR_HOURS;                         // 5.5 fixed
+        driverAidePMHours  = Math.max(0, netMins / 60 - DRIVER_AIDE_REGULAR_HOURS) + approvedOTHours;
         totalHours         = +(regularHoursForLog + driverAidePMHours).toFixed(2);
       }
 
@@ -629,7 +639,7 @@ export default function PunchLogs() {
         cutoffApproval: log.cutoffApproval ?? null,
       };
     });
-  }, [logs, smartLogs, viewMode, defaultHours, minLunchMins, locList, userShifts]);
+  }, [logs, smartLogs, viewMode, defaultHours, minLunchMins, otBasis, dailyOtThreshold, locList, userShifts]);
 
   // ── FIX 3: getSortableValue — punchType sort covers all 4 values ──────────────
   const getSortableValue = (l, k) => {
@@ -1471,10 +1481,11 @@ function TimelogRow({ log, columnVisibility, isDayCare, expanded, onToggleExpand
 
         {columnVisibility.includes("date") && (
           <TableCell className="font-medium">
-            <div className="flex flex-col">
-              <span className="text-sm">{safeDate(log.timeIn)}</span>
-              <span className="text-xs text-muted-foreground font-mono">ID: {log.id}</span>
-            </div>
+            <span className="text-sm">
+              {log.timeIn ? new Date(log.timeIn).toLocaleDateString(undefined, {
+                weekday: "short", year: "numeric", month: "long", day: "numeric"
+              }) : "—"}
+            </span>
           </TableCell>
         )}
         {columnVisibility.includes("timeIn")   && <TableCell className="text-sm font-medium">{safeTime(log.timeIn)}</TableCell>}

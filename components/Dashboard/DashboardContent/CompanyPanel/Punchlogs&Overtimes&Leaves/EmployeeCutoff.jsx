@@ -300,9 +300,7 @@ export default function EmployeeCutoff() {
           };
           break;
       }
-      
-      console.log('[📅 Generating periods]', payload);
-      
+            
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff/cutoff-periods/generate`,
         {

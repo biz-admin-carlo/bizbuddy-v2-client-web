@@ -541,7 +541,6 @@ export default function ModernEmployees() {
         body: JSON.stringify(payload),
       });
       const j = await r.json();
-      console.log(j)
       if (r.ok) {
         toast.success("Employee updated successfully!");
         setShowEditModal(false);

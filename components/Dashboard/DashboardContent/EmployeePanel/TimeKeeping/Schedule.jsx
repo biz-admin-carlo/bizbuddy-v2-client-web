@@ -460,7 +460,6 @@ export default function ModernSchedule() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      console.log("Shifts data:", data);
       if (res.ok) setAllShifts(data.data || []);
       else toast.error(data.error || "Failed to fetch shifts.");
     } catch (err) {
