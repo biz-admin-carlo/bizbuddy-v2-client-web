@@ -108,7 +108,6 @@ export default function ContestTimeLogs() {
       );
   
       const data = await res.json();
-      console.log(data);  
       if (res.ok) {
         setContestLogs(data.data?.contestLogs || []);
       } else {

@@ -460,6 +460,8 @@ export default function ModernCompanyConfigurations() {
         />
 
         <TimeDefaultsCard loading={loadingSettings} draft={draft} setDraft={setDraft} />
+
+        <OvertimeConfigCard loading={loadingSettings} draft={draft} setDraft={setDraft} />
         
         <DepartmentBreakPolicyCard 
           departments={departments}
@@ -759,6 +761,171 @@ function TimeDefaultsCard({ loading, draft, setDraft }) {
               helpText="Allowed lateness before deductions apply"
             />
           </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function OvertimeConfigCard({ loading, draft, setDraft }) {
+  const basis = draft?.otBasis ?? "daily";
+
+  const basisConfig = {
+    daily: {
+      label: "Daily OT Threshold",
+      field: "dailyOtThresholdHours",
+      default: 8,
+      step: "0.25",
+      unit: "hours / day",
+      description: "Employee works more than N hours in a single day. OT is computed per individual punch log — no cross-record aggregation needed.",
+      example: "e.g. 8h → any session exceeding 8 hours triggers OT",
+    },
+    weekly: {
+      label: "Weekly OT Threshold",
+      field: "weeklyOtThresholdHours",
+      default: 40,
+      step: "0.5",
+      unit: "hours / week",
+      description: "Employee's total hours across a 7-day window exceed N hours. Requires cross-record aggregation — backend job needed.",
+      example: "e.g. 40h → cumulative weekly hours past 40 trigger OT",
+    },
+    cutoff: {
+      label: "Cutoff Period OT Threshold",
+      field: "cutoffOtThresholdHours",
+      default: 80,
+      step: "1",
+      unit: "hours / cutoff period",
+      description: "Employee's total hours within the active payroll cutoff exceed N hours. Requires cross-record aggregation — backend job needed.",
+      example: "e.g. 80h → cumulative cutoff hours past 80 trigger OT",
+    },
+  };
+
+  const active = basisConfig[basis];
+  const thresholdValue = draft?.[active.field] ?? active.default;
+  const needsBackend = basis === "weekly" || basis === "cutoff";
+
+  return (
+    <Card className="border-2 shadow-lg">
+      <div className="h-1 w-full bg-orange-500" />
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-xl font-semibold">
+          <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center">
+            <TrendingUp className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+          </div>
+          Overtime (OT) Configuration
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Define how overtime is measured for this company. Employees submit OT requests — this setting determines when the request button becomes available.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {loading ? (
+          <div className="space-y-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : (
+          <>
+            {/* Basis radio cards — replaces dropdown + pills */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-orange-500" />
+                OT Calculation Basis
+              </Label>
+              <div className="grid grid-cols-3 gap-3">
+                {Object.entries(basisConfig).map(([key, cfg]) => {
+                  const val = draft?.[cfg.field] ?? cfg.default;
+                  const isActive = basis === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setDraft((prev) => ({ ...prev, otBasis: key }))}
+                      className={`text-left p-4 rounded-xl border-2 transition-all focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 ${
+                        isActive
+                          ? "border-orange-400 bg-orange-50 dark:bg-orange-950/20 shadow-sm"
+                          : "border-border bg-card hover:border-orange-200 hover:bg-orange-50/40 dark:hover:bg-orange-950/10"
+                      }`}
+                    >
+                      {/* Selected indicator dot */}
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-xs font-bold uppercase tracking-widest ${
+                          isActive ? "text-orange-600" : "text-muted-foreground"
+                        }`}>
+                          {key}
+                        </span>
+                        <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                          isActive
+                            ? "border-orange-500 bg-orange-500"
+                            : "border-muted-foreground/30"
+                        }`}>
+                          {isActive && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </span>
+                      </div>
+
+                      {/* Threshold value — big and prominent */}
+                      <div className={`text-3xl font-bold font-mono mb-1 ${
+                        isActive ? "text-orange-600" : "text-foreground"
+                      }`}>
+                        {val}h
+                      </div>
+                      <div className="text-xs text-muted-foreground mb-3">{cfg.unit}</div>
+
+                      {/* Description */}
+                      <p className={`text-xs leading-relaxed ${
+                        isActive ? "text-orange-800 dark:text-orange-200" : "text-muted-foreground"
+                      }`}>
+                        {cfg.description}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Threshold input — shown below the cards */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-2">
+                <Timer className="h-4 w-4 text-orange-500" />
+                {active.label}
+              </Label>
+              <div className="flex items-center gap-3 max-w-xs">
+                <Input
+                  type="number"
+                  step={active.step}
+                  min="0"
+                  value={thresholdValue}
+                  onChange={(e) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      [active.field]: e.target.value === "" ? null : Number(e.target.value),
+                    }))
+                  }
+                  className="bg-background text-lg font-mono font-semibold"
+                />
+                <span className="text-sm text-muted-foreground whitespace-nowrap">{active.unit}</span>
+              </div>
+              <p className="text-xs text-muted-foreground italic">{active.example}</p>
+            </div>
+
+            {/* Info callout */}
+            <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mt-0.5 flex-shrink-0">
+                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">How OT Requests Work</p>
+                  <ul className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
+                    <li>• Only <strong>employees</strong> can submit OT requests — from their own Punch Logs view</li>
+                    <li>• Supervisors and Admins <strong>approve or reject</strong> requests — they do not submit them</li>
+                    <li>• Unapproved OT hours are <strong>not credited</strong> — the session is capped at scheduled end</li>
+                    <li>• Each company uses exactly <strong>one basis model</strong> — daily, weekly, or per cutoff</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </>
         )}
       </CardContent>
     </Card>

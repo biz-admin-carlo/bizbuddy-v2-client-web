@@ -6,6 +6,7 @@ import { Fragment, useEffect, useMemo, useState, useCallback } from "react";
 import {
   Clock,
   Filter,
+  BookOpen,
   RefreshCw,
   Download,
   FileText,
@@ -62,8 +63,10 @@ const DAYCARE_COMPANY_IDS = (process.env.NEXT_PUBLIC_DAYCARE_COMPANY_IDS || "")
   .map((id) => id.trim())
   .filter(Boolean);
 
-const DRIVER_AIDE_AM_HOURS = 1.25;
-const DRIVER_AIDE_PM_HOURS = 1.25;
+// ── D-2: DA hour constants ─────────────────────────────────────────────────────
+const DRIVER_AIDE_AM_HOURS      = 1.25;   // fixed always
+const DRIVER_AIDE_REGULAR_HOURS = 5.5;    // fixed always
+const DRIVER_AIDE_PM_HOURS      = 1.25;   // base for complete punch
 
 // ── Utility helpers ────────────────────────────────────────────────────────────
 const MAX_DEV_CHARS = 12;
@@ -121,6 +124,30 @@ const templateMatchesDate = (tmpl, userId, userDeptId, isoDate) => {
   return tmpl.daysOfWeek.map(Number).includes(checkDate.getUTCDay());
 };
 
+// ── D-3: Find PM shift template — highest UTC endTime among matched ────────────
+const getPMShiftTemplate = (templates) => {
+  if (!Array.isArray(templates) || !templates.length) return null;
+  return templates.reduce((best, tmpl) => {
+    if (!tmpl.shift?.endTime) return best;
+    if (!best?.shift?.endTime) return tmpl;
+    const aM = new Date(best.shift.endTime).getUTCHours() * 60 + new Date(best.shift.endTime).getUTCMinutes();
+    const bM = new Date(tmpl.shift.endTime).getUTCHours()  * 60 + new Date(tmpl.shift.endTime).getUTCMinutes();
+    return bM > aM ? tmpl : best;
+  }, null);
+};
+
+// ── D-3: Compute PM hours — strictly < 45 min before PM end = complete; else actual ──
+const computePMHours = (timeOutISO, pmStartDT, pmEndDT, approvedOT) => {
+  const completePunch = DRIVER_AIDE_PM_HOURS + approvedOT;
+  if (!timeOutISO || !pmEndDT) return completePunch;          // active or no boundary → full credit
+  const to = new Date(timeOutISO);
+  const minsBeforePMEnd = (pmEndDT - to) / 60000;
+  if (minsBeforePMEnd < 45) return completePunch;             // strictly < 45 min → scheduled end
+  if (!pmStartDT) return approvedOT;                          // no start ref, just OT
+  const actualPMMins = Math.max(0, (to - pmStartDT) / 60000);
+  return +(actualPMMins / 60 + approvedOT).toFixed(2);        // ≥ 45 min → actual time
+};
+
 // ── FIX 2: PunchTypeBadge — config-map for all 4 punch types ──────────────────
 const PunchTypeBadge = ({ punchType, size = "sm" }) => {
   if (!punchType) return null;
@@ -151,11 +178,6 @@ const PunchTypeBadge = ({ punchType, size = "sm" }) => {
 };
 
 // ── CutoffApprovalBadge ────────────────────────────────────────────────────────
-// Shows the status of the TimeLog within its current CutoffPeriod.
-// null  → log hasn't been included in any cutoff yet ("Not in cutoff")
-// pending  → cutoff is open, awaiting admin review
-// approved → admin approved this log for payroll
-// rejected → admin rejected this log
 const CutoffApprovalBadge = ({ cutoffApproval, onClick }) => {
   if (!cutoffApproval) {
     return (
@@ -225,7 +247,6 @@ const CutoffApprovalBadge = ({ cutoffApproval, onClick }) => {
     </TooltipProvider>
   );
 };
-
 
 // ── Status Badge ───────────────────────────────────────────────────────────────
 const StatusBadge = ({ status }) => (
@@ -482,6 +503,7 @@ const DriverAideBreakdown = ({ log }) => (
       <div className="flex justify-between items-center p-2 rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
         <span className="text-blue-700 dark:text-blue-300 flex items-center gap-1">
           <Car className="h-3 w-3" /> Driver/Aide AM
+          <span className="ml-1 text-xs text-muted-foreground font-normal">(fixed)</span>
         </span>
         <span className="font-bold text-blue-700 dark:text-blue-300">{log.daAMHours?.toFixed(2)}h</span>
       </div>
@@ -490,6 +512,7 @@ const DriverAideBreakdown = ({ log }) => (
     <div className="flex justify-between items-center p-2 rounded-lg bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800">
       <span className="text-purple-700 dark:text-purple-300 flex items-center gap-1">
         <UserCheck className="h-3 w-3" /> Regular Hours
+        <span className="ml-1 text-xs text-muted-foreground font-normal">(fixed)</span>
       </span>
       <span className="font-bold text-purple-700 dark:text-purple-300">{log.daRegularHours?.toFixed(2)}h</span>
     </div>
@@ -498,6 +521,10 @@ const DriverAideBreakdown = ({ log }) => (
       <div className="flex justify-between items-center p-2 rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
         <span className="text-blue-700 dark:text-blue-300 flex items-center gap-1">
           <Car className="h-3 w-3" /> Driver/Aide PM
+          {/* D-3: show "actual" when clock-out was ≥ 45 min before PM end */}
+          {log.daPMHours < (DRIVER_AIDE_PM_HOURS + (log.daApprovedOT || 0)) && (
+            <span className="ml-1 text-xs text-amber-500 font-normal">(actual)</span>
+          )}
           {log.daApprovedOT > 0 && (
             <span className="ml-1 text-xs text-green-600 dark:text-green-400">(+{log.daApprovedOT.toFixed(2)}h OT)</span>
           )}
@@ -517,9 +544,7 @@ const DriverAideBreakdown = ({ log }) => (
   </div>
 );
 
-// ── FIX 7: ScheduleDialog — visual timeline (ported from PunchLogs.jsx) ────────
-// Admin-side uses ShiftSchedule schema: daysOfWeek is int[], no nested shift relation needed
-// for the timeline — shift data lives on s.shift.shiftName / startTime / endTime directly
+// ── ScheduleDialog ─────────────────────────────────────────────────────────────
 const SHIFT_STYLE = (name = "") => {
   const n = name.toLowerCase();
   if (n.includes("am") || (n.includes("driver") && n.includes("am")))
@@ -534,7 +559,6 @@ const SHIFT_STYLE = (name = "") => {
 const ScheduleDialog = ({ open, onOpenChange, scheduleList }) => {
   const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-  // Sort by UTC start time
   const sorted = [...scheduleList].sort((a, b) => {
     const aH = a.shift?.startTime ? new Date(a.shift.startTime).getUTCHours() * 60 + new Date(a.shift.startTime).getUTCMinutes() : 0;
     const bH = b.shift?.startTime ? new Date(b.shift.startTime).getUTCHours() * 60 + new Date(b.shift.startTime).getUTCMinutes() : 0;
@@ -564,8 +588,6 @@ const ScheduleDialog = ({ open, onOpenChange, scheduleList }) => {
         {sorted.length ? (
           <ScrollArea className="max-h-[65vh]">
             <div className="px-1 pb-2 space-y-5">
-
-              {/* Timeline bar */}
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>{sorted[0].shift?.startTime ? fmtUTCTime(sorted[0].shift.startTime) : "—"}</span>
@@ -582,12 +604,9 @@ const ScheduleDialog = ({ open, onOpenChange, scheduleList }) => {
                     );
                   })}
                 </div>
-                <p className="text-xs text-center text-muted-foreground">
-                  Total: {toHour(dayEnd - dayStart)}h
-                </p>
+                <p className="text-xs text-center text-muted-foreground">Total: {toHour(dayEnd - dayStart)}h</p>
               </div>
 
-              {/* Shift cards with connector */}
               <div className="relative">
                 {sorted.length > 1 && (
                   <div className="absolute left-[18px] top-6 bottom-6 w-0.5 bg-gradient-to-b from-muted-foreground/20 to-muted-foreground/20 z-0" />
@@ -603,8 +622,6 @@ const ScheduleDialog = ({ open, onOpenChange, scheduleList }) => {
                       if (durMins < 0) durMins += 1440;
                     }
                     const durStr = durMins ? `${toHour(durMins)}h` : "—";
-
-                    // Admin view: also show schedule period + days of week
                     const daysLabel = Array.isArray(s.daysOfWeek)
                       ? s.daysOfWeek.map(Number).map((d) => DAY_NAMES[d] ?? "?").join(", ")
                       : null;
@@ -618,18 +635,11 @@ const ScheduleDialog = ({ open, onOpenChange, scheduleList }) => {
                         <div className={`flex-1 rounded-xl border ${style.bg} ${style.border} p-3`}>
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <p className={`font-semibold text-sm ${style.text}`}>
-                                {s.shift?.shiftName || style.label}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {startStr} — {endStr}
-                              </p>
+                              <p className={`font-semibold text-sm ${style.text}`}>{s.shift?.shiftName || style.label}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">{startStr} — {endStr}</p>
                             </div>
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${style.bg} ${style.text} border ${style.border}`}>
-                              {durStr}
-                            </span>
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${style.bg} ${style.text} border ${style.border}`}>{durStr}</span>
                           </div>
-                          {/* Admin extras: period + days */}
                           {(periodStr || daysLabel) && (
                             <div className="mt-2 pt-2 border-t border-current/10 space-y-0.5">
                               {periodStr && (
@@ -637,14 +647,9 @@ const ScheduleDialog = ({ open, onOpenChange, scheduleList }) => {
                                   <Calendar className="h-2.5 w-2.5" /> {periodStr}
                                 </p>
                               )}
-                              {daysLabel && (
-                                <p className="text-xs text-muted-foreground">
-                                  Days: {daysLabel}
-                                </p>
-                              )}
+                              {daysLabel && <p className="text-xs text-muted-foreground">Days: {daysLabel}</p>}
                             </div>
                           )}
-                          {/* Continues at hint */}
                           {i < sorted.length - 1 && sorted[i + 1].shift?.startTime && (
                             <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                               <span className="inline-block w-3 border-t border-dashed border-muted-foreground/40" />
@@ -657,7 +662,6 @@ const ScheduleDialog = ({ open, onOpenChange, scheduleList }) => {
                   })}
                 </div>
               </div>
-
             </div>
           </ScrollArea>
         ) : (
@@ -668,9 +672,7 @@ const ScheduleDialog = ({ open, onOpenChange, scheduleList }) => {
         )}
 
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} className="bg-orange-500 hover:bg-orange-600 text-white">
-            Close
-          </Button>
+          <Button onClick={() => onOpenChange(false)} className="bg-orange-500 hover:bg-orange-600 text-white">Close</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -687,7 +689,6 @@ export default function EmployeesPunchLogs() {
   const [userTimezone,    setUserTimezone]    = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
   const [companyTimezone, setCompanyTimezone] = useState("UTC");
 
-  // FIX 1: isDayCare uses env array instead of hardcoded string
   const [companyId, setCompanyId] = useState(null);
   const isDayCare = DAYCARE_COMPANY_IDS.includes(companyId);
 
@@ -698,6 +699,12 @@ export default function EmployeesPunchLogs() {
   const [locMap,         setLocMap]         = useState({});
   const [defaultHours,   setDefaultHours]   = useState(8);
   const [minLunchMins,   setMinLunchMins]   = useState(60);
+  const [otBasis,          setOtBasis]          = useState("daily");
+  const [dailyOtThreshold, setDailyOtThreshold] = useState(8);
+  const [weeklyOtThreshold,setWeeklyOtThreshold]= useState(40);
+  const [cutoffOtThreshold,setCutoffOtThreshold]= useState(80);
+  // ── G-2: Grace period from company settings ────────────────────────────────
+  const [gracePeriodMins, setGracePeriodMins] = useState(15);
   const [companyName,    setCompanyName]    = useState("");
   const [currentUserName,  setCurrentUserName]  = useState("");
   const [currentUserEmail, setCurrentUserEmail] = useState("");
@@ -828,8 +835,13 @@ export default function EmployeesPunchLogs() {
         const raw = cJ.data?.minimumLunchMinutes;
         setMinLunchMins(raw === null ? 0 : raw ?? 60);
         setCompanyTimezone(cJ.data?.timezone || cJ.data?.companyTimezone || "America/Los_Angeles");
-        // FIX 1: setCompanyId from settings response — DAYCARE_COMPANY_IDS.includes() resolves isDayCare
         if (cJ.data?.id) setCompanyId(cJ.data.id);
+        // ── G-2: Read grace period from settings ──────────────────────────────
+        setGracePeriodMins(cJ.data?.gracePeriodMinutes ?? 15);
+        setOtBasis(cJ.data?.otBasis ?? "daily");
+        setDailyOtThreshold(parseFloat(cJ.data?.dailyOtThresholdHours  ?? 8));
+        setWeeklyOtThreshold(parseFloat(cJ.data?.weeklyOtThresholdHours ?? 40));
+        setCutoffOtThreshold(parseFloat(cJ.data?.cutoffOtThresholdHours ?? 80));
       }
 
       if (pJ?.data?.company?.name) setCompanyName(pJ.data.company.name.replace(/\s+/g, "_"));
@@ -975,6 +987,18 @@ export default function EmployeesPunchLogs() {
             shiftName = firstSched.shift.shiftName || "—";
           }
 
+          // ── D-3: PM shift boundary from matched templates ──────────────────
+          const pmTmpl = getPMShiftTemplate(matchedTemplates);
+          let pmStartDT = null;
+          let pmEndDT   = null;
+          if (pmTmpl?.shift?.startTime && pmTmpl?.shift?.endTime) {
+            const base  = t.timeIn ? new Date(t.timeIn) : new Date(`${dateKey}T00:00:00`);
+            const psUTC = new Date(pmTmpl.shift.startTime);
+            const peUTC = new Date(pmTmpl.shift.endTime);
+            pmStartDT = new Date(base); pmStartDT.setHours(psUTC.getUTCHours(), psUTC.getUTCMinutes(), 0, 0);
+            pmEndDT   = new Date(base); pmEndDT.setHours(peUTC.getUTCHours(),   peUTC.getUTCMinutes(), 0, 0);
+          }
+
           const latestOt = otMap[t.id] ?? null;
 
           let adjTimeOut = t.timeOut;
@@ -988,19 +1012,26 @@ export default function EmployeesPunchLogs() {
           const grossMins        = t.timeIn && adjTimeOut ? diffMins(t.timeIn, adjTimeOut) : 0;
           const lunchDeduct      = minLunchMins ? Math.max(lunchMinsN, minLunchMins) : lunchMinsN;
           const netMins          = grossMins - lunchDeduct - excessCoffee;
-          const defaultShiftMins = defaultHours * 60;
-          const effectiveCapUnsch = Math.max(0, defaultShiftMins - minLunchMins);
+          const isDailyBasis      = otBasis === "daily";
+          const otCapMins         = isDailyBasis ? dailyOtThreshold * 60 : defaultHours * 60;
+          const effectiveCapUnsch = Math.max(0, otCapMins - minLunchMins);
 
+          // ── G-2: Late calculation with grace period ────────────────────────
           let workInside, rawOtMins, lateMins = 0;
           if (isScheduled && shiftStart && shiftEnd) {
-            lateMins     = t.timeIn && new Date(t.timeIn) > shiftStart ? diffMins(shiftStart.toISOString(), t.timeIn) : 0;
+            const rawLateMins = t.timeIn && new Date(t.timeIn) > shiftStart
+              ? diffMins(shiftStart.toISOString(), t.timeIn)
+              : 0;
+            // Strictly less than gracePeriodMins = on-time (G-2)
+            lateMins = rawLateMins < gracePeriodMins ? 0 : rawLateMins;
+
             const schedDur  = diffMins(shiftStart.toISOString(), shiftEnd.toISOString());
             const insideRaw = Math.max(0, schedDur - lateMins - lunchDeduct - excessCoffee);
             workInside   = Math.min(insideRaw, netMins);
             rawOtMins    = adjTimeOut && new Date(adjTimeOut) > shiftEnd ? diffMins(shiftEnd.toISOString(), adjTimeOut) : 0;
           } else {
             workInside = Math.min(netMins, effectiveCapUnsch);
-            rawOtMins  = Math.max(0, netMins - effectiveCapUnsch);
+            rawOtMins  = isDailyBasis ? Math.max(0, netMins - effectiveCapUnsch) : 0;
           }
 
           const approvedMins = latestOt?.status === "approved" && latestOt?.requestedHours
@@ -1014,7 +1045,7 @@ export default function EmployeesPunchLogs() {
           const periodMins = Math.max(0, workInside + approvedMins);
           const locList    = locMap[t.userId] ?? [];
 
-          // ── FIX 3: Three-branch Driver/Aide breakdown ──────────────────────
+          // ── D-2/D-3: Three-branch Driver/Aide breakdown ────────────────────
           const punchType = t.punchType ?? "REGULAR";
           const isDA      = punchType === "DRIVER_AIDE";
           const isDA_AM   = punchType === "DRIVER_AIDE_AM";
@@ -1029,24 +1060,49 @@ export default function EmployeesPunchLogs() {
           let daTotalHours   = null;
 
           if (isDA) {
-            // Full driver day: AM (fixed) + Regular (derived) + PM (fixed + OT)
-            daAMHours      = DRIVER_AIDE_AM_HOURS;
-            daPMHours      = DRIVER_AIDE_PM_HOURS + daApprovedOT;
-            daRegularHours = Math.max(0, netMins / 60 - DRIVER_AIDE_AM_HOURS - DRIVER_AIDE_PM_HOURS);
+            // Full day: AM fixed + Regular fixed + PM derived (D-3)
+            daAMHours      = DRIVER_AIDE_AM_HOURS;                              // 1.25 fixed
+            daRegularHours = DRIVER_AIDE_REGULAR_HOURS;                         // 5.5  fixed
+            daPMHours      = computePMHours(adjTimeOut, pmStartDT, pmEndDT, daApprovedOT);
             daTotalHours   = +(daAMHours + daRegularHours + daPMHours).toFixed(2);
+
           } else if (isDA_AM) {
-            // AM slot only: AM (fixed) + Regular (derived). No PM.
-            daAMHours      = DRIVER_AIDE_AM_HOURS;
+            // AM slot only: AM fixed + Regular derived (no PM)
+            daAMHours      = DRIVER_AIDE_AM_HOURS;                              // 1.25 fixed
+            daRegularHours = Math.max(0, netMins / 60 - DRIVER_AIDE_AM_HOURS);  // derived
             daPMHours      = 0;
-            daRegularHours = Math.max(0, netMins / 60 - DRIVER_AIDE_AM_HOURS);
             daTotalHours   = +(daAMHours + daRegularHours).toFixed(2);
+
           } else if (isDA_PM) {
-            // PM slot only: Regular (derived) + PM (fixed + OT). No AM.
+            // PM slot only: Regular fixed + PM derived (no AM)
             daAMHours      = 0;
-            daPMHours      = DRIVER_AIDE_PM_HOURS + daApprovedOT;
-            daRegularHours = Math.max(0, netMins / 60 - DRIVER_AIDE_PM_HOURS);
+            daRegularHours = DRIVER_AIDE_REGULAR_HOURS;                         // 5.5 fixed
+            daPMHours      = computePMHours(adjTimeOut, pmStartDT, pmEndDT, daApprovedOT);
             daTotalHours   = +(daRegularHours + daPMHours).toFixed(2);
           }
+
+          // ── D-4: Regular employee clocking out into PM territory ───────────
+          const isD4Flag = (() => {
+            if (!isDayCare) return false;                              // ← DayCare only
+            if (punchType !== "REGULAR" || !t.timeOut) return false;
+            if (isScheduled && shiftEnd) {
+              const rawOut = new Date(t.timeOut);
+              return rawOut > new Date(shiftEnd.getTime() + gracePeriodMins * 60 * 1000);
+            }
+            return false;
+          })();
+
+          // ── D-5: Active session past scheduled end — missing clock-out ─────
+          const isMissingClockOut = (() => {
+            if (!isDayCare) return false;                              // ← DayCare only
+            if (t.status !== "active") return false;
+            if (isScheduled && shiftEnd) return new Date() > shiftEnd;
+            const expectedEndMs = new Date(t.timeIn).getTime() + defaultHours * 60 * 60 * 1000;
+            return Date.now() > expectedEndMs;
+          })();
+
+          // ── G-6: Auto clock-out flag ───────────────────────────────────────
+          const isAutoClockOut = t.autoClockOut === true;
 
           return {
             ...t,
@@ -1078,7 +1134,14 @@ export default function EmployeesPunchLogs() {
             daPMHours,
             daRegularHours,
             daApprovedOT,
-            // Cutoff approval — comes directly from backend include (null if not in any cutoff)
+            daTotalHours,
+            pmStartDT,
+            pmEndDT,
+            isD4Flag,
+            isDailyBasis,
+            otBasis,
+            isMissingClockOut,
+            isAutoClockOut,
             cutoffApproval: t.cutoffApproval ?? null,
           };
         });
@@ -1090,7 +1153,7 @@ export default function EmployeesPunchLogs() {
       } catch (err) { toast.error(err.message); }
       setLoading(false);
     },
-    [API_URL, token, filters, shiftTemplates, defaultHours, minLunchMins, locMap, perPage, userDeptMap]
+    [API_URL, token, filters, shiftTemplates, defaultHours, minLunchMins, gracePeriodMins, locMap, perPage, userDeptMap, otBasis, dailyOtThreshold, isDayCare]
   );
 
   useEffect(() => {
@@ -1101,7 +1164,9 @@ export default function EmployeesPunchLogs() {
     if (!token) return;
     setPage(1); setTimelogs([]); setRowsLoaded(0);
     fetchTimelogs({ pageParam: 1, append: false });
-  }, [token, filters.departmentId, filters.from, filters.to, filters.status, shiftTemplates, defaultHours, minLunchMins, locMap]);
+  }, [token, filters.departmentId, filters.from, filters.to, filters.status,
+    shiftTemplates, defaultHours, minLunchMins, gracePeriodMins, locMap,
+    otBasis, dailyOtThreshold]);
 
   // ── Displayed (client-side filters + sort) ────────────────────────────────────
   const displayed = useMemo(() => {
@@ -1112,7 +1177,6 @@ export default function EmployeesPunchLogs() {
       const q = filters.search.toLowerCase();
       data = data.filter((t) => t.employeeName?.toLowerCase().includes(q) || t.email?.toLowerCase().includes(q));
     }
-    // FIX 6: filter matches all 4 punch type values
     if (isDayCare && filters.punchType !== "all")
       data = data.filter((t) => t.punchType === filters.punchType);
 
@@ -1220,6 +1284,16 @@ export default function EmployeesPunchLogs() {
           <IconBtn icon={RefreshCw} tooltip="Refresh data"   spinning={refreshing}   onClick={refreshAll} />
           <IconBtn icon={Download}  tooltip="Export CSV"     spinning={exporting}    onClick={exportCSV}  disabled={exporting    || !displayed.length} />
           <IconBtn icon={FileText}  tooltip="Export PDF"     spinning={pdfExporting} onClick={exportPDF}  disabled={pdfExporting || !displayed.length} />
+          <IconBtn
+            icon={BookOpen}
+            tooltip="Punch Log Rules Guide"
+            onClick={() => window.open(
+              isDayCare
+                ? "/docs/punch_log_rules_v1_0_0.html"
+                : "/docs/general_rules_v1_0_0.html",
+              "_blank"
+            )}
+          />
         </div>
       </div>
 
@@ -1275,7 +1349,6 @@ export default function EmployeesPunchLogs() {
                 </SelectContent>
               </Select>
             </div>
-            {/* FIX 6: DayCare punch type filter — all 4 values */}
             {isDayCare && (
               <div className="min-w-[170px]">
                 <Select value={filters.punchType} onValueChange={(v) => setFilters({ ...filters, punchType: v })}>
@@ -1478,7 +1551,7 @@ export default function EmployeesPunchLogs() {
               Punch Logs
               {isDayCare && (
                 <span className="text-xs font-normal text-muted-foreground flex items-center gap-1 ml-2">
-                  <Car className="h-3 w-3 text-blue-500" />Driver/Aide: 1.25 AM + Regular + 1.25 PM
+                  <Car className="h-3 w-3 text-blue-500" />Driver/Aide: 1.25 AM + 5.5 Regular + PM (derived)
                 </span>
               )}
             </CardTitle>
@@ -1528,8 +1601,67 @@ export default function EmployeesPunchLogs() {
                             return <TableCell key="schedule" className="text-center"><ScheduleBadge isScheduled={t.isScheduled} onClick={() => { setScheduleList(t.scheduleList); setSchedDialogOpen(true); }} /></TableCell>;
                           case "locationRestricted":
                             return <TableCell key="locationRestricted" className="text-center"><LocationBadge isRestricted={t.isLocRestricted} onClick={() => { setLocationDialogList(t.locList); setLocationDialogOpen(true); }} /></TableCell>;
+
+                          // ── G-1 + D-4: Employee cell with flag icons ───────────
                           case "employee":
-                            return <TableCell key="employee" className="text-left text-sm font-medium"><div className="max-w-[200px] truncate" title={t.employeeName}>{t.employeeName}</div></TableCell>;
+                            return (
+                              <TableCell key="employee" className="text-left text-sm font-medium">
+                                <div className="flex items-center gap-1.5">
+                                  {/* G-1: Unscheduled punch */}
+                                  {!t.isScheduled && (
+                                    <TooltipProvider delayDuration={200}>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <AlertCircle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent className="max-w-xs">
+                                          <div className="text-sm font-semibold text-amber-700">Unscheduled Punch (G-1)</div>
+                                          <div className="text-xs mt-1">No shift assigned for this date. Flagged for SV review.</div>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                  {/* D-4: Regular into PM territory */}
+                                  {t.isD4Flag && (
+                                    <TooltipProvider delayDuration={200}>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0 cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent className="max-w-xs">
+                                          <div className="text-sm font-semibold text-red-700">Late Clock-Out (D-4)</div>
+                                          <div className="text-xs mt-1">Regular employee clocked out past scheduled end by more than {gracePeriodMins} min. SV review required.</div>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                  {/* G-6: Auto clock-out icon */}
+                                  {t.isAutoClockOut && (
+                                    <TooltipProvider delayDuration={200}>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Timer className="h-3.5 w-3.5 text-purple-500 flex-shrink-0 cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent className="max-w-xs">
+                                          <div className="text-sm font-semibold text-purple-700">Auto Clock-Out (G-6)</div>
+                                          <div className="text-xs mt-1">
+                                            Session exceeded the maximum active duration. System auto-closed this record.
+                                            Clock-out was set to scheduled end time. Mandatory SV review required.
+                                          </div>
+                                          {t.autoClockOutAt && (
+                                            <div className="text-xs mt-1 text-muted-foreground">
+                                              Triggered at: {safeDateTime(t.autoClockOutAt)}
+                                            </div>
+                                          )}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                  <span className="max-w-[180px] truncate" title={t.employeeName}>{t.employeeName}</span>
+                                </div>
+                              </TableCell>
+                            );
+
                           case "dateTimeIn":
                             return <TableCell key="dateTimeIn" className="text-center"><DualTimeDisplay datetime={t.timeIn} userTz={userTimezone} companyTz={companyTimezone} /></TableCell>;
                           case "dateTimeOut":
@@ -1543,7 +1675,46 @@ export default function EmployeesPunchLogs() {
                           case "ot":
                             return <TableCell key="ot" className="text-center text-sm font-medium"><TimeDisplayWithTooltip time={parseFloat(t.otHours) > 0 ? t.otHours : null} type="overtime" /></TableCell>;
                           case "otStatus":
-                            return <TableCell key="otStatus" className="text-center"><OvertimeBadge otStatus={t.otStatus} overtimeRec={t.overtimeRec} onClick={() => { if (t.overtimeRec) { setOtViewData({ ot: t.overtimeRec, log: t }); setOtDialogOpen(true); } }} /></TableCell>;
+                            return (
+                              <TableCell key="otStatus" className="text-center">
+                                {!t.isDailyBasis ? (
+                                  <TooltipProvider delayDuration={200}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Badge
+                                          variant="outline"
+                                          className="text-xs text-muted-foreground border-dashed cursor-help"
+                                        >
+                                          <Timer className="w-3 h-3 mr-1 opacity-50" />
+                                          {t.otBasis === "weekly" ? "Weekly" : "Cutoff"} basis
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs">
+                                        <div className="text-sm font-semibold">
+                                          {t.otBasis === "weekly" ? "Weekly" : "Cutoff period"} OT basis
+                                        </div>
+                                        <div className="text-xs mt-1">
+                                          OT for this company is calculated across multiple records.
+                                          Per-punch detection is not available — review cumulative
+                                          hours during cutoff approval.
+                                        </div>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                ) : (
+                                  <OvertimeBadge
+                                    otStatus={t.otStatus}
+                                    overtimeRec={t.overtimeRec}
+                                    onClick={() => {
+                                      if (t.overtimeRec) {
+                                        setOtViewData({ ot: t.overtimeRec, log: t });
+                                        setOtDialogOpen(true);
+                                      }
+                                    }}
+                                  />
+                                )}
+                              </TableCell>
+                            );
                           case "late":
                             return <TableCell key="late" className="text-center text-sm">{parseFloat(t.lateHours) > 0 ? <TimeDisplayWithTooltip time={t.lateHours} type="late" className="text-red-600 font-medium" /> : <span className="text-muted-foreground">—</span>}</TableCell>;
                           case "deviceIn":
@@ -1556,8 +1727,38 @@ export default function EmployeesPunchLogs() {
                             return <TableCell key="locationOut" className="text-center"><LocationDisplay location={t.locOut} /></TableCell>;
                           case "period":
                             return <TableCell key="period" className="text-center text-sm font-semibold"><TimeDisplayWithTooltip time={t.periodHours} type="period" /></TableCell>;
+
+                          // ── D-5: Status cell with missing clock-out badge ──────
                           case "status":
-                            return <TableCell key="status" className="text-center"><StatusBadge status={t.status} /></TableCell>;
+                            return (
+                              <TableCell key="status" className="text-center">
+                                {t.isMissingClockOut ? (
+                                  <TooltipProvider delayDuration={200}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Badge
+                                          variant="outline"
+                                          className="bg-red-50 border-red-300 text-red-700 dark:bg-red-950/30 dark:text-red-400 cursor-help animate-pulse"
+                                        >
+                                          <AlertTriangle className="w-3 h-3 mr-1" />
+                                          Missing Out
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs">
+                                        <div className="text-sm font-semibold text-red-700">Missing Clock-Out (D-5)</div>
+                                        <div className="text-xs mt-1">
+                                          Active session past scheduled shift end. Employee has not clocked out.
+                                          Record cannot be approved until clock-out is provided or manually entered by SV.
+                                        </div>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                ) : (
+                                  <StatusBadge status={t.status} />
+                                )}
+                              </TableCell>
+                            );
+
                           case "punchType":
                             return <TableCell key="punchType" className="text-center">{isDayCare ? <PunchTypeBadge punchType={t.punchType} /> : null}</TableCell>;
                           case "cutoffApproval":
@@ -1594,7 +1795,18 @@ export default function EmployeesPunchLogs() {
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, height: 0 }}
                             transition={{ duration: 0.2, delay: index * 0.02 }}
-                            className={`border-b transition-all hover:bg-muted/50 cursor-pointer ${isExpanded ? "bg-muted/30" : ""}`}
+                            // ── G-1 + D-4: Row color coding ──────────────────
+                            className={`border-b transition-all cursor-pointer ${
+                              isExpanded
+                                ? "bg-muted/30 hover:bg-muted/40"
+                                : t.isAutoClockOut
+                                ? "bg-purple-50/40 dark:bg-purple-950/10 hover:bg-purple-50/60 border-l-2 border-l-purple-400"
+                                : t.isD4Flag
+                                ? "bg-red-50/50 dark:bg-red-950/10 hover:bg-red-50/70 dark:hover:bg-red-950/20 border-l-2 border-l-red-400"
+                                : !t.isScheduled
+                                ? "bg-amber-50/50 dark:bg-amber-950/10 hover:bg-amber-100/50 dark:hover:bg-amber-950/20 border-l-2 border-l-amber-400"
+                                : "hover:bg-muted/50"
+                            }`}
                             onClick={() => setExpandedRow(isExpanded ? null : t.id)}
                           >
                             <TableCell className="w-10">
@@ -1607,7 +1819,7 @@ export default function EmployeesPunchLogs() {
                               .map((col) => renderCell(col.value))}
                           </motion.tr>
 
-                          {/* FIX 5: Expanded row — isAnyDA catches all 3 driver-aide variants */}
+                          {/* Expanded row */}
                           <AnimatePresence>
                             {isExpanded && (
                               <motion.tr
@@ -1674,41 +1886,27 @@ export default function EmployeesPunchLogs() {
                                       <div className="space-y-2 text-sm">
                                         <div>
                                           <span className="text-muted-foreground block mb-1">Device In:</span>
-                                          <code className="text-xs bg-muted px-2 py-1 rounded block truncate" title={t.fullDevIn}>
-                                            {t.fullDevIn}
-                                          </code>
+                                          <code className="text-xs bg-muted px-2 py-1 rounded block truncate" title={t.fullDevIn}>{t.fullDevIn}</code>
                                         </div>
                                         <div>
                                           <span className="text-muted-foreground block mb-1">Device Out:</span>
-                                          <code className="text-xs bg-muted px-2 py-1 rounded block truncate" title={t.fullDevOut}>
-                                            {t.fullDevOut}
-                                          </code>
+                                          <code className="text-xs bg-muted px-2 py-1 rounded block truncate" title={t.fullDevOut}>{t.fullDevOut}</code>
                                         </div>
                                         {t.locIn?.lat && (
                                           <div>
                                             <span className="text-muted-foreground block mb-1">Location In:</span>
-                                            <a
-                                              href={`https://www.google.com/maps?q=${t.locIn.lat},${t.locIn.lng}`}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-                                            >
-                                              <MapPin className="h-3 w-3" />
-                                              {t.locIn.txt}
+                                            <a href={`https://www.google.com/maps?q=${t.locIn.lat},${t.locIn.lng}`} target="_blank" rel="noopener noreferrer"
+                                              className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                                              <MapPin className="h-3 w-3" />{t.locIn.txt}
                                             </a>
                                           </div>
                                         )}
                                         {t.locOut?.lat && (
                                           <div>
                                             <span className="text-muted-foreground block mb-1">Location Out:</span>
-                                            <a
-                                              href={`https://www.google.com/maps?q=${t.locOut.lat},${t.locOut.lng}`}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-                                            >
-                                              <MapPin className="h-3 w-3" />
-                                              {t.locOut.txt}
+                                            <a href={`https://www.google.com/maps?q=${t.locOut.lat},${t.locOut.lng}`} target="_blank" rel="noopener noreferrer"
+                                              className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                                              <MapPin className="h-3 w-3" />{t.locOut.txt}
                                             </a>
                                           </div>
                                         )}
@@ -1743,10 +1941,48 @@ export default function EmployeesPunchLogs() {
                                           <span>{t.otStatus}</span>
                                         </div>
                                         <div className="flex justify-between">
+                                          <span className="text-muted-foreground">Grace Period:</span>
+                                          <span className="text-xs text-muted-foreground">{gracePeriodMins} min</span>
+                                        </div>
+                                        <div className="flex justify-between">
                                           <span className="text-muted-foreground">Cutoff:</span>
                                           <CutoffApprovalBadge cutoffApproval={t.cutoffApproval} />
                                         </div>
                                       </div>
+
+                                      {/* D-4 warning */}
+                                      {t.isD4Flag && (
+                                        <div className="mt-2 p-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2">
+                                          <AlertTriangle className="h-3.5 w-3.5 text-red-500 mt-0.5 flex-shrink-0" />
+                                          <p className="text-xs text-red-700 dark:text-red-400">
+                                            <strong>D-4:</strong> Regular employee clocked out into PM territory — more than {gracePeriodMins} min past scheduled end.
+                                            PM hours not credited. SV review required.
+                                          </p>
+                                        </div>
+                                      )}
+
+                                      {/* D-5 warning */}
+                                      {t.isMissingClockOut && (
+                                        <div className="mt-2 p-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2">
+                                          <AlertTriangle className="h-3.5 w-3.5 text-red-500 mt-0.5 flex-shrink-0" />
+                                          <p className="text-xs text-red-700 dark:text-red-400">
+                                            <strong>D-5:</strong> Session is active past scheduled shift end. Clock-out is missing.
+                                            Record cannot be approved until clock-out is provided or manually entered by SV.
+                                          </p>
+                                        </div>
+                                      )}
+
+                                      {/* G-6 auto clock-out warning */}
+                                      {t.isAutoClockOut && (
+                                        <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 rounded-lg flex items-start gap-2">
+                                          <Timer className="h-3.5 w-3.5 text-purple-500 mt-0.5 flex-shrink-0" />
+                                          <p className="text-xs text-purple-700 dark:text-purple-400">
+                                            <strong>G-6:</strong> This session was automatically closed by the system after exceeding
+                                            the maximum active duration. Clock-out was recorded at the scheduled end time.
+                                            Mandatory SV review — cannot advance to payroll without approval.
+                                          </p>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 </TableCell>
@@ -1828,12 +2064,7 @@ export default function EmployeesPunchLogs() {
 
       {/* ── Dialogs ── */}
 
-      {/* FIX 7: ScheduleDialog — visual timeline (extracted above as component) */}
-      <ScheduleDialog
-        open={schedDialogOpen}
-        onOpenChange={setSchedDialogOpen}
-        scheduleList={scheduleList}
-      />
+      <ScheduleDialog open={schedDialogOpen} onOpenChange={setSchedDialogOpen} scheduleList={scheduleList} />
 
       {/* Reject Dialog */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
@@ -1936,7 +2167,7 @@ export default function EmployeesPunchLogs() {
         </DialogContent>
       </Dialog>
 
-      {/* FIX 8: Edit Dialog — isAnyDA instead of isDA */}
+      {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="sm:max-w-md border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -1956,15 +2187,20 @@ export default function EmployeesPunchLogs() {
               <div className="bg-muted/50 p-3 rounded-lg text-sm">
                 <div className="font-medium mb-1">Employee: {editLog.employeeName}</div>
                 <div className="text-muted-foreground">Log ID: {editLog.id}</div>
-                {/* FIX 8: isAnyDA catches all 3 driver-aide variants */}
                 {editLog.isAnyDA && (
                   <div className="mt-2 flex items-center gap-1 text-xs">
                     <Car className="h-3 w-3 text-blue-500" />
                     <span className="text-blue-600 dark:text-blue-400">
-                      {editLog.isDA    ? "Driver/Aide"    :
-                       editLog.isDA_AM ? "Driver/Aide AM" :
-                                         "Driver/Aide PM"} — hours breakdown will recalculate on save
+                      {editLog.isDA    ? "Driver/Aide — AM (1.25h fixed) + Regular (5.5h fixed) + PM (derived)" :
+                       editLog.isDA_AM ? "Driver/Aide AM — AM (1.25h fixed) + Regular (derived)" :
+                                         "Driver/Aide PM — Regular (5.5h fixed) + PM (derived)"} — hours will recalculate on save
                     </span>
+                  </div>
+                )}
+                {editLog.isAutoClockOut && (
+                  <div className="mt-2 flex items-center gap-1 text-xs text-purple-600">
+                    <Timer className="h-3 w-3" />
+                    This record was auto-closed by G-6. SV review required after edit.
                   </div>
                 )}
               </div>

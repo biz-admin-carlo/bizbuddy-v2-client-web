@@ -143,7 +143,6 @@ const CheckSettings = () => {
     try {
       setGeneratingPDF(true);
       toast.info('Generating test check PDF...');
-        console.log(token);
       const response = await fetch(`${API_URL}/api/company-settings/check-test-pdf`, {
         method: 'POST',
         headers: {
@@ -155,8 +154,6 @@ const CheckSettings = () => {
           mockData: MOCK_DATA,
         }),
       });
-
-      console.log(response);
 
       if (!response.ok) throw new Error('Failed to generate test PDF');
 

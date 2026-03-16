@@ -29,7 +29,7 @@ export default function ErrorsPage() {
 
       const result = await response.json();
       if (result.success) {
-        console.log("🔴 Error data received:", result.data);
+        // console.log("🔴 Error data received:", result.data);
         setData(result.data);
       }
     } catch (error) {

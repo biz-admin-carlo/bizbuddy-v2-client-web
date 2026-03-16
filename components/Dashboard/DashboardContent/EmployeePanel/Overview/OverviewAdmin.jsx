@@ -38,7 +38,6 @@ export default function OverviewAdmin() {
     setLoading(true);
     try {
       let url = `${API}/api/analytics/admin-dashboard?period=${period}`;
-      console.log(token)
       if (period === 'custom' && customStart && customEnd) {
         url += `&startDate=${format(customStart, 'yyyy-MM-dd')}&endDate=${format(customEnd, 'yyyy-MM-dd')}`;
       }

@@ -127,7 +127,6 @@ export default function Punch() {
   // { shiftName, scheduledStartMs, scheduledEndMs } | null
   const [todayShift, setTodayShift]               = useState(undefined);
   const [todayShiftLoading, setTodayShiftLoading] = useState(true);
-  console.log(todayShift);
 
   // Punch type state
   const [punchTypeModalOpen, setPunchTypeModalOpen] = useState(false);
@@ -157,9 +156,12 @@ export default function Punch() {
 
   // Strict match — "driver" only (case-insensitive). "Driver Aide", "Aide" etc. are NOT drivers.
   const isDriver = employeeInfo.jobTitle?.toLowerCase() === "driver";
+  const isDriverOrAide = ["driver", "aide"].includes(
+    employeeInfo.jobTitle?.toLowerCase()
+  );
 
   // Non-driver DayCare employee — the only group that sees the AM/PM modal
-  const isDayCareNonDriver = isDayCare && !isDriver;
+  const isDayCareNonDriver = isDayCare && !isDriverOrAide;
 
   // ── Location on mount ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -771,15 +773,19 @@ export default function Punch() {
                   <Button
                     size="lg"
                     className={`w-full text-xl font-bold h-16 transition-all shadow-lg ${
-                      isTimedIn
+                      employeeInfoLoading || todayShiftLoading
+                        ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                        : isTimedIn
                         ? "bg-red-500 hover:bg-red-600 text-white"
                         : "bg-gradient-to-r from-orange-500 to-orange-500 hover:from-orange-600 hover:to-orange-600 text-white"
                     }`}
-                    disabled={loading}
+                    disabled={loading || employeeInfoLoading || todayShiftLoading}
                     onClick={handlePunch}
                   >
                     {loading ? (
                       <Loader2 className="h-6 w-6 animate-spin mr-3" />
+                    ) : employeeInfoLoading || todayShiftLoading ? (
+                      <><Loader2 className="h-6 w-6 animate-spin mr-3" /> Loading...</>
                     ) : isTimedIn ? (
                       <><LogOut className="h-6 w-6 mr-3" /> TIME OUT</>
                     ) : (
