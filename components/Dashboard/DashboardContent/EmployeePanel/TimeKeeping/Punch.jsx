@@ -141,6 +141,7 @@ export default function Punch() {
   // Stores the pending action to resume after dismissing the no-schedule modal
   // "timein" | "timeout"
   const [pendingActionAfterModal, setPendingActionAfterModal] = useState(null);
+  const [noScheduleRemarks, setNoScheduleRemarks] = useState("");
 
   // Confirmation dialog
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
@@ -281,6 +282,7 @@ export default function Punch() {
     setActivePunchType(null);
     setSelectedPunchType(null);
     setPunchTypeContext(null);
+    setNoScheduleRemarks("");
   };
 
   // ── Shared API caller ─────────────────────────────────────────────────────────
@@ -448,10 +450,21 @@ export default function Punch() {
     // For time-in: send selectedPunchType if set (covers DRIVER_AIDE and DRIVER_AIDE_AM)
     // For time-out: send selectedPunchType only if it's DRIVER_AIDE_PM (updating the log)
     const extraBody = {};
+
+    // Punch type
     if (isTimeIn && selectedPunchType) {
       extraBody.punchType = selectedPunchType;
     } else if (!isTimeIn && selectedPunchType === PUNCH_TYPES.DRIVER_AIDE_PM) {
       extraBody.punchType = selectedPunchType;
+    }
+  
+    // No-schedule remark — separate check, not else if
+    if (isTimeIn && noScheduleRemarks.trim()) {
+      extraBody.remarks = [{
+        type:      "no_schedule",
+        message:   noScheduleRemarks.trim(),
+        timestamp: new Date().toISOString(),
+      }];
     }
 
     const ok = await doCall(isTimeIn ? "/time-in" : "/time-out", extraBody);
@@ -900,37 +913,62 @@ export default function Punch() {
                   No Schedule Today
                 </DialogTitle>
                 <DialogDescription>
-                  The system did not find a scheduled shift for you today.
+                  No scheduled shift found. Please explain why you are clocking in.
                 </DialogDescription>
               </DialogHeader>
-
+ 
+              {/* Info notice */}
               <div className="p-4 rounded-xl bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
                 <div className="flex items-start gap-3">
                   <Info className="h-5 w-5 text-yellow-600 mt-0.5 shrink-0" />
                   <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                    You can still clock in, but this session will not be linked to any scheduled shift.
-                    If you believe this is a mistake, please contact your supervisor.
+                    This session will not be linked to any scheduled shift.
+                    Your reason will be visible to your supervisor during payroll review.
                   </p>
                 </div>
               </div>
-
+ 
+              {/* Required reason field */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+                  <span className="text-red-500">*</span> Reason for clocking in
+                </label>
+                <textarea
+                  value={noScheduleRemarks}
+                  onChange={(e) => setNoScheduleRemarks(e.target.value)}
+                  placeholder="e.g. Supervisor asked me to cover for a colleague, make-up day, emergency coverage..."
+                  rows={3}
+                  maxLength={300}
+                  className="w-full rounded-xl border-2 border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-2.5 text-sm text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 focus:outline-none focus:border-yellow-400 dark:focus:border-yellow-500 resize-none transition-colors"
+                />
+                <div className="flex justify-between items-center">
+                  <p className="text-xs text-neutral-400">Required — minimum 10 characters</p>
+                  <p className={`text-xs ${noScheduleRemarks.length >= 300 ? "text-red-500" : "text-neutral-400"}`}>
+                    {noScheduleRemarks.length}/300
+                  </p>
+                </div>
+              </div>
+ 
               <DialogFooter className="gap-2">
                 <Button
                   variant="outline"
                   onClick={() => {
                     setNoScheduleModalOpen(false);
                     setPendingActionAfterModal(null);
+                    setNoScheduleRemarks("");
                   }}
                 >
                   Cancel
                 </Button>
                 <Button
-                  className="bg-orange-500 hover:bg-orange-600 text-white"
+                  className="bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-50"
+                  disabled={noScheduleRemarks.trim().length < 10}
                   onClick={() => {
                     setNoScheduleModalOpen(false);
                     const action = pendingActionAfterModal;
                     setPendingActionAfterModal(null);
                     proceedWithPunch(action);
+                    // remarks are picked up by confirmPunch via noScheduleRemarks state
                   }}
                 >
                   <LogIn className="h-4 w-4 mr-2" />
