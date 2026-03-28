@@ -261,7 +261,7 @@ const DeptConfigPanel = ({
           )}
 
           {mode === "range" && (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
                 <Label className="text-xs">From</Label>
                 <Input type="date" className="text-xs h-8" value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} />
@@ -675,7 +675,7 @@ export default function EmployeeCutoff() {
       </div>
 
       {/* ── Stat Cards ── */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard label="Total Cutoffs" value={stats.total}     color="text-neutral-800 dark:text-neutral-200" Icon={Calendar}      delay={0.05} />
         <StatCard label="Open"          value={stats.open}      color="text-green-600"                         Icon={CircleDot}     delay={0.10} />
         <StatCard label="Locked"        value={stats.locked}    color="text-amber-600"                         Icon={Lock}          delay={0.15} />
@@ -972,7 +972,7 @@ export default function EmployeeCutoff() {
 
       {/* ── Configure Modal ── */}
       <Dialog open={isConfigModalOpen} onOpenChange={setIsConfigModalOpen}>
-        <DialogContent className="sm:max-w-[460px]">
+        <DialogContent className="w-[90vw] sm:max-w-[460px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings className="w-4 h-4 text-orange-500" /> Configure Department Cutoff
@@ -1015,7 +1015,7 @@ export default function EmployeeCutoff() {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wide text-neutral-500">Starting Date</Label>
                 <Input
@@ -1055,7 +1055,7 @@ export default function EmployeeCutoff() {
 
       {/* ── Manual Cutoff Modal ── */}
       <Dialog open={isManualModalOpen} onOpenChange={setIsManualModalOpen}>
-        <DialogContent className="sm:max-w-[460px]">
+        <DialogContent className="w-[90vw] sm:max-w-[460px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Plus className="w-4 h-4 text-orange-500" /> Create Manual Cutoff Period
@@ -1084,7 +1084,7 @@ export default function EmployeeCutoff() {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wide text-neutral-500">Period Start</Label>
                 <Input type="date" value={manualForm.periodStart} onChange={(e) => setManualForm((f) => ({ ...f, periodStart: e.target.value }))} />
@@ -1095,7 +1095,7 @@ export default function EmployeeCutoff() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wide text-neutral-500">Payment Date</Label>
                 <Input type="date" value={manualForm.paymentDate} onChange={(e) => setManualForm((f) => ({ ...f, paymentDate: e.target.value }))} />

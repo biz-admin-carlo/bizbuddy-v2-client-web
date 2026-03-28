@@ -1127,7 +1127,7 @@ export default function CutoffReview({ cutoffId }) {
 
       {/* ── Edit Modal ── */}
       <Dialog open={!!editModal} onOpenChange={() => setEditModal(null)}>
-        <DialogContent className="sm:max-w-[460px]">
+        <DialogContent className="w-[90vw] sm:max-w-[460px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Pencil className="w-4 h-4 text-amber-500" /> Edit Punch Log
@@ -1141,7 +1141,7 @@ export default function CutoffReview({ cutoffId }) {
               <div className="flex justify-between"><span className="text-neutral-400">Original Clock-In</span><span className="font-semibold">{editModal?.rec?.timeIn}</span></div>
               <div className="flex justify-between"><span className="text-neutral-400">Original Clock-Out</span><span className="font-semibold">{editModal?.rec?.timeOut}</span></div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wide text-neutral-500">Corrected Clock-In</Label>
                 <Input type="text" defaultValue={editModal?.rec?.timeIn} />
@@ -1167,7 +1167,7 @@ export default function CutoffReview({ cutoffId }) {
 
       {/* ── Exclude Modal ── */}
       <Dialog open={!!excludeModal} onOpenChange={() => setExcludeModal(null)}>
-        <DialogContent className="sm:max-w-[440px]">
+        <DialogContent className="w-[90vw] sm:max-w-[440px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <XCircle className="w-4 h-4 text-red-500" /> Exclude Record
@@ -1212,7 +1212,7 @@ export default function CutoffReview({ cutoffId }) {
 
       {/* ── Finalize Modal ── */}
       <Dialog open={finalizeModal} onOpenChange={setFinalizeModal}>
-        <DialogContent className="sm:max-w-[440px]">
+        <DialogContent className="w-[90vw] sm:max-w-[440px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Lock className="w-4 h-4 text-orange-500" /> Finalize Cutoff Period

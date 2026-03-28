@@ -49,7 +49,6 @@ import TableSkeleton from "@/components/common/TableSkeleton";
 import ConfirmDeleteDialog from "@/components/common/ConfirmDeleteDialog";
 import FormDialog from "@/components/common/FormDialog";
 import OrangeLoadingSpinner from "@/components/common/Spinner";
-import { exportPunchLogsCSV, exportPunchLogsPDF } from "@/lib/exportUtils";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const DAYCARE_COMPANY_IDS = (process.env.NEXT_PUBLIC_DAYCARE_COMPANY_IDS || "")
@@ -760,6 +759,7 @@ export default function PunchLogs() {
     if (!filteredSorted.length) { toast.error("No rows to export"); return; }
     setExporting(true);
     try {
+      const { exportPunchLogsCSV } = await import("@/lib/exports/punchLogs");
       const result = await exportPunchLogsCSV({ data: filteredSorted });
       if (result.success) toast.success(result.filename);
     } catch (e) { toast.error(`Export failed: ${e.message}`); }
@@ -770,6 +770,7 @@ export default function PunchLogs() {
     if (!filteredSorted.length) { toast.error("No rows to export"); return; }
     setExporting(true);
     try {
+      const { exportPunchLogsPDF } = await import("@/lib/exports/punchLogs");
       const result = await exportPunchLogsPDF({ data: filteredSorted });
       if (result.success) toast.success(result.filename);
     } catch (e) { toast.error(`Export failed: ${e.message}`); }

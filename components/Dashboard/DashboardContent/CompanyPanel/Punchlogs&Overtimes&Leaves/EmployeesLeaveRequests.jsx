@@ -310,7 +310,7 @@ export default function SupervisorLeaveRequests() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Leave Requests</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Leave Requests</h1>
           <p className="text-muted-foreground">Review and manage employee leave requests</p>
         </div>
       </div>
@@ -325,7 +325,7 @@ export default function SupervisorLeaveRequests() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
+            <div className="text-lg sm:text-2xl font-bold">{stats.total}</div>
           </CardContent>
         </Card>
 
@@ -337,7 +337,7 @@ export default function SupervisorLeaveRequests() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-600">{stats.pending}</div>
+            <div className="text-lg sm:text-2xl font-bold text-amber-600">{stats.pending}</div>
           </CardContent>
         </Card>
 
@@ -349,7 +349,7 @@ export default function SupervisorLeaveRequests() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.approved}</div>
+            <div className="text-lg sm:text-2xl font-bold text-green-600">{stats.approved}</div>
           </CardContent>
         </Card>
 
@@ -361,7 +361,7 @@ export default function SupervisorLeaveRequests() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{stats.rejected}</div>
+            <div className="text-lg sm:text-2xl font-bold text-red-600">{stats.rejected}</div>
           </CardContent>
         </Card>
       </div>
@@ -462,7 +462,7 @@ export default function SupervisorLeaveRequests() {
               </div>
 
               {/* Request Info */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <div className="text-sm text-muted-foreground">Request ID</div>
                   <div className="font-mono text-xs">{detailDialog.request.id}</div>

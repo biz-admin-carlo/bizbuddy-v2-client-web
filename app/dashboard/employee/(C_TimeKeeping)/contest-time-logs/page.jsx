@@ -4,7 +4,6 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import useAuthStore from "@/store/useAuthStore";
-import { exportContestLogsCSV, exportContestLogsPDF } from "@/lib/exportUtils";
 import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
@@ -173,6 +172,7 @@ export default function ContestTimeLogs() {
   const exportToCSV = async () => {
     if (filteredLogs.length === 0) return toast.error("No data to export");
     try {
+      const { exportContestLogsCSV } = await import("@/lib/exports/contestLogs");
       const result = await exportContestLogsCSV({ data: filteredLogs });
       if (result.success) toast.success(`${result.filename}`);
     } catch (error) {
@@ -183,6 +183,7 @@ export default function ContestTimeLogs() {
   const exportToPDF = async () => {
     if (filteredLogs.length === 0) return toast.error("No data to export");
     try {
+      const { exportContestLogsPDF } = await import("@/lib/exports/contestLogs");
       const result = await exportContestLogsPDF({ data: filteredLogs });
       if (result.success) toast.success(`${result.filename}`);
     } catch (error) {

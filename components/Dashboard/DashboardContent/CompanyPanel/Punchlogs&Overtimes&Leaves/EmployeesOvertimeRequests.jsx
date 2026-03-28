@@ -280,7 +280,7 @@ export default function OvertimeRequests() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
+            <div className="text-lg sm:text-2xl font-bold">{stats.total}</div>
           </CardContent>
         </Card>
 
@@ -292,7 +292,7 @@ export default function OvertimeRequests() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-600">{stats.pending}</div>
+            <div className="text-lg sm:text-2xl font-bold text-amber-600">{stats.pending}</div>
           </CardContent>
         </Card>
 
@@ -304,7 +304,7 @@ export default function OvertimeRequests() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.approved}</div>
+            <div className="text-lg sm:text-2xl font-bold text-green-600">{stats.approved}</div>
           </CardContent>
         </Card>
 
@@ -316,7 +316,7 @@ export default function OvertimeRequests() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{stats.approvedHours}</div>
+            <div className="text-lg sm:text-2xl font-bold text-orange-600">{stats.approvedHours}</div>
           </CardContent>
         </Card>
       </div>
@@ -433,13 +433,13 @@ export default function OvertimeRequests() {
               <div className="flex items-center justify-between">
                 <StatusBadge status={detailDialog.request.status} />
                 <div className="text-right">
-                  <div className="text-2xl font-bold">{Number(detailDialog.request.requestedHours).toFixed(2)}h</div>
+                  <div className="text-lg sm:text-2xl font-bold">{Number(detailDialog.request.requestedHours).toFixed(2)}h</div>
                   <div className="text-sm text-muted-foreground">Overtime Hours</div>
                 </div>
               </div>
 
               {/* Employee Info */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <div className="text-sm text-muted-foreground">Employee</div>
                   <div className="font-medium">{detailDialog.request.requester?.email}</div>

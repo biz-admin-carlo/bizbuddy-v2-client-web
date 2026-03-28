@@ -20,6 +20,10 @@
 .DS_Store
 *.pem
 
+# large binaries — host externally, not in repo
+*.apk
+*.ipa
+
 # debug
 npm-debug.log*
 yarn-debug.log*

@@ -78,11 +78,15 @@ export default function SignInPage() {
     setLoading(true);
 
     try {
-      const signInUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/account/sign-in?email=${encodeURIComponent(
-        formData.email.trim().toLowerCase()
-      )}&password=${encodeURIComponent(formData.password)}&companyId=${encodeURIComponent(selectedCompanyId)}`;
-
-      const res = await fetch(signInUrl);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/account/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email.trim().toLowerCase(),
+          password: formData.password,
+          companyId: selectedCompanyId,
+        }),
+      });
       const data = await res.json();
 
       if (res.status === 403) {

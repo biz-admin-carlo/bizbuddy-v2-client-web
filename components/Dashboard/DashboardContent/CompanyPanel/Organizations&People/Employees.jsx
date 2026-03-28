@@ -1,26 +1,19 @@
-// Modern Company Employees Management - Preserving ALL Original Functionality
 "use client";
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import {
   Trash2,
   Edit,
-  ChevronDown,
-  ChevronUp,
   Users,
-  RefreshCw,
-  Filter,
   AlertCircle,
   UserPlus,
   Building,
-  Mail,
   User,
   UserCog,
   Download,
   UploadCloud,
   Info,
   FileText,
-  Plus,
   Eye,
   EyeOff,
   Badge as BadgeIcon,
@@ -31,27 +24,19 @@ import {
   UserCheck,
   Loader2,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import Papa from "papaparse";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
-import { exportEmployeesCSV, exportEmployeesPDF } from "@/lib/exportUtils";
 import DataTable from "@/components/common/DataTable";
 import ColumnSelector from "@/components/common/ColumnSelector";
-import MultiSelect from "@/components/common/MultiSelect";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
-import { fmtMMDDYYYY, fmtMMDDYYYY_hhmma } from "@/lib/dateTimeFormatter";
 
 const val = (v) => (v?.trim() ? v.trim() : undefined);
 
@@ -165,22 +150,6 @@ export default function ModernEmployees() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [employeeToDelete, setEmployeeToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-
-  const [sortConfig, setSort] = useState({ key: "updatedAt", direction: "descending" });
-  const requestSort = (k) =>
-    setSort((p) => ({
-      key: k,
-      direction: p.key === k && p.direction === "ascending" ? "descending" : "ascending",
-    }));
-
-  const [filters, setFilters] = useState({
-    ids: ["all"],
-    employeeIds: ["all"],
-    names: ["all"],
-    emails: ["all"],
-    departments: ["all"],
-    roles: ["all"],
-  });
 
   const columnOptions = [
     { value: "id", label: "Employee ID" },
@@ -597,7 +566,8 @@ export default function ModernEmployees() {
     setExporting(true);
     
     try {
-      const result = await exportEmployeesCSV({ 
+      const { exportEmployeesCSV } = await import("@/lib/exports/employees");
+      const result = await exportEmployeesCSV({
         data: processedEmployees,
         visibleColumns: visibleCols,
         columnMap: headerMap,
@@ -622,7 +592,8 @@ export default function ModernEmployees() {
     setPdfExporting(true);
     
     try {
-      const result = await exportEmployeesPDF({ 
+      const { exportEmployeesPDF } = await import("@/lib/exports/employees");
+      const result = await exportEmployeesPDF({
         data: processedEmployees,
         visibleColumns: visibleCols,
         columnMap: headerMap,
@@ -638,66 +609,85 @@ export default function ModernEmployees() {
     }
   };
 
-  // Import functions (preserving original logic)
+  // Import functions — uses POST /api/employee/bulk (max 100 per request)
   const onFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
       complete: async (results) => {
+        const rows = results.data;
+
+        if (rows.length === 0) {
+          toast.error("CSV file is empty.");
+          return;
+        }
+
+        if (rows.length > 100) {
+          toast.error("Maximum 100 employees per import. Please split your CSV into batches of 100.");
+          return;
+        }
+
+        const requiredFields = ["firstName", "lastName", "email", "password"];
+        const headers = Object.keys(rows[0] || {});
+        const missingFields = requiredFields.filter((f) => !headers.includes(f));
+        if (missingFields.length > 0) {
+          toast.error(`CSV is missing required columns: ${missingFields.join(", ")}`);
+          return;
+        }
+
         setImporting(true);
-        setImportReport({ total: results.data.length, success: 0, failed: [], processed: 0 });
+        setImportReport({ total: rows.length, success: 0, failed: [], processed: 0 });
         setShowImportDialog(true);
 
-        for (let i = 0; i < results.data.length; i++) {
-          const row = results.data[i];
-          setImportReport(prev => ({ ...prev, processed: i + 1 }));
+        const employees = rows.map((row) => ({
+          firstName: val(row.firstName),
+          lastName: val(row.lastName),
+          email: val(row.email),
+          password: val(row.password),
+          role: row.role || "employee",
+          departmentId: val(row.departmentId),
+          employeeId: val(row.employeeId),
+          hireDate: val(row.hireDate),
+          jobTitle: val(row.jobTitle),
+          employmentStatus: val(row.employmentStatus),
+          exemptStatus: val(row.exemptStatus),
+          employmentType: val(row.employmentType),
+          workLocation: val(row.workLocation),
+          probationEndDate: val(row.probationEndDate),
+          timeZone: val(row.timeZone),
+        }));
 
-          try {
-            const payload = {
-              firstName: val(row.firstName),
-              lastName: val(row.lastName),
-              email: val(row.email),
-              password: val(row.password),
-              role: row.role || "employee",
-              departmentId: val(row.departmentId),
-              employeeId: val(row.employeeId),
-              hireDate: val(row.hireDate),
-              jobTitle: val(row.jobTitle),
-              employmentStatus: val(row.employmentStatus),
-              exemptStatus: val(row.exemptStatus),
-              employmentType: val(row.employmentType),
-              workLocation: val(row.workLocation),
-              probationEndDate: val(row.probationEndDate),
-              timeZone: val(row.timeZone),
-            };
+        try {
+          const r = await fetch(`${API}/api/employee/bulk`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ employees }),
+          });
 
-            const r = await fetch(`${API}/api/employee`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-              body: JSON.stringify(payload),
-            });
+          const j = await r.json();
 
-            if (r.ok) {
-              setImportReport(prev => ({ ...prev, success: prev.success + 1 }));
-            } else {
-              const j = await r.json();
-              setImportReport(prev => ({ 
-                ...prev, 
-                failed: [...prev.failed, { row: i + 1, reason: j.message || "Unknown error" }] 
-              }));
-            }
-          } catch (err) {
-            setImportReport(prev => ({ 
-              ...prev, 
-              failed: [...prev.failed, { row: i + 1, reason: err.message || "Network error" }] 
-            }));
-          }
+          const created = j.created || [];
+          const failed  = (j.failed  || []).map((f) => ({
+            row: f.index + 1,
+            reason: f.reason || "Unknown error",
+          }));
 
-          // Small delay to show progress
-          await new Promise(resolve => setTimeout(resolve, 100));
+          setImportReport({
+            total: rows.length,
+            success: created.length,
+            failed,
+            processed: rows.length,
+          });
+        } catch (err) {
+          setImportReport({
+            total: rows.length,
+            success: 0,
+            failed: [{ row: "–", reason: err.message || "Network error" }],
+            processed: rows.length,
+          });
         }
 
         setImporting(false);
@@ -714,14 +704,14 @@ export default function ModernEmployees() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Company Employees</h1>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Company Employees</h1>
             <p className="text-muted-foreground">Manage your workforce and employee information</p>
           </div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               onClick={() => setShowInfoDialog(true)}
-              className="border-orange-200 text-orange-600 hover:bg-orange-50"
+              className="border-orange-200 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-900/20"
             >
               <Info className="h-4 w-4 mr-2" />
               Import Guide
@@ -729,7 +719,7 @@ export default function ModernEmployees() {
             <Button
               variant="outline"
               onClick={() => fileRef.current?.click()}
-              className="border-orange-200 text-orange-600 hover:bg-orange-50"
+              className="border-orange-200 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-900/20"
             >
               <UploadCloud className="h-4 w-4 mr-2" />
               Import CSV
@@ -754,7 +744,7 @@ export default function ModernEmployees() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
+              <div className="text-lg sm:text-2xl font-bold text-blue-600">{stats.total}</div>
             </CardContent>
           </Card>
 
@@ -766,7 +756,7 @@ export default function ModernEmployees() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{stats.active}</div>
+              <div className="text-lg sm:text-2xl font-bold text-green-600">{stats.active}</div>
             </CardContent>
           </Card>
 
@@ -778,7 +768,7 @@ export default function ModernEmployees() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-purple-600">{stats.departments}</div>
+              <div className="text-lg sm:text-2xl font-bold text-purple-600">{stats.departments}</div>
             </CardContent>
           </Card>
 
@@ -790,7 +780,7 @@ export default function ModernEmployees() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-orange-600">{stats.supervisors}</div>
+              <div className="text-lg sm:text-2xl font-bold text-orange-600">{stats.supervisors}</div>
             </CardContent>
           </Card>
         </div>
@@ -812,7 +802,7 @@ export default function ModernEmployees() {
                   variant="outline"
                   onClick={downloadCSV}
                   disabled={exporting}
-                  className="border-orange-200 text-orange-600 hover:bg-orange-50"
+                  className="border-orange-200 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-900/20"
                 >
                   <Download className="h-4 w-4 mr-2" />
                   {exporting ? "Exporting..." : "CSV"}
@@ -822,7 +812,7 @@ export default function ModernEmployees() {
                   variant="outline"
                   onClick={downloadPDF}
                   disabled={pdfExporting}
-                  className="border-orange-200 text-orange-600 hover:bg-orange-50"
+                  className="border-orange-200 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-900/20"
                 >
                   <FileText className="h-4 w-4 mr-2" />
                   {pdfExporting ? "Exporting..." : "PDF"}
@@ -843,7 +833,7 @@ export default function ModernEmployees() {
                     }
                   }}
                 >
-                  <SelectTrigger className="w-[100px]">
+                  <SelectTrigger className="w-full sm:w-[100px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -886,7 +876,7 @@ export default function ModernEmployees() {
 
         {/* Create Employee Modal */}
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto dark:border-white/10">
             <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -902,7 +892,7 @@ export default function ModernEmployees() {
               {/* Basic Info */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium">Basic Information</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">First Name <span className="text-orange-500">*</span></label>
                     <Input
@@ -920,7 +910,7 @@ export default function ModernEmployees() {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Email <span className="text-orange-500">*</span></label>
                     <Input
@@ -943,7 +933,7 @@ export default function ModernEmployees() {
                       <button
                         type="button"
                         onClick={() => setShowCreatePassword(!showCreatePassword)}
-                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
                       >
                         {showCreatePassword ? (
                           <EyeOff className="h-4 w-4" />
@@ -954,7 +944,7 @@ export default function ModernEmployees() {
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Role</label>
                     <Select value={createForm.role} onValueChange={(v) => setCreateForm({ ...createForm, role: v })}>
@@ -990,7 +980,7 @@ export default function ModernEmployees() {
               {/* Employment Details */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium">Employment Details</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Employee ID</label>
                     <Input
@@ -1008,7 +998,7 @@ export default function ModernEmployees() {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Job Title</label>
                     <Input
@@ -1032,7 +1022,7 @@ export default function ModernEmployees() {
                     </Select>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Work Location</label>
                     <Select value={createForm.workLocation} onValueChange={(v) => setCreateForm({ ...createForm, workLocation: v })}>
@@ -1060,6 +1050,37 @@ export default function ModernEmployees() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Exempt Status</label>
+                    <Select value={createForm.exemptStatus} onValueChange={(v) => setCreateForm({ ...createForm, exemptStatus: v })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        <SelectItem value="exempt">Exempt</SelectItem>
+                        <SelectItem value="non_exempt">Non-exempt</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Probation End Date</label>
+                    <Input
+                      type="date"
+                      value={createForm.probationEndDate}
+                      onChange={(e) => setCreateForm({ ...createForm, probationEndDate: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Time Zone</label>
+                  <Input
+                    value={createForm.timeZone}
+                    onChange={(e) => setCreateForm({ ...createForm, timeZone: e.target.value })}
+                    placeholder="e.g., America/Los_Angeles"
+                  />
                 </div>
               </div>
             </div>
@@ -1091,7 +1112,7 @@ export default function ModernEmployees() {
 
         {/* Edit Employee Modal */}
         <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto dark:border-white/10">
             <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -1111,7 +1132,7 @@ export default function ModernEmployees() {
                     <User className="h-5 w-5 text-blue-600" />
                     Basic Information
                   </h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">First Name <span className="text-orange-500">*</span></label>
                       <Input
@@ -1127,7 +1148,7 @@ export default function ModernEmployees() {
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Email <span className="text-orange-500">*</span></label>
                       <Input
@@ -1192,12 +1213,12 @@ export default function ModernEmployees() {
                 </div>
 
                 {/* Employment Details */}
-                <div className="space-y-4 pt-4 border-t">
+                <div className="space-y-4 pt-4 border-t dark:border-white/10">
                   <h3 className="text-lg font-medium flex items-center gap-2">
                     <Briefcase className="h-5 w-5 text-purple-600" />
                     Employment Details
                   </h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Employee ID</label>
                       <Input
@@ -1215,7 +1236,7 @@ export default function ModernEmployees() {
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Job Title</label>
                       <Input
@@ -1234,11 +1255,12 @@ export default function ModernEmployees() {
                           <SelectItem value="none">None</SelectItem>
                           <SelectItem value="full_time">Full-time</SelectItem>
                           <SelectItem value="part_time">Part-time</SelectItem>
+                          <SelectItem value="contract">Contract</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Exempt Status</label>
                       <Select value={editForm.exemptStatus} onValueChange={(v) => setEditForm({ ...editForm, exemptStatus: v })}>
@@ -1266,7 +1288,7 @@ export default function ModernEmployees() {
                       </Select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Work Location</label>
                       <Select value={editForm.workLocation} onValueChange={(v) => setEditForm({ ...editForm, workLocation: v })}>
@@ -1326,7 +1348,7 @@ export default function ModernEmployees() {
 
         {/* Delete Modal */}
         <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md dark:border-white/10">
             <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -1374,7 +1396,7 @@ export default function ModernEmployees() {
 
         {/* Employee Details Modal */}
         <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-          <DialogContent className="max-w-3xl">
+          <DialogContent className="max-w-3xl dark:border-white/10">
             <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -1391,7 +1413,7 @@ export default function ModernEmployees() {
                       <User className="h-5 w-5 text-blue-600" />
                       Account Information
                     </h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-muted-foreground">Full Name:</span>
                         <div className="font-medium">{selectedEmployee.fullName || "—"}</div>
@@ -1434,12 +1456,12 @@ export default function ModernEmployees() {
                   </div>
 
                   {/* Employment Details */}
-                  <div className="space-y-3 pt-4 border-t">
+                  <div className="space-y-3 pt-4 border-t dark:border-white/10">
                     <h3 className="text-lg font-medium flex items-center gap-2">
                       <Briefcase className="h-5 w-5 text-purple-600" />
                       Employment Details
                     </h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-muted-foreground">Employee ID:</span>
                         <div className="font-medium font-mono">{selectedEmployee.employeeId || "—"}</div>
@@ -1532,12 +1554,12 @@ export default function ModernEmployees() {
                   {(selectedEmployee.profile?.dateOfBirth || 
                     selectedEmployee.profile?.addressLine || 
                     selectedEmployee.profile?.ssnItin) && (
-                    <div className="space-y-3 pt-4 border-t">
+                    <div className="space-y-3 pt-4 border-t dark:border-white/10">
                       <h3 className="text-lg font-medium flex items-center gap-2">
                         <UserCheck className="h-5 w-5 text-green-600" />
                         Personal Information
                       </h3>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                         {selectedEmployee.profile?.dateOfBirth && (
                           <div>
                             <span className="text-muted-foreground">Date of Birth:</span>
@@ -1570,12 +1592,12 @@ export default function ModernEmployees() {
                   {/* Emergency Contact */}
                   {(selectedEmployee.profile?.emergencyContactName || 
                     selectedEmployee.profile?.emergencyContactPhone) && (
-                    <div className="space-y-3 pt-4 border-t">
+                    <div className="space-y-3 pt-4 border-t dark:border-white/10">
                       <h3 className="text-lg font-medium flex items-center gap-2">
                         <AlertCircle className="h-5 w-5 text-red-600" />
                         Emergency Contact
                       </h3>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                         {selectedEmployee.profile?.emergencyContactName && (
                           <div>
                             <span className="text-muted-foreground">Contact Name:</span>
@@ -1593,12 +1615,12 @@ export default function ModernEmployees() {
                   )}
 
                   {/* System Information */}
-                  <div className="space-y-3 pt-4 border-t">
+                  <div className="space-y-3 pt-4 border-t dark:border-white/10">
                     <h3 className="text-lg font-medium flex items-center gap-2">
                       <Clock className="h-5 w-5 text-gray-600" />
                       System Information
                     </h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-muted-foreground">User ID:</span>
                         <div className="font-medium font-mono text-xs break-all">{selectedEmployee.id}</div>
@@ -1631,7 +1653,7 @@ export default function ModernEmployees() {
 
         {/* Import Dialog */}
         <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md dark:border-white/10">
             <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -1642,18 +1664,10 @@ export default function ModernEmployees() {
             {importing ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between mb-1 text-sm font-medium">
-                  <span>Processing: {importReport.processed} / {importReport.total}</span>
-                  <span>{Math.round((importReport.processed / importReport.total) * 100)}%</span>
+                  <span>Uploading {importReport.total} employee{importReport.total !== 1 ? "s" : ""}…</span>
                 </div>
-                <div className="w-full bg-neutral-200 rounded-full h-2">
-                  <div
-                    className="bg-orange-500 h-2 rounded-full transition-all"
-                    style={{ width: `${(importReport.processed / importReport.total) * 100}%` }}
-                  />
-                </div>
-                <div className="flex justify-between text-sm text-muted-foreground">
-                  <div>Success: {importReport.success}</div>
-                  <div>Failed: {importReport.failed.length}</div>
+                <div className="w-full bg-neutral-200 dark:bg-neutral-700 rounded-full h-2">
+                  <div className="bg-orange-500 h-2 rounded-full animate-pulse w-full" />
                 </div>
                 <div className="flex justify-center mt-2">
                   <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
@@ -1698,7 +1712,7 @@ export default function ModernEmployees() {
 
         {/* Info Dialog */}
         <Dialog open={showInfoDialog} onOpenChange={setShowInfoDialog}>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-lg dark:border-white/10">
             <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -1710,7 +1724,7 @@ export default function ModernEmployees() {
               Your CSV file must include the exact headers below. <em>departmentId</em>, <em>employeeId</em>, <em>hireDate</em>, and
               all employment-detail columns are optional.
             </p>
-            <pre className="bg-neutral-100 p-4 rounded-md text-sm font-mono overflow-x-auto">{CSV_TEMPLATE}</pre>
+            <pre className="bg-neutral-100 dark:bg-neutral-800 dark:text-neutral-200 p-4 rounded-md text-sm font-mono overflow-x-auto">{CSV_TEMPLATE}</pre>
             <DialogFooter>
               <Button
                 variant="outline"

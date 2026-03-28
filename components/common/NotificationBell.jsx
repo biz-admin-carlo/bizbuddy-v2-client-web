@@ -10,11 +10,51 @@ import { toast } from 'sonner';
 
 // Notification type configuration
 const NOTIFICATION_CONFIG = {
-  MISSED_CLOCK_IN: { title: 'Missed Clock-In', emoji: '⏰' },
-  MISSED_CLOCK_OUT: { title: 'Missed Clock-Out', emoji: '🕐' },
-  DAILY_CLOCK_IN_REPORT: { title: 'Morning Report', emoji: '☀️' },
-  DAILY_CLOCK_OUT_REPORT: { title: 'Evening Report', emoji: '🌙' },
-  DEFAULT: { title: 'Notification', emoji: '🔔' }
+  // ── Attendance ────────────────────────────────────────────────
+  MISSED_CLOCK_IN:           { title: 'Missed Clock-In',          emoji: '⏰' },
+  MISSED_CLOCK_OUT:          { title: 'Missed Clock-Out',         emoji: '🕐' },
+  DAILY_CLOCK_IN_REPORT:     { title: 'Morning Report',           emoji: '☀️' },
+  DAILY_CLOCK_OUT_REPORT:    { title: 'Evening Report',           emoji: '🌙' },
+
+  // ── Leave Requests ────────────────────────────────────────────
+  LEAVE_REQUEST_SUBMITTED:   { title: 'New Leave Request',        emoji: '📋' },
+  LEAVE_REQUEST_APPROVED:    { title: 'Leave Approved',           emoji: '✅' },
+  LEAVE_REQUEST_REJECTED:    { title: 'Leave Rejected',           emoji: '❌' },
+
+  // ── Overtime Requests ─────────────────────────────────────────
+  OVERTIME_REQUEST_SUBMITTED: { title: 'New Overtime Request',    emoji: '⏱️' },
+  OVERTIME_REQUEST_APPROVED:  { title: 'Overtime Approved',       emoji: '✅' },
+  OVERTIME_REQUEST_REJECTED:  { title: 'Overtime Rejected',       emoji: '❌' },
+
+  // ── Contest / Time Correction Requests ────────────────────────
+  CONTEST_REQUEST_SUBMITTED: { title: 'New Time Contest',         emoji: '🔁' },
+  CONTEST_REQUEST_APPROVED:  { title: 'Time Contest Approved',    emoji: '✅' },
+  CONTEST_REQUEST_REJECTED:  { title: 'Time Contest Rejected',    emoji: '❌' },
+
+  // ── Schedule ──────────────────────────────────────────────────
+  SCHEDULE_ASSIGNED:             { title: 'Schedule Assigned',        emoji: '📅' },
+  SCHEDULE_ASSIGNED_MANAGEMENT:  { title: 'Schedule Alert',           emoji: '📋' },
+  SCHEDULE_REPLACED:             { title: 'Schedule Replaced',        emoji: '🔄' },
+  SCHEDULE_UPDATED:              { title: 'Schedule Updated',         emoji: '📅' },
+
+  // ── Auto Clock-Out ────────────────────────────────────────────
+  AUTO_CLOCK_OUT:            { title: 'Auto Clock-Out',           emoji: '🔒' },
+
+  // ── Password ──────────────────────────────────────────────────
+  PASSWORD_RESET_SUCCESS:    { title: 'Password Reset',           emoji: '🔑' },
+
+  // ── Payslip ───────────────────────────────────────────────────
+  PAYSLIP_GENERATED:         { title: 'Payslip Available',        emoji: '💰' },
+
+  // ── Cutoff Periods ────────────────────────────────────────────
+  CUTOFF_PERIOD_LOCKED:      { title: 'Cutoff Period Locked',     emoji: '🔒' },
+  CUTOFF_PROCESSED:          { title: 'Cutoff Processed',         emoji: '🏦' },
+
+  // ── Account Deletion ──────────────────────────────────────────
+  DELETION_REQUEST_SUBMITTED: { title: 'Deletion Request',        emoji: '🗑️' },
+  DELETION_REQUEST_APPROVED:  { title: 'Account Deletion Done',   emoji: '✔️' },
+
+  DEFAULT:                   { title: 'Notification',             emoji: '🔔' },
 };
 
 // Time formatter

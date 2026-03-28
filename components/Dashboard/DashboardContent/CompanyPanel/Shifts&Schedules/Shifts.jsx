@@ -445,7 +445,7 @@ export default function Shifts() {
     return (
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant="outline" className="min-w-[180px] justify-between">
+          <Button variant="outline" className="w-full sm:min-w-[180px] justify-between">
             {label}
             <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
           </Button>
@@ -629,7 +629,7 @@ export default function Shifts() {
     };
 
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <TooltipProvider delayDuration={300}>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -740,7 +740,7 @@ export default function Shifts() {
               setCurrentPage(1);
             }}
           >
-            <SelectTrigger className="w-[100px] h-8">
+            <SelectTrigger className="w-full sm:w-[100px] h-8">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -896,7 +896,7 @@ export default function Shifts() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
+          <h2 className="text-lg sm:text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
             <Clock className="h-7 w-7 text-orange-500" />
             Shift Templates
           </h2>
@@ -1023,7 +1023,7 @@ export default function Shifts() {
               <Search className="w-4 h-4 mr-1 inline" />
               Search:
             </span>
-            <div className="relative min-w-[200px]">
+            <div className="relative w-full sm:min-w-[200px]">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search shift templates..."
@@ -1419,7 +1419,7 @@ export default function Shifts() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="flex items-center gap-1">
                   Start Time
@@ -1562,7 +1562,7 @@ export default function Shifts() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Start Time</Label>
                 <Input

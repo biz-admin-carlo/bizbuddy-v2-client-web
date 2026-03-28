@@ -9,6 +9,7 @@ import useAuthStore from "@/store/useAuthStore";
 import Sidebar from "@/components/Dashboard/sidebar";
 import PageLoader from "@/components/Dashboard/PageLoader";
 import DashboardSkeleton from "./DashboardSkeleton";
+import ErrorBoundary from "@/components/common/ErrorBoundary";
 
 export default function DashboardLayoutClient({ children }) {
   const { token, login } = useAuthStore();
@@ -154,7 +155,7 @@ export default function DashboardLayoutClient({ children }) {
                          shadow-sm border border-neutral-200/50 dark:border-neutral-700/50
                          min-h-[calc(100vh-8rem)] md:min-h-[calc(100vh-6rem)]"
             >
-              {children}
+              <ErrorBoundary>{children}</ErrorBoundary>
             </motion.div>
           </div>
         </motion.main>
