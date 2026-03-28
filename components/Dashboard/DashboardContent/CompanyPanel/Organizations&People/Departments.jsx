@@ -9,7 +9,6 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
-import { exportDepartmentsCSV, exportDepartmentsPDF } from "@/lib/exportUtils";
 import DataTable from "@/components/common/DataTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -192,7 +191,8 @@ export default function Departments() {
     setExporting(true);
     
     try {
-      const result = await exportDepartmentsCSV({ 
+      const { exportDepartmentsCSV } = await import("@/lib/exports/departments");
+      const result = await exportDepartmentsCSV({
         data: processedDepartments,
         visibleColumns: columnVisibility,
         columnMap: columnMap,
@@ -217,7 +217,8 @@ export default function Departments() {
     setPdfExporting(true);
     
     try {
-      const result = await exportDepartmentsPDF({ 
+      const { exportDepartmentsPDF } = await import("@/lib/exports/departments");
+      const result = await exportDepartmentsPDF({
         data: processedDepartments,
         visibleColumns: columnVisibility,
         columnMap: columnMap,

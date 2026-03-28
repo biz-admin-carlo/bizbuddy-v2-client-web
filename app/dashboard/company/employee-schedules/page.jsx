@@ -127,7 +127,7 @@ const CompanyWideSummaryStats = ({ currentMonth }) => {
               <div>
                 <div className="text-sm font-medium text-green-600">With Shifts</div>
                 <div className="text-2xl font-bold text-green-700 dark:text-green-500">
-                  {stats.employeesWithShifts}
+                  {stats.withShifts}
                 </div>
               </div>
             </div>
@@ -148,7 +148,7 @@ const CompanyWideSummaryStats = ({ currentMonth }) => {
               <div>
                 <div className="text-sm font-medium text-red-600">Without Shifts</div>
                 <div className="text-2xl font-bold text-red-700 dark:text-red-500">
-                  {stats.employeesWithoutShifts}
+                  {stats.withoutShifts}
                 </div>
               </div>
             </div>
@@ -169,7 +169,7 @@ const CompanyWideSummaryStats = ({ currentMonth }) => {
               <div>
                 <div className="text-sm font-medium text-orange-600">Coverage</div>
                 <div className="text-2xl font-bold text-orange-700 dark:text-orange-500">
-                  {stats.coverageRate}
+                  {stats.coverage}%
                 </div>
               </div>
             </div>

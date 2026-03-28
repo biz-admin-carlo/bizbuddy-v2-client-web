@@ -302,7 +302,7 @@ export default function OverviewSuperadmin() {
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <div className="flex items-baseline justify-between gap-2">
-                <p className="text-2xl font-semibold truncate" title={String(c.value)}>
+                <p className="text-lg sm:text-2xl font-semibold truncate" title={String(c.value)}>
                   {c.value}
                 </p>
                 {c.trend && (

@@ -23,8 +23,6 @@ import {
 import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import useAuthStore from "@/store/useAuthStore";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -237,11 +235,16 @@ export default function Overtime() {
     setExporting(false);
   };
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
     if (!filteredSorted.length) {
       toast.message("No data to export");
       return;
     }
+
+    const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+      import("jspdf"),
+      import("jspdf-autotable"),
+    ]);
 
     const company = user?.company?.name || "—";
     const fullName = `${user?.profile?.firstName || ""} ${user?.profile?.lastName || ""}`.trim() || "—";
@@ -260,7 +263,7 @@ export default function Overtime() {
       req.timeLogId || "—",
       req.requestedHours || "0",
       req.status || "—",
-      req.approver?.profile?.firstName && req.approver?.profile?.lastName 
+      req.approver?.profile?.firstName && req.approver?.profile?.lastName
         ? `${req.approver.profile.firstName} ${req.approver.profile.lastName}`
         : req.approver?.email || "—",
       (req.requesterReason || "").substring(0, 40) + (req.requesterReason?.length > 40 ? "..." : "")

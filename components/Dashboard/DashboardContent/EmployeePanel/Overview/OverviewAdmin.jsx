@@ -291,7 +291,7 @@ export default function OverviewAdmin() {
             <CardContent className="px-4 pb-4">
               <div className="flex items-baseline justify-between gap-2">
                 <p 
-                  className={`${c.isText ? 'text-lg' : 'text-2xl'} font-semibold truncate ${c.isText ? 'max-w-[140px]' : ''}`} 
+                  className={`${c.isText ? 'text-lg' : 'text-lg sm:text-2xl'} font-semibold truncate ${c.isText ? 'max-w-[100px] sm:max-w-[140px]' : ''}`} 
                   title={String(c.value)}
                 >
                   {c.value}

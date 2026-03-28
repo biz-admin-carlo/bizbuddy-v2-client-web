@@ -114,9 +114,9 @@ export default function OverviewEmployee() {
 
   // Dynamic username sizing based on length
   const getUsernameFontSize = (username) => {
-    if (!username) return "text-2xl";
+    if (!username) return "text-lg sm:text-2xl";
     const length = username.length;
-    if (length <= 10) return "text-2xl";
+    if (length <= 10) return "text-lg sm:text-2xl";
     if (length <= 15) return "text-xl";
     if (length <= 20) return "text-lg";
     return "text-base";
@@ -305,8 +305,8 @@ export default function OverviewEmployee() {
                       ? getUsernameFontSize(c.value) 
                       : c.isText 
                         ? 'text-lg' 
-                        : 'text-2xl'
-                  } ${c.isText ? 'max-w-[180px]' : ''}`} 
+                        : 'text-lg sm:text-2xl'
+                  } ${c.isText ? 'max-w-[120px] sm:max-w-[180px]' : ''}`} 
                   title={c.value}
                 >
                   {c.value}

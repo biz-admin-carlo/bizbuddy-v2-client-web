@@ -316,7 +316,7 @@ export default function AdminContestRequests() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
+          <h2 className="text-lg sm:text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
             <AlertTriangle className="h-7 w-7 text-orange-500" />
             Contest Requests Management
           </h2>
@@ -340,7 +340,7 @@ export default function AdminContestRequests() {
                 <Clock className="h-6 w-6" />
               </div>
               <div className="ml-4">
-                <p className="text-2xl font-bold">{pendingCount}</p>
+                <p className="text-lg sm:text-2xl font-bold">{pendingCount}</p>
                 <p className="text-muted-foreground">Pending Review</p>
               </div>
             </div>
@@ -355,7 +355,7 @@ export default function AdminContestRequests() {
                 <CheckCircle className="h-6 w-6" />
               </div>
               <div className="ml-4">
-                <p className="text-2xl font-bold">{approvedCount}</p>
+                <p className="text-lg sm:text-2xl font-bold">{approvedCount}</p>
                 <p className="text-muted-foreground">Approved</p>
               </div>
             </div>
@@ -370,7 +370,7 @@ export default function AdminContestRequests() {
                 <XCircle className="h-6 w-6" />
               </div>
               <div className="ml-4">
-                <p className="text-2xl font-bold">{rejectedCount}</p>
+                <p className="text-lg sm:text-2xl font-bold">{rejectedCount}</p>
                 <p className="text-muted-foreground">Rejected</p>
               </div>
             </div>

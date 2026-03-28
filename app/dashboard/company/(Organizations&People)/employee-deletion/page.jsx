@@ -23,7 +23,6 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
-import { exportDeletionRequestsCSV, exportDeletionRequestsPDF } from "@/lib/exportUtils";
 import IconBtn from "@/components/common/IconBtn";
 import ColumnSelector from "@/components/common/ColumnSelector";
 import MultiSelect from "@/components/common/MultiSelect";
@@ -357,7 +356,8 @@ export default function EmployeeAccountDeletion() {
     setExporting(true);
     
     try {
-      const result = await exportDeletionRequestsCSV({ 
+      const { exportDeletionRequestsCSV } = await import("@/lib/exports/deletionRequests");
+      const result = await exportDeletionRequestsCSV({
         data: list,
         visibleColumns: visibleCols,
         columnMap: headerMap,
@@ -382,7 +382,8 @@ export default function EmployeeAccountDeletion() {
     setPdfExporting(true);
     
     try {
-      const result = await exportDeletionRequestsPDF({ 
+      const { exportDeletionRequestsPDF } = await import("@/lib/exports/deletionRequests");
+      const result = await exportDeletionRequestsPDF({
         data: list,
         visibleColumns: visibleCols,
         columnMap: headerMap,

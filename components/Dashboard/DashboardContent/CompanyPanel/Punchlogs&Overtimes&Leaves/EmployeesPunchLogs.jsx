@@ -40,7 +40,6 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
-import { exportEmployeePunchLogsCSV, exportEmployeePunchLogsPDF } from "@/lib/exportUtils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -469,7 +468,7 @@ const SummaryStats = ({ data }) => {
   };
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
       {cards.map(({ key, label, value, Icon, cls, def }) => {
         const c = clsMap[cls];
         return (
@@ -1205,6 +1204,7 @@ export default function EmployeesPunchLogs() {
     if (!displayed.length) { toast.error("No data to export"); return; }
     setExporting(true);
     try {
+      const { exportEmployeePunchLogsCSV } = await import("@/lib/exports/employeePunchLogs");
       const result = await exportEmployeePunchLogsCSV({
         data: displayed, visibleColumns: columnVisibility,
         columnMap: columnMapForExport, filters, userTimezone, companyTimezone,
@@ -1218,6 +1218,7 @@ export default function EmployeesPunchLogs() {
     if (!displayed.length) { toast.error("No data to export"); return; }
     setPdfExporting(true);
     try {
+      const { exportEmployeePunchLogsPDF } = await import("@/lib/exports/employeePunchLogs");
       const result = await exportEmployeePunchLogsPDF({
         data: displayed, visibleColumns: columnVisibility,
         columnMap: columnMapForExport, filters, userTimezone, companyTimezone,
@@ -1268,17 +1269,25 @@ export default function EmployeesPunchLogs() {
   // Render
   // ═════════════════════════════════════════════════════════════════════════════
   return (
-    <div className="max-w-full mx-auto p-4 lg:px-6 px-2 space-y-6">
-      <Toaster position="top-center" />
+    <div className="max-w-7xl mx-auto p-6 space-y-6">
+      <Toaster position="top-center" richColors />
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Clock className="h-7 w-7 text-orange-500" />
-            Employee Punch Logs
-          </h2>
-          <p className="text-muted-foreground mt-1">Track and manage employee time tracking and attendance</p>
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col md:flex-row md:items-center justify-between gap-4"
+      >
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-orange-500 text-white shadow-lg">
+            <Clock className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-lg sm:text-2xl md:text-3xl font-bold tracking-tight">
+              Employee Punch Logs
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-0.5 text-sm">Track and manage employee time tracking and attendance</p>
+          </div>
         </div>
         <div className="flex gap-2">
           <IconBtn icon={RefreshCw} tooltip="Refresh data"   spinning={refreshing}   onClick={refreshAll} />
@@ -1295,21 +1304,22 @@ export default function EmployeesPunchLogs() {
             )}
           />
         </div>
-      </div>
+      </motion.div>
 
       {/* Summary */}
-      <SummaryStats data={displayed} />
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+        <SummaryStats data={displayed} />
+      </motion.div>
 
       {/* Filters */}
-      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-3">
+      <Card className="border-2 border-orange-200 dark:border-orange-900/50 shadow-lg overflow-hidden">
+        <CardHeader className="pb-3 bg-gradient-to-r from-orange-50 to-transparent dark:from-orange-950/20 border-b">
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500"><Filter className="h-4 w-4" /></div>
+              <div className="p-2 rounded-xl bg-orange-500 text-white shadow-lg"><Filter className="h-4 w-4" /></div>
               Filters &amp; Controls
             </CardTitle>
-            <span className="text-sm text-muted-foreground">Showing {rowsLoaded} of {totalRows} records</span>
+            <span className="text-sm text-gray-500 dark:text-gray-400">Showing {rowsLoaded} of {totalRows} records</span>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1330,7 +1340,7 @@ export default function EmployeesPunchLogs() {
               width={220}
             />
             <span className={labelClass}><Building className="w-4 h-4 mr-1 inline" />Department:</span>
-            <div className="min-w-[180px]">
+            <div className="w-full sm:min-w-[180px]">
               <Select value={filters.departmentId} onValueChange={(v) => setFilters({ ...filters, departmentId: v })}>
                 <SelectTrigger><SelectValue placeholder="All departments" /></SelectTrigger>
                 <SelectContent className="max-h-60">
@@ -1339,7 +1349,7 @@ export default function EmployeesPunchLogs() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="min-w-[140px]">
+            <div className="w-full sm:min-w-[140px]">
               <Select value={filters.status} onValueChange={(v) => setFilters({ ...filters, status: v })}>
                 <SelectTrigger><SelectValue placeholder="All statuses" /></SelectTrigger>
                 <SelectContent>
@@ -1350,7 +1360,7 @@ export default function EmployeesPunchLogs() {
               </Select>
             </div>
             {isDayCare && (
-              <div className="min-w-[170px]">
+              <div className="w-full sm:min-w-[170px]">
                 <Select value={filters.punchType} onValueChange={(v) => setFilters({ ...filters, punchType: v })}>
                   <SelectTrigger><SelectValue placeholder="All types" /></SelectTrigger>
                   <SelectContent>
@@ -1386,12 +1396,11 @@ export default function EmployeesPunchLogs() {
 
       {/* Pending Requests */}
       {pendingRequests.length > 0 && (
-        <Card className="border-2 shadow-md overflow-hidden dark:border-white/10 border-orange-200">
-          <div className="h-1 w-full bg-orange-500" />
-          <CardHeader className="pb-4 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => setRequestsExpanded(!requestsExpanded)}>
+        <Card className="border-2 border-orange-200 dark:border-orange-900/50 shadow-lg overflow-hidden">
+          <CardHeader className="pb-4 cursor-pointer bg-gradient-to-r from-orange-50 to-transparent dark:from-orange-950/20 border-b hover:from-orange-100 dark:hover:from-orange-950/30 transition-colors" onClick={() => setRequestsExpanded(!requestsExpanded)}>
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
-                <div className="p-2 rounded-full bg-orange-500/10 text-orange-500"><AlarmClockPlus className="h-4 w-4" /></div>
+                <div className="p-2 rounded-xl bg-orange-500 text-white shadow-lg"><AlarmClockPlus className="h-4 w-4" /></div>
                 Punch Log Requests Pending Approval
                 {pendingRequests.filter((r) => r.status === "PENDING").length > 0 && (
                   <Badge className="ml-2 bg-red-500 hover:bg-red-600 text-white">
@@ -1401,7 +1410,7 @@ export default function EmployeesPunchLogs() {
               </CardTitle>
               <div className="flex items-center gap-3">
                 <Select value={requestStatusFilter} onValueChange={setRequestStatusFilter}>
-                  <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full sm:w-[140px] h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="PENDING">Pending Only</SelectItem>
                     <SelectItem value="ALL">All Requests</SelectItem>
@@ -1462,7 +1471,7 @@ export default function EmployeesPunchLogs() {
                                       </Badge>
                                     </div>
                                   </div>
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                                     <div className="space-y-1">
                                       <div className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" />Date</div>
                                       <div className="font-medium">{new Date(req.requestedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
@@ -1542,12 +1551,11 @@ export default function EmployeesPunchLogs() {
       )}
 
       {/* Main Table */}
-      <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
-        <div className="h-1 w-full bg-orange-500" />
-        <CardHeader className="pb-3">
+      <Card className="border-2 border-orange-200 dark:border-orange-900/50 shadow-lg overflow-hidden">
+        <CardHeader className="pb-3 bg-gradient-to-r from-orange-50 to-transparent dark:from-orange-950/20 border-b">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
             <CardTitle className="flex items-center gap-2">
-              <div className="p-2 rounded-full bg-orange-500/10 text-orange-500"><Clock className="h-4 w-4" /></div>
+              <div className="p-2 rounded-xl bg-orange-500 text-white shadow-lg"><Clock className="h-4 w-4" /></div>
               Punch Logs
               {isDayCare && (
                 <span className="text-xs font-normal text-muted-foreground flex items-center gap-1 ml-2">
@@ -1555,8 +1563,8 @@ export default function EmployeesPunchLogs() {
                 </span>
               )}
             </CardTitle>
-            <div className="flex flex-col md:flex-row items-end md:items-center gap-2 md:gap-4 text-sm text-muted-foreground">
-              <span>Total Period Hours: <span className="font-semibold text-foreground">{totalPeriodHours}</span></span>
+            <div className="flex flex-col md:flex-row items-end md:items-center gap-2 md:gap-4 text-sm text-gray-500 dark:text-gray-400">
+              <span>Total Period Hours: <span className="font-semibold text-gray-900 dark:text-gray-100">{totalPeriodHours}</span></span>
               <TooltipProvider delayDuration={200}><Tooltip>
                 <TooltipTrigger asChild>
                   <div className="flex items-center gap-2 text-xs cursor-help">

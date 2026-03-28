@@ -504,7 +504,7 @@ export default function Locations() {
     return (
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant="outline" className="min-w-[180px] justify-between">
+          <Button variant="outline" className="w-full sm:min-w-[180px] justify-between">
             {label}
             <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
           </Button>
@@ -737,7 +737,7 @@ export default function Locations() {
     };
 
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <TooltipProvider delayDuration={300}>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -824,7 +824,7 @@ export default function Locations() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
+          <h2 className="text-lg sm:text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
             <MapPin className="h-7 w-7 text-orange-500" />
             Company Locations
           </h2>
@@ -949,7 +949,7 @@ export default function Locations() {
               <Search className="w-4 h-4 mr-1 inline" />
               Search:
             </span>
-            <div className="relative min-w-[200px]">
+            <div className="relative w-full sm:min-w-[200px]">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search locations..."

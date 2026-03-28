@@ -9,11 +9,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Lock, ChevronDown, Building2, User, Pin, PinOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
-// ✅ UPDATED: Schedule moved out of Time Keeping into its own section
+// ---------------------------------------------------------------------------
+// Navigation config
+// ---------------------------------------------------------------------------
+
 const EmployeePanelItems = [
   {
     id: "overview",
@@ -24,10 +26,7 @@ const EmployeePanelItems = [
     id: "my-profile",
     label: "Profile",
     children: [
-      {
-        id: "employee/personal-employment-identifications",
-        label: "Personal Identification",
-      },
+      { id: "employee/personal-employment-identifications", label: "Personal Identification" },
       { id: "employee/employment-details", label: "Employment Details" },
     ],
   },
@@ -44,43 +43,31 @@ const EmployeePanelItems = [
   {
     id: "schedule",
     label: "Schedule",
-    children: [
-      { id: "employee/schedule", label: "My Schedule" },
-    ],
+    children: [{ id: "employee/schedule", label: "My Schedule" }],
   },
   {
     id: "leaves",
     label: "Leaves",
-    children: [
-      { id: "employee/leave-logs", label: "Leave Logs" },
-    ],
+    children: [{ id: "employee/leave-logs", label: "Leave Logs" }],
   },
-  // ✅ Payroll will be added dynamically based on role
 ];
 
-// ✅ NEW: Function to get Payroll items based on role
 function getPayrollItems(role) {
   const roleLower = role.toLowerCase();
-  
-  // Admin, Supervisor, Superadmin → BOTH Payroll Management AND Payslip
   if (["admin", "supervisor", "superadmin"].includes(roleLower)) {
     return {
       id: "payroll",
       label: "Payroll",
       children: [
         { id: "employee/payroll", label: "Payroll Management" },
-        { id: "employee/payslip", label: "My Payslip" }  // ✅ Everyone needs to see their own payslip!
+        { id: "employee/payslip", label: "My Payslip" },
       ],
     };
   }
-  
-  // Employee → Only Payslip
   return {
     id: "payroll",
     label: "Payroll",
-    children: [
-      { id: "employee/payslip", label: "My Payslip" }
-    ],
+    children: [{ id: "employee/payslip", label: "My Payslip" }],
   };
 }
 
@@ -91,19 +78,19 @@ const CompanyPanelItems = [
     children: [
       { id: "company/departments", label: "Departments" },
       { id: "company/employees", label: "Employees" },
-      { id: "company/employee-deletion", label: "Employee Account Deletion" },
+      { id: "company/employee-deletion", label: "Employee Account Deletion", notifyKey: "deletion" },
     ],
   },
   {
     id: "punch-logs",
     label: "Requests & Logs",
     children: [
-      { id: "company/employee-schedules", label: "Employee Schedule" },
+      { id: "company/employee-schedules", label: "Employee Schedule", notifyKey: "unscheduled", variant: "dot" },
       { id: "company/punch-logs", label: "Employees Punch logs" },
-      { id: "company/contest-requests", label: "Employee Requests" },
-      { id: "company/leave-requests", label: "Employees Leave Requests" },
-      { id: "company/overtime-requests", label: "Employees Overtime Requests" },
-      { id: "company/cutoff-periods", label: "Employee Cutoff" },
+      { id: "company/contest-requests", label: "Employee Requests", notifyKey: "contest" },
+      { id: "company/leave-requests", label: "Employees Leave Requests", notifyKey: "leave" },
+      { id: "company/overtime-requests", label: "Employees Overtime Requests", notifyKey: "overtime" },
+      { id: "company/cutoff-periods", label: "Employee Cutoff", notifyKey: "cutoff" },
     ],
   },
   {
@@ -126,7 +113,7 @@ const CompanyPanelItems = [
       { id: "company/profile", label: "Profile" },
       { id: "company/configurations", label: "Configurations" },
       { id: "company/notifications", label: "Notifications" },
-      { id: "company/subscription", label: "Subscription" },
+      { id: "company/subscription", label: "Subscription", notifyKey: "subscription", variant: "dot" },
       { id: "company/deletion", label: "Deletion" },
     ],
   },
@@ -140,15 +127,18 @@ const ReferralPanelItems = [
   },
 ];
 
-// ✅ UPDATED: Add payslip to free allowed routes
+// ---------------------------------------------------------------------------
+// Plan locking
+// ---------------------------------------------------------------------------
+
 const FREE_ALLOWED = new Set([
   "employee/punch",
   "employee/overtime",
   "employee/punch-logs",
   "employee/contest-requests",
-  "employee/schedule", // ✅ Schedule is free
-  "employee/payslip", // ✅ NEW: Free for employees
-  "employee/payroll", // ✅ Payroll Management (for admins)
+  "employee/schedule",
+  "employee/payslip",
+  "employee/payroll",
   "company/punch-logs",
   "company/contest-requests",
   "company/deletion",
@@ -174,7 +164,8 @@ function lockChildByPlan(child, plan) {
 function filterCompanyPanelByRole(items, role) {
   const r = role.toLowerCase();
   if (r === "employee") return [];
-  if (r === "supervisor") return items.filter((g) => ["organizations&people", "punch-logs"].includes(g.id));
+  if (r === "supervisor")
+    return items.filter((g) => ["organizations&people", "punch-logs"].includes(g.id));
   return items;
 }
 
@@ -202,10 +193,84 @@ function applyPlanLock(groups, plan) {
   }));
 }
 
+// ---------------------------------------------------------------------------
+// ✅ Unified notification resolver
+//    Centralises ALL count/dot logic so every component just reads this map.
+// ---------------------------------------------------------------------------
+
+/**
+ * Given the raw counts, returns a flat map:
+ *   notifyKey → { count: number, variant: "badge" | "dot" }
+ *
+ * "dot" keys only ever show a coloured circle (no number).
+ * "badge" keys show a red numbered badge.
+ */
+function buildNotifyMap({ contest, overtime, leave, deletion, cutoff, unscheduled, subscriptionExpiring }) {
+  return {
+    contest:      { count: contest,      variant: "badge" },
+    overtime:     { count: overtime,     variant: "badge" },
+    leave:        { count: leave,        variant: "badge" },
+    deletion:     { count: deletion,     variant: "badge" },
+    cutoff:       { count: cutoff,       variant: "badge" },
+    unscheduled:  { count: unscheduled,  variant: "dot"   },   // dot — no number shown
+    subscription: { count: subscriptionExpiring ? 1 : 0, variant: "dot" },
+  };
+}
+
+/**
+ * Returns the total badge count for a group (used on the parent header button).
+ * Dot-only keys are excluded because they don't carry a meaningful count.
+ */
+function groupBadgeCount(group, notifyMap) {
+  return group.children.reduce((sum, child) => {
+    if (!child.notifyKey) return sum;
+    const entry = notifyMap[child.notifyKey];
+    if (!entry || entry.variant === "dot") return sum;
+    return sum + (entry.count || 0);
+  }, 0);
+}
+
+/** Returns true if any child in the group has a dot-type notification active. */
+function groupHasDot(group, notifyMap) {
+  return group.children.some((child) => {
+    if (!child.notifyKey) return false;
+    const entry = notifyMap[child.notifyKey];
+    return entry?.variant === "dot" && entry.count > 0;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Notification badge components
+// ---------------------------------------------------------------------------
+
+/** A clean numbered badge — no redundant dot alongside it. */
+function NotifyBadge({ count, size = "md" }) {
+  if (!count || count <= 0) return null;
+  const sizeClass = size === "sm"
+    ? "text-[9px] px-1 py-0 min-w-[16px] h-4"
+    : "text-[10px] px-1.5 py-0.5 min-w-[20px] h-5";
+  return (
+    <span
+      className={`inline-flex items-center justify-center rounded-full bg-red-500 font-semibold text-white flex-shrink-0 ${sizeClass}`}
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
+/** A simple pulsing dot — used for non-numeric alerts (schedule, subscription). */
+function NotifyDot({ color = "orange" }) {
+  const bg = color === "orange" ? "bg-orange-500" : "bg-red-500";
+  return <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 animate-pulse ${bg}`} />;
+}
+
+// ---------------------------------------------------------------------------
+// Skeleton
+// ---------------------------------------------------------------------------
+
 function SidebarSkeleton() {
   return (
     <div className="flex flex-col h-full animate-pulse">
-      {/* Logo Skeleton */}
       <div className="flex items-center justify-between p-3 sm:p-4 border-b border-neutral-200 dark:border-neutral-700">
         <Skeleton className="h-8 w-28" />
         <div className="flex gap-2">
@@ -213,7 +278,6 @@ function SidebarSkeleton() {
           <Skeleton className="w-10 h-10 rounded-full" />
         </div>
       </div>
-      {/* User Info Skeleton */}
       <div className="flex flex-col items-center p-3 sm:p-4 lg:p-6 border-b border-neutral-200 dark:border-neutral-700">
         <Skeleton className="w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-full mb-2 sm:mb-3" />
         <Skeleton className="h-3 sm:h-4 w-24 sm:w-32 mb-1 sm:mb-2" />
@@ -239,39 +303,52 @@ function SidebarSkeleton() {
   );
 }
 
-function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle, pendingContestCount = 0 }) {
-  const hasChildWithPendingCount = item.children.some(child => child.hasPendingCount);
-  
+// ---------------------------------------------------------------------------
+// CollapsibleNavItem — now purely driven by notifyMap
+// ---------------------------------------------------------------------------
+
+function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle, notifyMap = {} }) {
+  // ✅ Aggregate badge count & dot state from the unified map
+  const totalBadge = groupBadgeCount(item, notifyMap);
+  const hasDot     = groupHasDot(item, notifyMap);
+
   return (
     <li className="mb-1 sm:mb-2 w-full">
-      <div className="w-full">
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => onToggle(item.id)}
-          className="flex w-full items-center gap-2
-                     rounded-lg sm:rounded-xl border border-neutral-200 bg-white
-                     px-3 sm:px-4 lg:px-5 sm:py-1 lg:py-2
-                     text-xs sm:text-sm shadow-sm transition-all duration-200
-                     hover:border-orange-200 hover:bg-gradient-to-r hover:from-orange-50 hover:to-orange-50
-                     dark:border-neutral-700 dark:bg-neutral-900 dark:hover:border-orange-700
-                     dark:hover:from-orange-900 dark:hover:to-orange-900
-                     min-h-[48px] sm:min-h-[52px] touch-manipulation"
-        >
-          <span className="text-neutral-700 dark:text-neutral-200 leading-tight flex-none truncate pr-2">{item.label}</span>
+      <motion.button
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        onClick={() => onToggle(item.id)}
+        className="flex w-full items-center gap-2
+                   rounded-lg sm:rounded-xl border border-neutral-200 bg-white
+                   px-3 sm:px-4 lg:px-5 sm:py-1 lg:py-2
+                   text-xs sm:text-sm shadow-sm transition-all duration-200
+                   hover:border-orange-200 hover:bg-gradient-to-r hover:from-orange-50 hover:to-orange-50
+                   dark:border-neutral-700 dark:bg-neutral-900 dark:hover:border-orange-700
+                   dark:hover:from-orange-900 dark:hover:to-orange-900
+                   min-h-[48px] sm:min-h-[52px] touch-manipulation"
+      >
+        <span className="text-neutral-700 dark:text-neutral-200 leading-tight flex-none truncate pr-2">
+          {item.label}
+        </span>
 
-          <div className="flex items-center gap-2 ml-auto">
-            {hasChildWithPendingCount && pendingContestCount > 0 && (
-              <Badge className="bg-red-500 hover:bg-red-600 text-white text-[10px] px-1.5 py-0.5 min-w-[20px] h-5 flex items-center justify-center rounded-full">
-                {pendingContestCount}
-              </Badge>
-            )}
-            <motion.div animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.2 }} className="flex-shrink-0">
-              <ChevronDown className="h-4 w-4 sm:h-5 sm:w-5 text-neutral-500" />
-            </motion.div>
-          </div>
-        </motion.button>
-      </div>
+        {/* ✅ Right side: only one indicator at most */}
+        <div className="flex items-center gap-2 ml-auto">
+          {totalBadge > 0 ? (
+            // Prefer badge count over dot when there are numbers to show
+            <NotifyBadge count={totalBadge} size="sm" />
+          ) : hasDot ? (
+            <NotifyDot />
+          ) : null}
+
+          <motion.div
+            animate={{ rotate: expanded ? 180 : 0 }}
+            transition={{ duration: 0.2 }}
+            className="flex-shrink-0"
+          >
+            <ChevronDown className="h-4 w-4 sm:h-5 sm:w-5 text-neutral-500" />
+          </motion.div>
+        </div>
+      </motion.button>
 
       <AnimatePresence>
         {expanded && (
@@ -283,8 +360,13 @@ function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle,
             className="mt-1 sm:mt-2 ml-1 sm:ml-2 space-y-0.5 sm:space-y-1 overflow-hidden"
           >
             {item.children.map((c, i) => {
-              const route = `/dashboard/${c.id}`;
+              const route  = `/dashboard/${c.id}`;
               const active = currentPath === route;
+
+              // ✅ Pull notification info from the unified map
+              const notifyEntry = c.notifyKey ? notifyMap[c.notifyKey] : null;
+              const childCount  = notifyEntry?.count  || 0;
+              const childVariant = notifyEntry?.variant || "badge";
 
               return (
                 <motion.li
@@ -297,41 +379,37 @@ function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle,
                     href={c.locked ? "#" : route}
                     prefetch={false}
                     onClick={(e) => {
-                      if (c.locked) {
-                        e.preventDefault();
-                        return;
-                      }
+                      if (c.locked) { e.preventDefault(); return; }
                       onNavigate(route);
                     }}
                     className={`flex w-full items-center gap-3 rounded-md sm:rounded-lg
                                 px-3 sm:px-4 lg:px-5 py-2.5 sm:py-3
                                 text-xs sm:text-sm transition-all duration-200 border-l-2
                                 ml-1 sm:ml-2 min-h-[44px] sm:min-h-[48px] touch-manipulation
-                                ${
-                                  active
-                                    ? "bg-gradient-to-r from-orange-100 to-orange-100 dark:from-orange-900 dark:to-orange-900 border-l-orange-500 font-semibold text-orange-700 dark:text-orange-300 shadow-sm"
-                                    : "hover:bg-neutral-50 dark:hover:bg-neutral-800 border-l-transparent hover:border-l-neutral-300 dark:hover:border-l-neutral-600"
+                                ${active
+                                  ? "bg-gradient-to-r from-orange-100 to-orange-100 dark:from-orange-900 dark:to-orange-900 border-l-orange-500 font-semibold text-orange-700 dark:text-orange-300 shadow-sm"
+                                  : "hover:bg-neutral-50 dark:hover:bg-neutral-800 border-l-transparent hover:border-l-neutral-300 dark:hover:border-l-neutral-600"
                                 }
                                 ${c.locked ? "cursor-not-allowed opacity-60" : "hover:shadow-sm"}`}
                   >
                     <span
                       className={`leading-tight flex-none truncate pr-2 ${
-                        active ? "text-orange-700 dark:text-orange-300" : "text-neutral-600 dark:text-neutral-300"
+                        active
+                          ? "text-orange-700 dark:text-orange-300"
+                          : "text-neutral-600 dark:text-neutral-300"
                       }`}
                     >
                       {c.label}
                     </span>
 
+                    {/* ✅ Child right-side: single, clean indicator */}
                     <div className="flex items-center gap-2 ml-auto">
-                      {c.hasPendingCount && pendingContestCount > 0 && (
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                          <Badge className="bg-red-500 hover:bg-red-600 text-white text-[10px] px-1.5 py-0.5 min-w-[18px] h-4 flex items-center justify-center rounded-full">
-                            {pendingContestCount}
-                          </Badge>
-                        </div>
+                      {childCount > 0 && (
+                        childVariant === "dot"
+                          ? <NotifyDot />
+                          : <NotifyBadge count={childCount} size="sm" />
                       )}
-                      
+
                       {c.locked && c.requiredPlan && (
                         <Badge
                           variant="outline"
@@ -355,12 +433,19 @@ function CollapsibleNavItem({ item, currentPath, onNavigate, expanded, onToggle,
   );
 }
 
+// ---------------------------------------------------------------------------
+// SidebarUserInfo
+// ---------------------------------------------------------------------------
+
 function SidebarUserInfo({ profileData, plan }) {
-  const usr = profileData.user || {};
+  const usr  = profileData.user    || {};
   const prof = profileData.profile || {};
   const comp = profileData.company || {};
   const initials = (prof.firstName?.[0] || "") + (prof.lastName?.[0] || "");
-  const name = prof.firstName || prof.lastName ? `${prof.firstName} ${prof.lastName}`.trim() : usr.username || "Unknown User";
+  const name =
+    prof.firstName || prof.lastName
+      ? `${prof.firstName} ${prof.lastName}`.trim()
+      : usr.username || "Unknown User";
 
   return (
     <motion.div
@@ -369,25 +454,18 @@ function SidebarUserInfo({ profileData, plan }) {
       className="p-3 sm:p-4 lg:p-5 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900"
     >
       <div className="flex flex-col space-y-3">
-        {/* Top Row - Avatar and Company */}
         <div className="flex items-start justify-between gap-3">
-          {/* Avatar - Matching Navbar Style */}
-          <motion.div 
-            whileHover={{ scale: 1.05 }} 
-            className="flex-shrink-0"
-          >
+          <motion.div whileHover={{ scale: 1.05 }} className="flex-shrink-0">
             <div className="relative">
               <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-lg border-2 border-white dark:border-neutral-800">
                 <span className="text-white font-bold text-lg sm:text-xl">
                   {initials.toUpperCase() || "?"}
                 </span>
               </div>
-              {/* Online Status Indicator */}
-              <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 border-2 border-white dark:border-neutral-900 rounded-full"></div>
+              <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 border-2 border-white dark:border-neutral-900 rounded-full" />
             </div>
           </motion.div>
 
-          {/* Company Info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <Building2 className="w-4 h-4 text-neutral-500 dark:text-neutral-400 flex-shrink-0" />
@@ -401,7 +479,6 @@ function SidebarUserInfo({ profileData, plan }) {
           </div>
         </div>
 
-        {/* Bottom Row - User Details */}
         <div className="space-y-1 pt-2 border-t border-neutral-100 dark:border-neutral-800">
           <h3 className="text-sm sm:text-base font-semibold text-neutral-900 dark:text-neutral-100 truncate">
             {name}
@@ -418,22 +495,23 @@ function SidebarUserInfo({ profileData, plan }) {
   );
 }
 
-// ✅ NEW: Sidebar Header with Logo
+// ---------------------------------------------------------------------------
+// SidebarHeader
+// ---------------------------------------------------------------------------
+
 function SidebarHeader({ isSidebarPinned, togglePin, closeSidebar }) {
   return (
     <div className="flex items-center justify-between p-3 sm:p-4 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
-      {/* Logo */}
       <Link href="/" className="flex items-center">
-        <motion.img 
-          src="/logo.png" 
-          alt="BizBuddy" 
+        <motion.img
+          src="/logo.png"
+          alt="BizBuddy"
           className="h-8 sm:h-9 w-auto"
           whileHover={{ scale: 1.05 }}
           transition={{ duration: 0.2 }}
         />
       </Link>
 
-      {/* Pin & Close Buttons */}
       <TooltipProvider delayDuration={200}>
         <div className="flex items-center gap-1.5 sm:gap-2">
           <Tooltip>
@@ -444,11 +522,9 @@ function SidebarHeader({ isSidebarPinned, togglePin, closeSidebar }) {
                 onClick={togglePin}
                 className="flex items-center justify-center p-2 sm:p-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-all duration-200"
               >
-                {isSidebarPinned ? (
-                  <PinOff className="w-4 h-4 text-orange-600" />
-                ) : (
-                  <Pin className="w-4 h-4 text-neutral-600 dark:text-neutral-300" />
-                )}
+                {isSidebarPinned
+                  ? <PinOff className="w-4 h-4 text-orange-600" />
+                  : <Pin    className="w-4 h-4 text-neutral-600 dark:text-neutral-300" />}
               </motion.button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
@@ -475,19 +551,65 @@ function SidebarHeader({ isSidebarPinned, togglePin, closeSidebar }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Root Sidebar
+// ---------------------------------------------------------------------------
 
 export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, isSidebarPinned, togglePin }) {
   const { token } = useAuthStore();
-  const router = useRouter();
-  const pathname = usePathname();
-  const [profileData, setProfileData] = useState(null);
-  const [plan, setPlan] = useState("free");
-  const [openDropdown, setOpenDropdown] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [isPending, startTransition] = useTransition();
-  
-  const [pendingContestCount, setPendingContestCount] = useState(7);
-  
+  const router    = useRouter();
+  const pathname  = usePathname();
+
+  const [profileData, setProfileData]               = useState(null);
+  const [plan, setPlan]                             = useState("free");
+  const [openDropdown, setOpenDropdown]             = useState(null);
+  const [loading, setLoading]                       = useState(true);
+  const [, startTransition]                         = useTransition();
+
+  // ✅ All raw counts in one place
+  const [counts, setCounts] = useState({
+    contest:             0,
+    overtime:            0,
+    leave:               0,
+    deletion:            0,
+    cutoff:              0,
+    unscheduled:         0,
+    subscriptionExpiring: false,
+  });
+
+  // Fetch pending counts
+  useEffect(() => {
+    if (!token) return;
+    const h    = { Authorization: `Bearer ${token}` };
+    const base = process.env.NEXT_PUBLIC_API_URL;
+
+    Promise.allSettled([
+      fetch(`${base}/api/usershifts/company-stats`,                  { headers: h }).then((r) => r.json()),
+      fetch(`${base}/api/contest-policy/view-allContestTimeLogs`,    { headers: h }).then((r) => r.json()),
+      fetch(`${base}/api/overtime`,                                  { headers: h }).then((r) => r.json()),
+      fetch(`${base}/api/leaves`,                                    { headers: h }).then((r) => r.json()),
+      fetch(`${base}/api/account-deletion/get-request`,             { headers: h }).then((r) => r.json()),
+      fetch(`${base}/api/cutoff-periods`,                            { headers: h }).then((r) => r.json()),
+    ]).then(([shifts, contest, overtime, leaves, deletion, cutoff]) => {
+      setCounts((prev) => ({
+        ...prev,
+        unscheduled: shifts.status  === "fulfilled" && shifts.value.data?.withoutShifts != null
+          ? shifts.value.data.withoutShifts : prev.unscheduled,
+        contest:  contest.status  === "fulfilled" && Array.isArray(contest.value.data)
+          ? contest.value.data.filter((c) => c.status?.toLowerCase() === "pending").length : prev.contest,
+        overtime: overtime.status === "fulfilled" && Array.isArray(overtime.value.data)
+          ? overtime.value.data.filter((o) => o.status?.toLowerCase() === "pending").length : prev.overtime,
+        leave:    leaves.status   === "fulfilled" && Array.isArray(leaves.value.data)
+          ? leaves.value.data.filter((l) => l.status?.toLowerCase() === "pending").length : prev.leave,
+        deletion: deletion.status === "fulfilled" && Array.isArray(deletion.value.data)
+          ? deletion.value.data.filter((r) => r.status?.toLowerCase() === "pending").length : prev.deletion,
+        cutoff:   cutoff.status   === "fulfilled" && Array.isArray(cutoff.value.data)
+          ? cutoff.value.data.filter((p) => p.status?.toLowerCase() === "locked").length : prev.cutoff,
+      }));
+    });
+  }, [token]);
+
+  // Fetch profile
   useEffect(() => {
     if (!token) return;
     setLoading(true);
@@ -501,29 +623,35 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
           const p = d.data.subscription?.plan?.name?.toLowerCase() || "free";
           setPlan(p);
           useAuthStore.setState((state) => ({ ...state, plan: p }));
+          const endDate = d.data.subscription?.endDate;
+          if (endDate) {
+            const daysLeft = (new Date(endDate) - new Date()) / (1000 * 60 * 60 * 24);
+            setCounts((prev) => ({ ...prev, subscriptionExpiring: daysLeft <= 30 }));
+          }
         }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [token]);
 
+  // ✅ Build the single unified notify map
+  const notifyMap = buildNotifyMap(counts);
+
   const navigate = (route) => {
     if (onNavigateStart) onNavigateStart();
-    closeSidebar && closeSidebar();
+    closeSidebar?.();
     startTransition(() => router.push(route));
   };
 
-  const role = profileData?.user?.role || "employee";
+  const role    = profileData?.user?.role || "employee";
   const roleLower = role.toLowerCase();
-  
-  // ✅ NEW: Add payroll items based on role
-  const payrollItem = getPayrollItems(role);
+
+  const payrollItem            = getPayrollItems(role);
   const employeePanelWithPayroll = [...EmployeePanelItems, payrollItem];
-  
-  const features = applyPlanLock(employeePanelWithPayroll, plan); // ✅ UPDATED
-  const settings = applyPlanLock(filterCompanyPanelByRole(CompanyPanelItems, roleLower), plan);
-  const bizbuddy = getBizBuddyItems(role);
-  const referral = ReferralPanelItems;
+
+  const features  = applyPlanLock(employeePanelWithPayroll, plan);
+  const settings  = applyPlanLock(filterCompanyPanelByRole(CompanyPanelItems, roleLower), plan);
+  const bizbuddy  = getBizBuddyItems(role);
 
   const toggle = (id) => setOpenDropdown(openDropdown === id ? null : id);
 
@@ -531,7 +659,7 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
 
   return (
     <>
-      {/* Backdrop for mobile */}
+      {/* Mobile backdrop */}
       <AnimatePresence>
         {isSidebarOpen && (
           <motion.div
@@ -544,7 +672,7 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
         )}
       </AnimatePresence>
 
-      {/* Sidebar Panel */}
+      {/* Sidebar panel */}
       <motion.div
         initial={{ x: "-100%" }}
         animate={{ x: isSidebarOpen ? 0 : "-100%" }}
@@ -556,21 +684,20 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
             <SidebarSkeleton />
           ) : (
             <>
-              {/* ✅ NEW: Logo Header */}
-              <SidebarHeader 
+              <SidebarHeader
                 isSidebarPinned={isSidebarPinned}
                 togglePin={togglePin}
                 closeSidebar={closeSidebar}
               />
 
-              {/* User Info */}
               <SidebarUserInfo profileData={profileData} plan={plan} />
 
-              {/* Navigation Items */}
               <div className="flex-1 overflow-y-auto px-2 sm:px-3 lg:px-4 py-3 sm:py-4 lg:py-6 space-y-3 sm:space-y-4 lg:space-y-6 scrollbar-thin scrollbar-thumb-neutral-300 dark:scrollbar-thumb-neutral-600">
+
+                {/* Employee Panel */}
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
                   <h2 className="mb-1 sm:mb-2 px-1 sm:px-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1 sm:gap-2">
-                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-orange-500 rounded-full flex-shrink-0"></div>
+                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-orange-500 rounded-full flex-shrink-0" />
                     <span className="truncate">Employee Panel</span>
                   </h2>
                   <ul className="space-y-0.5 sm:space-y-1">
@@ -587,17 +714,18 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
                           onNavigate={navigate}
                           expanded={openDropdown === g.id}
                           onToggle={toggle}
-                          pendingContestCount={pendingContestCount}
+                          notifyMap={notifyMap}
                         />
                       </motion.div>
                     ))}
                   </ul>
                 </motion.div>
 
+                {/* Company Panel */}
                 {settings.length > 0 && (
                   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
                     <h2 className="mb-1 sm:mb-2 px-1 sm:px-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1 sm:gap-2">
-                      <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-orange-500 rounded-full flex-shrink-0"></div>
+                      <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-orange-500 rounded-full flex-shrink-0" />
                       <span className="truncate">Company Panel</span>
                     </h2>
                     <ul className="space-y-0.5 sm:space-y-1">
@@ -614,7 +742,7 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
                             onNavigate={navigate}
                             expanded={openDropdown === g.id}
                             onToggle={toggle}
-                            pendingContestCount={pendingContestCount}
+                            notifyMap={notifyMap}
                           />
                         </motion.div>
                       ))}
@@ -622,10 +750,11 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
                   </motion.div>
                 )}
 
+                {/* BizBuddy Panel */}
                 {bizbuddy.length > 0 && (
                   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
                     <h2 className="mb-1 sm:mb-2 px-1 sm:px-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1 sm:gap-2">
-                      <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-orange-500 rounded-full flex-shrink-0"></div>
+                      <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-orange-500 rounded-full flex-shrink-0" />
                       <span className="truncate">BizBuddy Panel</span>
                     </h2>
                     <ul className="space-y-0.5 sm:space-y-1">
@@ -642,7 +771,7 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
                             onNavigate={navigate}
                             expanded={openDropdown === g.id}
                             onToggle={toggle}
-                            pendingContestCount={pendingContestCount}
+                            notifyMap={notifyMap}
                           />
                         </motion.div>
                       ))}
