@@ -30,6 +30,8 @@ import {
   UserCheck,
   CheckCircle,
   XCircle,
+  TrendingUp,
+  Info,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -46,6 +48,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import TableSkeleton from "@/components/common/TableSkeleton";
+import { ContestDialog } from "./ContestDialog";
 import ConfirmDeleteDialog from "@/components/common/ConfirmDeleteDialog";
 import FormDialog from "@/components/common/FormDialog";
 import OrangeLoadingSpinner from "@/components/common/Spinner";
@@ -269,8 +272,13 @@ export default function PunchLogs() {
   const [otReason,      setOtReason]      = useState("");
   const [otHoursEdit,   setOtHoursEdit]   = useState("");
   const [otSubmitting,  setOtSubmitting]  = useState(false);
-  const [otBasis,          setOtBasis]          = useState("daily");
-  const [dailyOtThreshold, setDailyOtThreshold] = useState(8);
+  const [otBasis,            setOtBasis]            = useState("daily");
+  const [dailyOtThreshold,   setDailyOtThreshold]   = useState(8);
+  const [weeklyOtThreshold,  setWeeklyOtThreshold]  = useState(40);
+  const [cutoffOtThreshold,  setCutoffOtThreshold]  = useState(80);
+  const [employeeDeptId,     setEmployeeDeptId]      = useState(null);
+  const [employeeDeptName,   setEmployeeDeptName]    = useState(null);
+  const [activeCutoffPeriod, setActiveCutoffPeriod]  = useState(null);
 
   const [contestDialogOpen,         setContestDialogOpen]         = useState(false);
   const [contestLogId,              setContestLogId]              = useState("");
@@ -378,19 +386,56 @@ export default function PunchLogs() {
         const raw = j.data?.minimumLunchMinutes;
         setMinLunchMins(raw === null ? 0 : raw ?? 60);
         if (j.data?.id) setCompanyId(j.data.id);
-        // ── G-3: OT threshold ──────────────────────────────────
+        // ── OT configuration — all three bases ────────────────
         setOtBasis(j.data?.otBasis ?? "daily");
-        setDailyOtThreshold(parseFloat(j.data?.dailyOtThresholdHours ?? 8));
+        setDailyOtThreshold(parseFloat(j.data?.dailyOtThresholdHours   ?? 8));
+        setWeeklyOtThreshold(parseFloat(j.data?.weeklyOtThresholdHours ?? 40));
+        setCutoffOtThreshold(parseFloat(j.data?.cutoffOtThresholdHours ?? 80));
       }
     } catch { setDefaultHours(8); setMinLunchMins(60); }
   }, [API_URL, token]);
+
+  const fetchEmployeeDetails = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/employment-details/me`, { headers: { Authorization: `Bearer ${token}` } });
+      const j = await res.json();
+      if (res.ok) {
+        const dept = j.data?.department;
+        setEmployeeDeptId(j.data?.departmentId || dept?.id || null);
+        setEmployeeDeptName(dept?.name || null);
+      }
+    } catch {}
+  }, [token, API_URL]);
+
+  const fetchActiveCutoffPeriod = useCallback(async (deptId) => {
+    if (!deptId) return;
+    try {
+      const res = await fetch(`${API_URL}/api/cutoff-periods?departmentId=${deptId}&status=open`, { headers: { Authorization: `Bearer ${token}` } });
+      const j = await res.json();
+      if (res.ok && Array.isArray(j.data) && j.data.length > 0) {
+        const p = j.data[0];
+        setActiveCutoffPeriod({ id: p.id, periodStart: p.periodStart, periodEnd: p.periodEnd });
+      } else {
+        setActiveCutoffPeriod(null);
+      }
+    } catch {}
+  }, [token, API_URL]);
 
   const fetchSmartDetectsOT = useCallback(async () => {
     if (!token) return;
     try {
       setLoading(true);
       toast.message("Loading smart overtime logs...");
-      const res = await fetch(`${API_URL}/api/overtime/smart-detect`, { headers: { Authorization: `Bearer ${token}` } });
+      const params = new URLSearchParams({ otBasis });
+      if (otBasis === "daily")        params.set("threshold", dailyOtThreshold);
+      else if (otBasis === "weekly")  params.set("threshold", weeklyOtThreshold);
+      else if (otBasis === "cutoff") {
+        params.set("threshold", cutoffOtThreshold);
+        if (activeCutoffPeriod?.periodStart) params.set("periodStart", activeCutoffPeriod.periodStart);
+        if (activeCutoffPeriod?.periodEnd)   params.set("periodEnd",   activeCutoffPeriod.periodEnd);
+      }
+      const res = await fetch(`${API_URL}/api/overtime/smart-detect?${params}`, { headers: { Authorization: `Bearer ${token}` } });
       const j = await res.json();
       if (res.ok && Array.isArray(j.data)) {
         const transformed = j.data.map((d) => ({
@@ -427,7 +472,7 @@ export default function PunchLogs() {
     } finally {
       setLoading(false);
     }
-  }, [API_URL, token]);
+  }, [API_URL, token, otBasis, dailyOtThreshold, weeklyOtThreshold, cutoffOtThreshold, activeCutoffPeriod]);
 
   const fetchMyRequests = useCallback(async () => {
     if (!token) return;
@@ -520,12 +565,16 @@ export default function PunchLogs() {
     fetchSupervisors();
     fetchMyRequests();
     fetchUserShifts();
-  }, [token, fetchApprovers, fetchCompanySettings, fetchLocations]);
+    fetchEmployeeDetails();
+  }, [token, fetchApprovers, fetchCompanySettings, fetchLocations, fetchEmployeeDetails]);
 
   // ── FIX 2: logsWithSchedule — correct AM/PM/full-day hours formulas ──────────
   const logsWithSchedule = useMemo(() => {
-    const isDailyBasis  = otBasis === "daily";
-    const otCapMins     = isDailyBasis ? dailyOtThreshold * 60 : defaultHours * 60;
+    const otThresholdHours =
+      otBasis === "daily"  ? dailyOtThreshold  :
+      otBasis === "weekly" ? weeklyOtThreshold :
+      cutoffOtThreshold;
+    const otCapMins = otThresholdHours * 60;
     const unschedCap    = Math.max(0, otCapMins - minLunchMins);
     const sourceData = viewMode === "smart" ? smartLogs : logs;
 
@@ -539,7 +588,7 @@ export default function PunchLogs() {
         : (log._lunchNum || 0);
       const netMins          = Math.max(0, grossMins - lunchMinsVal - excessCoffeeMins);
       const inside           = Math.min(netMins, unschedCap);
-      const rawOtMins        = isDailyBasis ? Math.max(0, netMins - unschedCap) : 0;
+      const rawOtMins        = otBasis === "daily" ? Math.max(0, netMins - unschedCap) : 0;
 
       const fullDevIn  = getDevice(log, "in");
       const fullDevOut = getDevice(log, "out");
@@ -638,7 +687,61 @@ export default function PunchLogs() {
         cutoffApproval: log.cutoffApproval ?? null,
       };
     });
-  }, [logs, smartLogs, viewMode, defaultHours, minLunchMins, otBasis, dailyOtThreshold, locList, userShifts]);
+  }, [logs, smartLogs, viewMode, defaultHours, minLunchMins, otBasis, dailyOtThreshold, weeklyOtThreshold, cutoffOtThreshold, locList, userShifts]);
+
+  // ── OT Consumption — computed from logs within the active window ─────────────
+  const otConsumptionData = useMemo(() => {
+    if (otBasis === "daily") {
+      return { type: "daily", threshold: dailyOtThreshold, label: `${dailyOtThreshold}h per session`, approvedHours: 0, pendingHours: 0, pct: 0, window: null };
+    }
+
+    let windowStart, windowEnd, label;
+
+    if (otBasis === "weekly") {
+      const now = new Date();
+      const day = now.getDay();
+      const diffToMon = day === 0 ? -6 : 1 - day;
+      windowStart = new Date(now);
+      windowStart.setDate(now.getDate() + diffToMon);
+      windowStart.setHours(0, 0, 0, 0);
+      windowEnd = new Date(windowStart);
+      windowEnd.setDate(windowStart.getDate() + 6);
+      windowEnd.setHours(23, 59, 59, 999);
+      label = `${safeDate(windowStart)} – ${safeDate(windowEnd)}`;
+    } else if (activeCutoffPeriod) {
+      windowStart = new Date(activeCutoffPeriod.periodStart);
+      windowEnd   = new Date(activeCutoffPeriod.periodEnd);
+      label = `${safeDate(activeCutoffPeriod.periodStart)} – ${safeDate(activeCutoffPeriod.periodEnd)}`;
+    } else {
+      return { type: otBasis, threshold: cutoffOtThreshold, label: "No active cutoff period", approvedHours: 0, pendingHours: 0, pct: 0, window: null };
+    }
+
+    const windowLogs = logs.filter((l) => {
+      if (!l.timeIn) return false;
+      const d = new Date(l.timeIn);
+      return d >= windowStart && d <= windowEnd;
+    });
+
+    const approvedHours = parseFloat(windowLogs.reduce((sum, l) => {
+      const ots = Array.isArray(l.overtime) ? l.overtime : [];
+      return sum + ots.filter((ot) => ot.status === "approved").reduce((s, ot) => s + parseFloat(ot.requestedHours || 0), 0);
+    }, 0).toFixed(2));
+
+    const pendingHours = parseFloat(windowLogs.reduce((sum, l) => {
+      const ots = Array.isArray(l.overtime) ? l.overtime : [];
+      return sum + ots.filter((ot) => ot.status === "pending").reduce((s, ot) => s + parseFloat(ot.requestedHours || 0), 0);
+    }, 0).toFixed(2));
+
+    const threshold = otBasis === "weekly" ? weeklyOtThreshold : cutoffOtThreshold;
+    const pct = Math.min(100, (approvedHours / threshold) * 100);
+
+    return { type: otBasis, threshold, label, approvedHours, pendingHours, pct, window: { start: windowStart, end: windowEnd } };
+  }, [logs, otBasis, dailyOtThreshold, weeklyOtThreshold, cutoffOtThreshold, activeCutoffPeriod]);
+
+  // ── Auto-fetch active cutoff period once otBasis + departmentId are known ────
+  useEffect(() => {
+    if (otBasis === "cutoff" && employeeDeptId) fetchActiveCutoffPeriod(employeeDeptId);
+  }, [otBasis, employeeDeptId, fetchActiveCutoffPeriod]);
 
   // ── FIX 3: getSortableValue — punchType sort covers all 4 values ──────────────
   const getSortableValue = (l, k) => {
@@ -708,14 +811,14 @@ export default function PunchLogs() {
     setDeleteLoading(false);
   };
 
-  const submitContestPolicy = async () => {
+  const submitContestPolicy = async (clockInISO, clockOutISO) => {
     const errors = {};
     if (!contestLogId)              errors.logId       = "Please select a punch log";
     if (!contestApproverId)         errors.approverId  = "Please select an approver";
     if (!contestReason.trim())      errors.reason      = "Please provide a reason";
     if (!contestDescription.trim()) errors.description = "Please provide a description";
-    if (!contestRequestedClockIn)   errors.clockIn     = "Please provide the correct clock-in time";
-    if (!contestRequestedClockOut)  errors.clockOut    = "Please provide the correct clock-out time";
+    if (!clockInISO)                errors.clockIn     = "Please provide the correct clock-in time";
+    if (!clockOutISO)               errors.clockOut    = "Please provide the correct clock-out time";
     setContestErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
@@ -732,8 +835,8 @@ export default function PunchLogs() {
           description: contestDescription,
           currentClockIn: selectedLog?.timeIn,
           currentClockOut: selectedLog?.timeOut,
-          requestedClockIn: contestRequestedClockIn,
-          requestedClockOut: contestRequestedClockOut,
+          requestedClockIn: clockInISO,
+          requestedClockOut: clockOutISO,
           submittedAt: new Date().toISOString(),
         }),
       });
@@ -750,8 +853,9 @@ export default function PunchLogs() {
 
   const refresh = () => {
     setRefreshing(true);
-    const promises = [fetchLogs(), fetchCompanySettings(), fetchLocations()];
+    const promises = [fetchLogs(), fetchCompanySettings(), fetchLocations(), fetchEmployeeDetails()];
     if (viewMode === "smart") promises.push(fetchSmartDetectsOT());
+    if (otBasis === "cutoff" && employeeDeptId) promises.push(fetchActiveCutoffPeriod(employeeDeptId));
     Promise.all(promises).finally(() => setRefreshing(false));
   };
 
@@ -902,6 +1006,107 @@ export default function PunchLogs() {
             </CardContent>
           </Card>
         </div>
+
+        {/* OT Configuration & Consumption Panel */}
+        <Card className="border-2 dark:border-white/10 overflow-hidden">
+          <div className={`h-1 w-full ${
+            otBasis === "daily"  ? "bg-blue-500"   :
+            otBasis === "weekly" ? "bg-purple-500" :
+            "bg-orange-500"
+          }`} />
+          <CardContent className="p-4 space-y-3">
+            {/* Header row */}
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 border ${
+                  otBasis === "daily"  ? "bg-blue-50   border-blue-200   text-blue-600"   :
+                  otBasis === "weekly" ? "bg-purple-50 border-purple-200 text-purple-600" :
+                  "bg-orange-50 border-orange-200 text-orange-600"
+                }`}>
+                  <TrendingUp className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold">
+                    {otBasis === "daily"  && "Daily OT Configuration"}
+                    {otBasis === "weekly" && "Weekly OT Configuration"}
+                    {otBasis === "cutoff" && "Cutoff OT Configuration"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {otBasis === "daily"  && `Sessions exceeding ${dailyOtThreshold}h are eligible for OT`}
+                    {otBasis === "weekly" && `Cumulative weekly hours exceeding ${weeklyOtThreshold}h are eligible for OT`}
+                    {otBasis === "cutoff" && `Cumulative cutoff-period hours exceeding ${cutoffOtThreshold}h are eligible for OT`}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {employeeDeptName && (
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
+                    Dept: {employeeDeptName}
+                  </span>
+                )}
+                <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
+                  otBasis === "daily"  ? "bg-blue-100   text-blue-700"   :
+                  otBasis === "weekly" ? "bg-purple-100 text-purple-700" :
+                  "bg-orange-100 text-orange-700"
+                }`}>
+                  {otBasis === "daily" ? "Daily OT" : otBasis === "weekly" ? "Weekly OT" : "Cutoff OT"}
+                </span>
+              </div>
+            </div>
+
+            {/* Consumption meter — weekly / cutoff only */}
+            {otConsumptionData.type !== "daily" && (
+              <div className="pt-2 border-t space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground font-medium">{otConsumptionData.label || "Current window"}</span>
+                  <span className="font-mono font-bold">
+                    {otConsumptionData.approvedHours}h <span className="text-muted-foreground font-normal">/ {otConsumptionData.threshold}h</span>
+                  </span>
+                </div>
+                <div className="h-2 w-full bg-neutral-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      otConsumptionData.pct >= 100 ? "bg-red-500"   :
+                      otConsumptionData.pct >= 80  ? "bg-amber-500" :
+                      "bg-green-500"
+                    }`}
+                    style={{ width: `${otConsumptionData.pct}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>
+                    {otConsumptionData.approvedHours === 0
+                      ? "No approved OT in this period"
+                      : `${otConsumptionData.approvedHours}h approved`}
+                    {otConsumptionData.pendingHours > 0 && (
+                      <span className="ml-2 text-amber-600 font-semibold">· {otConsumptionData.pendingHours}h pending</span>
+                    )}
+                  </span>
+                  <span>{(otConsumptionData.threshold - otConsumptionData.approvedHours).toFixed(2)}h remaining</span>
+                </div>
+              </div>
+            )}
+
+            {/* Smart OT detection note */}
+            {viewMode === "smart" && (
+              <div className="pt-2 border-t flex items-start gap-2">
+                <Info className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                <p className="text-[11px] text-muted-foreground">
+                  Smart OT detected logs where hours exceeded the&nbsp;
+                  <strong>
+                    {otBasis === "daily"  && `${dailyOtThreshold}h daily threshold`}
+                    {otBasis === "weekly" && `${weeklyOtThreshold}h weekly cap`}
+                    {otBasis === "cutoff" && `${cutoffOtThreshold}h cutoff cap`}
+                  </strong>
+                  {otBasis === "cutoff" && activeCutoffPeriod && (
+                    <> &nbsp;({safeDate(activeCutoffPeriod.periodStart)} – {safeDate(activeCutoffPeriod.periodEnd)})</>
+                  )}
+                  .
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Filters */}
         <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
@@ -1373,86 +1578,27 @@ export default function PunchLogs() {
           </DialogContent>
         </Dialog>
 
-        {/* Contest Dialog */}
-        <Dialog open={contestDialogOpen} onOpenChange={setContestDialogOpen}>
-          <DialogContent className="sm:max-w-lg border-2 dark:border-white/30">
-            <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-orange-600" />
-                Contest Clock In/Out Times
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium flex items-center gap-2"><Clock className="h-4 w-4 text-orange-500" />Select Punch Log <span className="text-orange-500">*</span></label>
-                <Select value={contestLogId} onValueChange={(v) => {
-                  setContestLogId(v);
-                  setContestErrors((e) => ({ ...e, logId: undefined }));
-                  const l = filteredSorted.find((x) => x.id === v);
-                  if (l) { setContestRequestedClockIn(l.timeIn?.slice(0, 16) || ""); setContestRequestedClockOut(l.timeOut?.slice(0, 16) || ""); }
-                }}>
-                  <SelectTrigger className={contestErrors.logId ? "border-red-500" : ""}><SelectValue placeholder="Select a punch log to contest" /></SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {filteredSorted.map((l) => (
-                      <SelectItem key={l.id} value={String(l.id)}>
-                        <div className="flex items-center gap-2">
-                          {l.isAnyDA && <Car className="h-3 w-3 text-blue-500" />}
-                          {l.id} — {safeDate(l.timeIn)} ({safeTime(l.timeIn)} to {safeTime(l.timeOut)})
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {contestErrors.logId && <p className="text-red-500 text-xs flex items-center gap-1"><AlertCircle className="h-3 w-3" />{contestErrors.logId}</p>}
-              </div>
-
-              {contestLogId && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Correct Clock In <span className="text-orange-500">*</span></label>
-                      <Input type="datetime-local" value={contestRequestedClockIn} onChange={(e) => { setContestRequestedClockIn(e.target.value); setContestErrors((e) => ({ ...e, clockIn: undefined })); }} className={contestErrors.clockIn ? "border-red-500" : ""} />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Correct Clock Out <span className="text-orange-500">*</span></label>
-                      <Input type="datetime-local" value={contestRequestedClockOut} onChange={(e) => { setContestRequestedClockOut(e.target.value); setContestErrors((e) => ({ ...e, clockOut: undefined })); }} className={contestErrors.clockOut ? "border-red-500" : ""} />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium flex items-center gap-2"><User className="h-4 w-4 text-orange-500" />Approver <span className="text-orange-500">*</span></label>
-                    <Select value={contestApproverId} onValueChange={(v) => { setContestApproverId(v); setContestErrors((e) => ({ ...e, approverId: undefined })); }}>
-                      <SelectTrigger className={contestErrors.approverId ? "border-red-500" : ""}><SelectValue placeholder="Select approver" /></SelectTrigger>
-                      <SelectContent className="max-h-60">{approvers.map((a) => <SelectItem key={a.id} value={String(a.id)}>{a.name || a.email}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Reason <span className="text-orange-500">*</span></label>
-                    <Select value={contestReason} onValueChange={(v) => { setContestReason(v); setContestErrors((e) => ({ ...e, reason: undefined })); }}>
-                      <SelectTrigger className={contestErrors.reason ? "border-red-500" : ""}><SelectValue placeholder="Select reason" /></SelectTrigger>
-                      <SelectContent>
-                        {["system_clock_error","device_malfunction","network_delay","incorrect_time_zone","manual_entry_error","emergency_situation","other"].map((v) => (
-                          <SelectItem key={v} value={v}>{v.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Detailed Explanation <span className="text-orange-500">*</span></label>
-                    <Textarea value={contestDescription} onChange={(e) => { setContestDescription(e.target.value); setContestErrors((e) => ({ ...e, description: undefined })); }} placeholder="Please explain why the recorded times are incorrect..." className={`min-h-[100px] resize-none ${contestErrors.description ? "border-red-500" : ""}`} maxLength={500} />
-                    <div className="flex justify-between text-xs text-muted-foreground"><span>{contestDescription.length}/500</span></div>
-                  </div>
-                </>
-              )}
-            </div>
-            <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => { setContestDialogOpen(false); setContestLogId(""); setContestApproverId(""); setContestReason(""); setContestDescription(""); setContestRequestedClockIn(""); setContestRequestedClockOut(""); setContestErrors({}); }}>Cancel</Button>
-              <Button onClick={submitContestPolicy} disabled={contestSubmitting || !contestLogId} className="bg-orange-500 hover:bg-orange-600 text-white">
-                {contestSubmitting ? "Submitting..." : "Submit Contest"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ContestDialog
+          open={contestDialogOpen}
+          onOpenChange={setContestDialogOpen}
+          filteredSorted={filteredSorted}
+          approvers={approvers}
+          contestLogId={contestLogId}                     setContestLogId={setContestLogId}
+          contestApproverId={contestApproverId}           setContestApproverId={setContestApproverId}
+          contestReason={contestReason}                   setContestReason={setContestReason}
+          contestDescription={contestDescription}         setContestDescription={setContestDescription}
+          contestRequestedClockIn={contestRequestedClockIn}   setContestRequestedClockIn={setContestRequestedClockIn}
+          contestRequestedClockOut={contestRequestedClockOut} setContestRequestedClockOut={setContestRequestedClockOut}
+          contestSubmitting={contestSubmitting}
+          contestErrors={contestErrors}                   setContestErrors={setContestErrors}
+          onSubmit={submitContestPolicy}
+          onCancel={() => {
+            setContestDialogOpen(false);
+            setContestLogId(""); setContestApproverId(""); setContestReason("");
+            setContestDescription(""); setContestRequestedClockIn(""); setContestRequestedClockOut("");
+            setContestErrors({});
+          }}
+        />
 
         <ScheduleDialog open={schedDialogOpen} onOpenChange={setSchedDialogOpen} scheduleList={schedForDialog} />
         <LocationDialog open={locDialogOpen}  onOpenChange={setLocDialogOpen}  list={locDialogList} />

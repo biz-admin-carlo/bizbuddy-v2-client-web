@@ -10,6 +10,7 @@ import Sidebar from "@/components/Dashboard/sidebar";
 import PageLoader from "@/components/Dashboard/PageLoader";
 import DashboardSkeleton from "./DashboardSkeleton";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
+import FeedbackWidget from "@/components/common/FeedbackWidget";
 
 export default function DashboardLayoutClient({ children }) {
   const { token, login } = useAuthStore();
@@ -138,6 +139,8 @@ export default function DashboardLayoutClient({ children }) {
           isSidebarPinned={isSidebarPinned}
           togglePin={togglePin}
         />
+
+        <FeedbackWidget />
 
         <motion.main
           initial={{ opacity: 0 }}

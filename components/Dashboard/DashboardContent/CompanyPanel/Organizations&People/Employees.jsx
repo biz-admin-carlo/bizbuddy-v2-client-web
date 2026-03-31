@@ -23,6 +23,9 @@ import {
   Clock,
   UserCheck,
   Loader2,
+  CalendarDays,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import Papa from "papaparse";
 import { toast, Toaster } from "sonner";
@@ -37,6 +40,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
+import { DeleteEmployeeModal } from "./DeleteEmployeeModal";
 
 const val = (v) => (v?.trim() ? v.trim() : undefined);
 
@@ -150,6 +154,18 @@ export default function ModernEmployees() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [employeeToDelete, setEmployeeToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+
+  const [editOriginalDeptId, setEditOriginalDeptId] = useState(null);
+  const [scheduleInheritModal, setScheduleInheritModal] = useState({
+    open: false,
+    employeeId: null,
+    employeeName: "",
+    departmentName: "",
+    schedules: [],
+    selectedIds: [],
+    applying: false,
+  });
 
   const columnOptions = [
     { value: "id", label: "Employee ID" },
@@ -404,6 +420,63 @@ export default function ModernEmployees() {
     setRefreshing(false);
   };
 
+  const fetchApplicableSchedules = async (departmentId) => {
+    try {
+      const r = await fetch(`${API}/api/shiftschedules`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const j = await r.json();
+      if (!r.ok) return [];
+      const now = new Date();
+      return (j.data || []).filter((s) => {
+        const isActive = s.isActive && (!s.endDate || new Date(s.endDate) >= now);
+        const appliesToEmployee =
+          s.assignmentType === "all" ||
+          (s.assignmentType === "department" && s.targetId === departmentId);
+        return isActive && appliesToEmployee;
+      });
+    } catch {
+      return [];
+    }
+  };
+
+  const openScheduleInheritModal = async (employeeId, employeeName, departmentId) => {
+    const schedules = await fetchApplicableSchedules(departmentId);
+    if (schedules.length === 0) {
+      fetchEmployees();
+      return;
+    }
+    const dept = departments.find((d) => d.id === departmentId);
+    setScheduleInheritModal({
+      open: true,
+      employeeId,
+      employeeName,
+      departmentName: dept?.name || "this department",
+      schedules,
+      selectedIds: schedules.map((s) => s.id),
+      applying: false,
+    });
+  };
+
+  const handleApplySchedules = async () => {
+    setScheduleInheritModal((m) => ({ ...m, applying: true }));
+    const { employeeId, selectedIds } = scheduleInheritModal;
+    let applied = 0;
+    for (const scheduleId of selectedIds) {
+      try {
+        const r = await fetch(`${API}/api/shiftschedules/${scheduleId}/apply-to-employee`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ employeeId }),
+        });
+        if (r.ok) applied++;
+      } catch {}
+    }
+    toast.success(`${applied} schedule(s) applied successfully`);
+    setScheduleInheritModal({ open: false, employeeId: null, employeeName: "", departmentName: "", schedules: [], selectedIds: [], applying: false });
+    fetchEmployees();
+  };
+
   // CRUD Operations (preserving original logic)
   const handleCreateEmployee = async () => {
     const { firstName, lastName, email, password, role, departmentId, employeeId, hireDate, ...employment } = createForm;
@@ -435,6 +508,9 @@ export default function ModernEmployees() {
       const j = await r.json();
       if (r.ok) {
         toast.success("Employee created successfully!");
+        const newEmployeeId = j.data?.id;
+        const newEmployeeName = `${val(firstName)} ${val(lastName)}`;
+        const deptId = departmentId === "none" ? null : departmentId;
         setShowCreateModal(false);
         setCreateForm({
           firstName: "",
@@ -447,7 +523,11 @@ export default function ModernEmployees() {
           hireDate: "",
           ...blankEmployment,
         });
-        fetchEmployees();
+        if (deptId && newEmployeeId) {
+          await openScheduleInheritModal(newEmployeeId, newEmployeeName, deptId);
+        } else {
+          fetchEmployees();
+        }
       } else {
         toast.error(j.message || "Failed to create employee.");
       }
@@ -458,6 +538,7 @@ export default function ModernEmployees() {
   };
 
   const openEditModal = (employee) => {
+    setEditOriginalDeptId(employee.department?.id || "none");
     setEditForm({
       id: employee.id,
       firstName: employee.profile?.firstName || "",
@@ -512,8 +593,14 @@ export default function ModernEmployees() {
       const j = await r.json();
       if (r.ok) {
         toast.success("Employee updated successfully!");
+        const deptChanged = departmentId !== "none" && departmentId !== editOriginalDeptId;
+        const empName = `${val(firstName)} ${val(lastName)}`;
         setShowEditModal(false);
-        fetchEmployees();
+        if (deptChanged) {
+          await openScheduleInheritModal(id, empName, departmentId);
+        } else {
+          fetchEmployees();
+        }
       } else {
         toast.error(j.message || "Failed to update employee.");
       }
@@ -525,6 +612,7 @@ export default function ModernEmployees() {
 
   const openDeleteModal = (employee) => {
     setEmployeeToDelete(employee);
+    setDeleteConfirmText("");
     setShowDeleteModal(true);
   };
 
@@ -540,6 +628,7 @@ export default function ModernEmployees() {
         toast.success("Employee deleted successfully!");
         setShowDeleteModal(false);
         setEmployeeToDelete(null);
+        setDeleteConfirmText("");
         fetchEmployees();
       } else {
         const j = await r.json();
@@ -1346,53 +1435,18 @@ export default function ModernEmployees() {
           </DialogContent>
         </Dialog>
 
-        {/* Delete Modal */}
-        <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
-          <DialogContent className="sm:max-w-md dark:border-white/10">
-            <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <div className="p-2 rounded-full bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400">
-                  <AlertCircle className="h-5 w-5" />
-                </div>
-                Delete Employee
-              </DialogTitle>
-              <DialogDescription>This action cannot be undone.</DialogDescription>
-            </DialogHeader>
-            {employeeToDelete && (
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
-                <div className="text-sm space-y-1 text-red-600 dark:text-red-400">
-                  <div><strong>Name:</strong> {employeeToDelete.profile?.firstName} {employeeToDelete.profile?.lastName}</div>
-                  <div><strong>Email:</strong> {employeeToDelete.email}</div>
-                  <div><strong>Role:</strong> {employeeToDelete.role}</div>
-                </div>
-              </div>
-            )}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                disabled={deleteLoading}
-                onClick={confirmDelete}
-                className="bg-red-500 hover:bg-red-600"
-              >
-                {deleteLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Deleting...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete Employee
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <DeleteEmployeeModal
+          open={showDeleteModal}
+          onOpenChange={(open) => {
+            setShowDeleteModal(open);
+            if (!open) setDeleteConfirmText("");
+          }}
+          employee={employeeToDelete}
+          deleteConfirmText={deleteConfirmText}
+          setDeleteConfirmText={setDeleteConfirmText}
+          deleteLoading={deleteLoading}
+          onConfirm={confirmDelete}
+        />
 
         {/* Employee Details Modal */}
         <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
@@ -1748,6 +1802,133 @@ export default function ModernEmployees() {
         </Dialog>
 
         <input type="file" ref={fileRef} accept=".csv" onChange={onFile} className="hidden" />
+
+        {/* Schedule Inherit Modal */}
+        <Dialog
+          open={scheduleInheritModal.open}
+          onOpenChange={(open) => {
+            if (!open && !scheduleInheritModal.applying) {
+              setScheduleInheritModal((m) => ({ ...m, open: false }));
+              fetchEmployees();
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-lg dark:border-white/10">
+            <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <div className="p-2 rounded-full bg-orange-100 text-orange-500 dark:bg-orange-900/30 dark:text-orange-400">
+                  <CalendarDays className="h-5 w-5" />
+                </div>
+                Apply Department Schedules
+              </DialogTitle>
+              <DialogDescription>
+                <strong>{scheduleInheritModal.employeeName}</strong> was added to{" "}
+                <strong>{scheduleInheritModal.departmentName}</strong>. This department has{" "}
+                {scheduleInheritModal.schedules.length} active schedule(s). Select which to apply.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 py-2">
+              {/* Select All / Deselect All */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">
+                  {scheduleInheritModal.selectedIds.length} of {scheduleInheritModal.schedules.length} selected
+                </span>
+                <button
+                  type="button"
+                  className="text-orange-500 hover:text-orange-600 font-medium"
+                  onClick={() => {
+                    const allSelected = scheduleInheritModal.selectedIds.length === scheduleInheritModal.schedules.length;
+                    setScheduleInheritModal((m) => ({
+                      ...m,
+                      selectedIds: allSelected ? [] : m.schedules.map((s) => s.id),
+                    }));
+                  }}
+                >
+                  {scheduleInheritModal.selectedIds.length === scheduleInheritModal.schedules.length
+                    ? "Deselect all"
+                    : "Select all"}
+                </button>
+              </div>
+
+              {/* Schedule list */}
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {scheduleInheritModal.schedules.map((schedule) => {
+                  const isSelected = scheduleInheritModal.selectedIds.includes(schedule.id);
+                  const days = (Array.isArray(schedule.daysOfWeek) ? schedule.daysOfWeek : [])
+                    .sort((a, b) => a - b)
+                    .map((d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d])
+                    .join(", ");
+                  const start = schedule.startDate
+                    ? new Date(schedule.startDate).toLocaleDateString()
+                    : "—";
+                  const end = schedule.endDate
+                    ? new Date(schedule.endDate).toLocaleDateString()
+                    : "Ongoing";
+                  return (
+                    <button
+                      key={schedule.id}
+                      type="button"
+                      onClick={() =>
+                        setScheduleInheritModal((m) => ({
+                          ...m,
+                          selectedIds: isSelected
+                            ? m.selectedIds.filter((id) => id !== schedule.id)
+                            : [...m.selectedIds, schedule.id],
+                        }))
+                      }
+                      className={`w-full text-left flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+                        isSelected
+                          ? "border-orange-300 bg-orange-50 dark:border-orange-700 dark:bg-orange-900/20"
+                          : "border-border hover:bg-muted/50"
+                      }`}
+                    >
+                      <div className="mt-0.5 text-orange-500 flex-shrink-0">
+                        {isSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4 text-muted-foreground" />}
+                      </div>
+                      <div className="space-y-0.5 min-w-0">
+                        <p className="font-medium text-sm truncate">{schedule.shift?.shiftName || "—"}</p>
+                        <p className="text-xs text-muted-foreground">{days}</p>
+                        <p className="text-xs text-muted-foreground">{start} → {end}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button
+                variant="outline"
+                disabled={scheduleInheritModal.applying}
+                onClick={() => {
+                  setScheduleInheritModal((m) => ({ ...m, open: false }));
+                  fetchEmployees();
+                }}
+              >
+                Skip
+              </Button>
+              <Button
+                onClick={handleApplySchedules}
+                disabled={scheduleInheritModal.applying || scheduleInheritModal.selectedIds.length === 0}
+                className="bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                {scheduleInheritModal.applying ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Applying…
+                  </>
+                ) : (
+                  <>
+                    <CalendarDays className="h-4 w-4 mr-2" />
+                    Apply {scheduleInheritModal.selectedIds.length > 0 ? `(${scheduleInheritModal.selectedIds.length})` : ""}
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </TooltipProvider>
   );
