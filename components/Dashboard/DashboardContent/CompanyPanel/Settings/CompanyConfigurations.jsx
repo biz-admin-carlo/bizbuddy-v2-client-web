@@ -131,6 +131,17 @@ const GUIDE_SECTIONS = [
       "Use +/− adjustment to add or deduct hours for one or multiple types",
     ],
   },
+  {
+    icon: Timer, color: "blue", title: "DayCare Settings", badge: "DayCare Only", badgeColor: "purple",
+    who: "Admin / Superadmin", dayCareOnly: true,
+    desc: "Controls the driver-aide threshold that triggers the AM/PM punch-type modal for non-driver employees.",
+    bullets: [
+      "Driver-Aide Threshold — minutes early on time-in or late on time-out before the modal appears",
+      "Only affects non-driver / non-aide DayCare employees",
+      "Actual drivers always punch as Driver/Aide regardless of this setting",
+      "Defaults to <strong>45 minutes</strong> if not configured",
+    ],
+  },
 ];
 
 // ── Icon color map ────────────────────────────────────────────────────────────
@@ -229,7 +240,8 @@ function NumberField({ label, value, onChange, step, icon: Icon, helpText }) {
 // ── Quick Guide Panel ────────────────────────────────────────────────────────
 // Split into trigger + panel so the button sits cleanly in the header flex row
 // and the panel expands below the entire header.
-function QuickGuidePanel({ open, onClose }) {
+function QuickGuidePanel({ open, onClose, isDayCare }) {
+  const visibleSections = GUIDE_SECTIONS.filter((s) => !s.dayCareOnly || isDayCare);
   return (
     <AnimatePresence>
       {open && (
@@ -271,7 +283,7 @@ function QuickGuidePanel({ open, onClose }) {
 
                 {/* Cards grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mb-4">
-                  {GUIDE_SECTIONS.map((s) => {
+                  {visibleSections.map((s) => {
                     const Icon = s.icon;
                     return (
                       <div
@@ -649,7 +661,7 @@ function OvertimeConfigCard({ loading, draft, setDraft }) {
 }
 
 // ── Dept Lunch Break Card ────────────────────────────────────────────────────
-function DepartmentBreakPolicyCard({ departments, departmentBreakSettings, departmentLoading, updateDepartmentBreakSetting, loading }) {
+function DepartmentBreakPolicyCard({ departments, departmentBreakSettings, departmentAutoLunchSettings, setDepartmentAutoLunchSettings, departmentLoading, updateDepartmentBreakSetting, updateDepartmentAutoLunchSetting, loading }) {
   const paid   = Object.values(departmentBreakSettings).filter(Boolean).length;
   const unpaid = departments.length - paid;
 
@@ -684,37 +696,97 @@ function DepartmentBreakPolicyCard({ departments, departmentBreakSettings, depar
               return (
                 <div
                   key={dept.id}
-                  className={`flex items-center justify-between p-4 rounded-xl border-[1.5px] transition-all flex-wrap gap-3 ${
+                  className={`p-4 rounded-xl border-[1.5px] transition-all ${
                     isPaid ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center ${isPaid ? "bg-green-100" : "bg-amber-100"}`}>
-                      <Building2 className={`w-4 h-4 ${isPaid ? "text-green-600" : "text-amber-600"}`} />
+                  {/* Row header */}
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center ${isPaid ? "bg-green-100" : "bg-amber-100"}`}>
+                        <Building2 className={`w-4 h-4 ${isPaid ? "text-green-600" : "text-amber-600"}`} />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm">{dept.name}</p>
+                        <p className="text-[11px] text-neutral-400 font-mono">{dept.id}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-semibold text-sm">{dept.name}</p>
-                      <p className="text-[11px] text-neutral-400 font-mono">{dept.id}</p>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right hidden sm:block">
+                        <p className={`text-sm font-semibold ${isPaid ? "text-green-600" : "text-amber-600"}`}>
+                          {isPaid ? "Paid Lunch Breaks" : "Unpaid Lunch Breaks"}
+                        </p>
+                        <p className="text-[11px] text-neutral-400">{isPaid ? "Employees paid during lunch" : "Lunch time deducted from pay"}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Toggle
+                          on={isPaid}
+                          loading={!!departmentLoading[dept.id]}
+                          onChange={(v) => updateDepartmentBreakSetting(dept.id, v)}
+                        />
+                        <span className={`text-sm font-semibold ${isPaid ? "text-green-600" : "text-neutral-500"}`}>
+                          {departmentLoading[dept.id] ? "Saving…" : isPaid ? "Paid" : "Unpaid"}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right hidden sm:block">
-                      <p className={`text-sm font-semibold ${isPaid ? "text-green-600" : "text-amber-600"}`}>
-                        {isPaid ? "Paid Lunch Breaks" : "Unpaid Lunch Breaks"}
-                      </p>
-                      <p className="text-[11px] text-neutral-400">{isPaid ? "Employees paid during lunch" : "Lunch time deducted from pay"}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Toggle
-                        on={isPaid}
-                        loading={!!departmentLoading[dept.id]}
-                        onChange={(v) => updateDepartmentBreakSetting(dept.id, v)}
-                      />
-                      <span className={`text-sm font-semibold ${isPaid ? "text-green-600" : "text-neutral-500"}`}>
-                        {departmentLoading[dept.id] ? "Saving…" : isPaid ? "Paid" : "Unpaid"}
-                      </span>
-                    </div>
-                  </div>
+
+                  {/* Auto-lunch config — only shown when paid lunch is on */}
+                  {isPaid && (() => {
+                    const als = departmentAutoLunchSettings[dept.id] || { autoLunchDurationMinutes: 60, autoLunchAfterHours: 4 };
+                    const isAutoLunchLoading = !!departmentLoading[`autolunch_${dept.id}`];
+                    return (
+                      <div className="mt-3 pt-3 border-t border-green-200">
+                        <p className="text-[11px] font-semibold text-green-700 mb-2 flex items-center gap-1">
+                          <Timer className="w-3 h-3" /> Auto-Lunch Defaults
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
+                          <div>
+                            <label className="text-[11px] font-semibold text-neutral-600 mb-1 flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-green-500" /> Duration (min)
+                            </label>
+                            <Input
+                              type="number" min="1" value={als.autoLunchDurationMinutes}
+                              className="h-9 text-sm font-mono"
+                              onChange={(e) => {
+                                const v = Math.max(1, parseInt(e.target.value) || 1);
+                                setDepartmentAutoLunchSettings((p) => ({ ...p, [dept.id]: { ...p[dept.id], autoLunchDurationMinutes: v } }));
+                              }}
+                              onBlur={() => updateDepartmentAutoLunchSetting(dept.id, { autoLunchDurationMinutes: als.autoLunchDurationMinutes })}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-semibold text-neutral-600 mb-1 flex items-center gap-1">
+                              <Timer className="w-3 h-3 text-green-500" /> After (hours)
+                            </label>
+                            <Input
+                              type="number" min="0.5" step="0.5" value={als.autoLunchAfterHours}
+                              className="h-9 text-sm font-mono"
+                              onChange={(e) => {
+                                const v = Math.max(0.5, parseFloat(e.target.value) || 0.5);
+                                setDepartmentAutoLunchSettings((p) => ({ ...p, [dept.id]: { ...p[dept.id], autoLunchAfterHours: v } }));
+                              }}
+                              onBlur={() => updateDepartmentAutoLunchSetting(dept.id, { autoLunchAfterHours: als.autoLunchAfterHours })}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-semibold text-neutral-600 mb-1 block">Preview</label>
+                            <div className="h-9 border rounded-lg bg-white flex items-center justify-center font-mono text-xs font-semibold text-neutral-700 px-2 text-center">
+                              {als.autoLunchDurationMinutes}m after {als.autoLunchAfterHours}h
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-semibold text-neutral-600 mb-1 block">Status</label>
+                            <div className="h-9 flex items-center">
+                              <span className="text-[11px] font-semibold text-green-600">
+                                {isAutoLunchLoading ? "Saving…" : "Saved"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -874,6 +946,54 @@ function DepartmentCoffeeBreakPolicyCard({ departments, departmentCoffeeSettings
               <li>• <strong>Total Consumable Time:</strong> Breaks × Minutes. Example: 2 × 15 min = 30 min</li>
               <li>• <strong>⚠️ Excess Time:</strong> If an employee exceeds the allowed total, excess is auto-deducted on approval</li>
               <li>• Setting breaks to 0 disables coffee break tracking for that department entirely</li>
+            </ul>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── DayCare Settings Card ─────────────────────────────────────────────────────
+function DayCareSettingsCard({ loading, draft, setDraft }) {
+  return (
+    <Card className="border-[1.5px] border-blue-300 shadow-md overflow-hidden">
+      <CardStripe />
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2.5 text-[15px] font-extrabold">
+          <SectionIcon icon={Timer} color="blue" />
+          DayCare Settings
+          <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+            DayCare Only
+          </span>
+        </CardTitle>
+        <p className="text-xs text-neutral-500 mt-0.5">
+          Settings specific to DayCare companies
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loading ? (
+          <Skeleton className="h-16 w-full" />
+        ) : (
+          <div className="max-w-xs">
+            <NumberField
+              label="Driver-Aide Threshold (minutes)"
+              value={draft?.driverAideThresholdMinutes ?? 45}
+              onChange={(v) => setDraft((o) => ({ ...o, driverAideThresholdMinutes: v }))}
+              step="5"
+              icon={Timer}
+              helpText="Minutes early on time-in or late on time-out that triggers the AM/PM Driver-Aide modal for non-driver employees"
+            />
+          </div>
+        )}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 items-start">
+          <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[12px] font-bold text-blue-900 mb-1">How the Driver-Aide Threshold Works</p>
+            <ul className="text-[11px] text-blue-700 space-y-0.5">
+              <li>• Non-driver/aide employees clocking in <strong>this many minutes early</strong> are prompted for an AM Driver-Aide punch</li>
+              <li>• Non-driver/aide employees clocking out <strong>this many minutes late</strong> are prompted for a PM Driver-Aide punch</li>
+              <li>• Defaults to <strong>45 minutes</strong> if not set</li>
             </ul>
           </div>
         </div>
@@ -1215,12 +1335,14 @@ export default function ModernCompanyConfigurations() {
   }, [role, token]);
 
   // ── State ────────────────────────────────────────────────────────────────
+  const [companyId,               setCompanyId]               = useState(null);
   const [leaveTypes,              setLeaveTypes]              = useState([]);
   const [policies,                setPolicies]                = useState([]);
   const [matrix,                  setMatrix]                  = useState([]);
   const [departments,             setDepartments]             = useState([]);
-  const [departmentBreakSettings, setDepartmentBreakSettings] = useState({});
-  const [departmentCoffeeSettings,setDepartmentCoffeeSettings]= useState({});
+  const [departmentBreakSettings,     setDepartmentBreakSettings]     = useState({});
+  const [departmentCoffeeSettings,    setDepartmentCoffeeSettings]    = useState({});
+  const [departmentAutoLunchSettings, setDepartmentAutoLunchSettings] = useState({});
   const [departmentLoading,       setDepartmentLoading]       = useState({});
   const [loadingDepartments,      setLoadingDepartments]      = useState(true);
   const [loadingMatrix,           setLoadingMatrix]           = useState(true);
@@ -1259,14 +1381,18 @@ export default function ModernCompanyConfigurations() {
     return () => clearInterval(id);
   }, [pendingTimezone, draft?.timezone]);
 
-  // ── API: GET /api/company-settings ───────────────────────────────────────
+  // ── API: GET /api/company-settings + GET /api/company/me ─────────────────
   const loadSettings = async () => {
     setLoadingSettings(true);
     try {
-      const r = await fetch(`${API}/api/company-settings`, { headers: { Authorization: `Bearer ${token}` } });
-      const j = await r.json();
-      if (r.ok) setDraft(j.data || {});
-      else toast.error(j.message || "Failed to load settings");
+      const [settingsRes, profileRes] = await Promise.all([
+        fetch(`${API}/api/company-settings`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/api/company/me`,        { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      const [settingsJson, profileJson] = await Promise.all([settingsRes.json(), profileRes.json()]);
+      if (settingsRes.ok) setDraft(settingsJson.data || {});
+      else toast.error(settingsJson.message || "Failed to load settings");
+      if (profileRes.ok) setCompanyId(profileJson.data?.id || null);
     } catch { toast.error("Network error loading settings"); }
     setLoadingSettings(false);
   };
@@ -1279,7 +1405,7 @@ export default function ModernCompanyConfigurations() {
       const j = await r.json();
       if (r.ok && j.data) {
         setDepartments(j.data);
-        const bs = {}, cs = {};
+        const bs = {}, cs = {}, als = {};
         j.data.forEach((d) => {
           bs[d.id] = d.paidBreak || false;
           cs[d.id] = {
@@ -1287,9 +1413,14 @@ export default function ModernCompanyConfigurations() {
             coffeeBreakMinutes:  d.coffeeBreakMinutes  || 0,
             coffeeBreakPaid:     d.coffeeBreakPaid     || false,
           };
+          als[d.id] = {
+            autoLunchDurationMinutes: d.autoLunchDurationMinutes ?? 60,
+            autoLunchAfterHours:      d.autoLunchAfterHours      ?? 4,
+          };
         });
         setDepartmentBreakSettings(bs);
         setDepartmentCoffeeSettings(cs);
+        setDepartmentAutoLunchSettings(als);
       } else toast.error(j.message || "Failed to load departments");
     } catch { toast.error("Network error loading departments"); }
     setLoadingDepartments(false);
@@ -1361,6 +1492,24 @@ export default function ModernCompanyConfigurations() {
     setDepartmentLoading((p) => ({ ...p, [`coffee_${deptId}`]: false }));
   };
 
+  // ── API: PUT /api/departments/update/:id (auto-lunch) ────────────────────
+  const updateDepartmentAutoLunchSetting = async (deptId, updates) => {
+    setDepartmentLoading((p) => ({ ...p, [`autolunch_${deptId}`]: true }));
+    try {
+      const r = await fetch(`${API}/api/departments/update/${deptId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(updates),
+      });
+      const j = await r.json();
+      if (r.ok) {
+        setDepartmentAutoLunchSettings((p) => ({ ...p, [deptId]: { ...p[deptId], ...updates } }));
+        toast.success("Auto-lunch settings updated");
+      } else toast.error(j.message || "Failed to update");
+    } catch { toast.error("Network error"); }
+    setDepartmentLoading((p) => ({ ...p, [`autolunch_${deptId}`]: false }));
+  };
+
   // ── API: PATCH /api/company-settings ─────────────────────────────────────
   const saveSettings = async () => {
     setSavingSettings(true);
@@ -1397,6 +1546,11 @@ export default function ModernCompanyConfigurations() {
     if (token) { loadSettings(); loadData(); loadDepartments(); }
   }, [token]);
 
+  // ── DayCare detection ────────────────────────────────────────────────────
+  const DAYCARE_COMPANY_IDS = (process.env.NEXT_PUBLIC_DAYCARE_COMPANY_IDS || "")
+    .split(",").map((id) => id.trim()).filter(Boolean);
+  const isDayCare = companyId ? DAYCARE_COMPANY_IDS.includes(companyId) : false;
+
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="p-4 sm:p-6 space-y-5 max-w-6xl mx-auto">
@@ -1426,7 +1580,7 @@ export default function ModernCompanyConfigurations() {
       </div>
 
       {/* Quick Guide panel — spans full width below header */}
-      <QuickGuidePanel open={guideOpen} onClose={() => setGuideOpen(false)} />
+      <QuickGuidePanel open={guideOpen} onClose={() => setGuideOpen(false)} isDayCare={isDayCare} />
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1458,9 +1612,16 @@ export default function ModernCompanyConfigurations() {
       />
       <TimeDefaultsCard loading={loadingSettings} draft={draft} setDraft={setDraft} />
       <OvertimeConfigCard loading={loadingSettings} draft={draft} setDraft={setDraft} />
+      {isDayCare && (
+        <DayCareSettingsCard loading={loadingSettings} draft={draft} setDraft={setDraft} />
+      )}
       <DepartmentBreakPolicyCard
         departments={departments} departmentBreakSettings={departmentBreakSettings}
-        departmentLoading={departmentLoading} updateDepartmentBreakSetting={updateDepartmentBreakSetting}
+        departmentAutoLunchSettings={departmentAutoLunchSettings}
+        setDepartmentAutoLunchSettings={setDepartmentAutoLunchSettings}
+        departmentLoading={departmentLoading}
+        updateDepartmentBreakSetting={updateDepartmentBreakSetting}
+        updateDepartmentAutoLunchSetting={updateDepartmentAutoLunchSetting}
         loading={loadingDepartments}
       />
       <DepartmentCoffeeBreakPolicyCard

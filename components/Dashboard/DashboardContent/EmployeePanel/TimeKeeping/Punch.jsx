@@ -77,9 +77,8 @@ const PUNCH_TYPES = {
   DRIVER_AIDE_PM:"DRIVER_AIDE_PM", // non-driver covered PM slot (late clock-out)
 };
 
-// How many minutes early/late triggers the driver-aide confirmation modal.
-// Hardcoded for now — will be moved to company/department settings later.
-const DRIVER_AIDE_THRESHOLD_MINUTES = 45;
+// Driver-aide threshold is now configurable via company settings.
+// The value is fetched from /api/company-settings on mount; falls back to 45.
 
 // ── Badge label/colour helpers ─────────────────────────────────────────────────
 const PUNCH_TYPE_LABELS = {
@@ -147,6 +146,13 @@ export default function Punch() {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [confirmAction, setConfirmAction]         = useState(null);
 
+  // Driver-aide threshold — loaded from company settings, defaults to 45
+  const [driverAideThresholdMinutes, setDriverAideThresholdMinutes] = useState(45);
+
+  // Auto-lunch config — loaded from employment details (department settings)
+  // null means not configured / dept has no paid lunch
+  const [autoLunchConfig, setAutoLunchConfig] = useState(null);
+
   // ── Derived flags ────────────────────────────────────────────────────────────
   const DAYCARE_COMPANY_IDS = (process.env.NEXT_PUBLIC_DAYCARE_COMPANY_IDS || "")
   .split(",")
@@ -163,6 +169,14 @@ export default function Punch() {
 
   // Non-driver DayCare employee — the only group that sees the AM/PM modal
   const isDayCareNonDriver = isDayCare && !isDriverOrAide;
+
+  // Auto-lunch is due when: timed in, threshold crossed, no lunch started or taken yet
+  const autoLunchDue =
+    isTimedIn &&
+    autoLunchConfig !== null &&
+    elapsed >= autoLunchConfig.afterHours * 3600 &&
+    !lunchActive &&
+    lunchElapsed === 0;
 
   // ── Location on mount ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -189,8 +203,11 @@ export default function Punch() {
       fetch(`${API_URL}/api/timelogs/today-shift`, {
         headers: { Authorization: `Bearer ${token}` },
       }).then((r) => r.json()),
+      fetch(`${API_URL}/api/company-settings`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((r) => r.json()).catch(() => null),
     ])
-      .then(([profileRes, employmentRes, shiftRes]) => {
+      .then(([profileRes, employmentRes, shiftRes, settingsRes]) => {
         setEmployeeInfo({
           companyId:   profileRes?.data?.company?.id   || null,
           companyName: profileRes?.data?.company?.name || null,
@@ -198,6 +215,20 @@ export default function Punch() {
         });
         // null = no shift today, object = shift found
         setTodayShift(shiftRes?.data ?? null);
+        // Use configured threshold or fall back to 45
+        const threshold = settingsRes?.data?.driverAideThresholdMinutes;
+        if (typeof threshold === "number" && threshold > 0) {
+          setDriverAideThresholdMinutes(threshold);
+        }
+
+        // Auto-lunch config from employment details (department settings)
+        const dept = employmentRes?.data?.department;
+        if (dept?.paidBreak && dept?.autoLunchDurationMinutes && dept?.autoLunchAfterHours) {
+          setAutoLunchConfig({
+            durationMinutes: dept.autoLunchDurationMinutes,
+            afterHours:      dept.autoLunchAfterHours,
+          });
+        }
       })
       .catch(() => {
         setTodayShift(null);
@@ -401,7 +432,7 @@ export default function Punch() {
     }
 
     // DayCare non-driver + 45+ min early → show AM driver-aide modal
-    if (isDayCareNonDriver && minutesEarlyForTimeIn() >= DRIVER_AIDE_THRESHOLD_MINUTES) {
+    if (isDayCareNonDriver && minutesEarlyForTimeIn() >= driverAideThresholdMinutes) {
       setSelectedPunchType(null);
       setPunchTypeContext("timein_early");
       setPunchTypeModalOpen(true);
@@ -417,7 +448,7 @@ export default function Punch() {
   // ── Time-out routing ──────────────────────────────────────────────────────────
   const handleTimeOutLogic = () => {
     // DayCare non-driver + 45+ min late → show PM driver-aide modal
-    if (isDayCareNonDriver && minutesLateForTimeOut() >= DRIVER_AIDE_THRESHOLD_MINUTES) {
+    if (isDayCareNonDriver && minutesLateForTimeOut() >= driverAideThresholdMinutes) {
       setSelectedPunchType(null);
       setPunchTypeContext("timeout_late");
       setPunchTypeModalOpen(true);
@@ -465,6 +496,13 @@ export default function Punch() {
         message:   noScheduleRemarks.trim(),
         timestamp: new Date().toISOString(),
       }];
+    }
+
+    // Auto-lunch deduction signal — sent on time-out when threshold was crossed
+    // and the employee never manually started a lunch break
+    if (!isTimeIn && autoLunchDue && autoLunchConfig) {
+      extraBody.autoLunchApplied   = true;
+      extraBody.autoLunchMinutes   = autoLunchConfig.durationMinutes;
     }
 
     const ok = await doCall(isTimeIn ? "/time-in" : "/time-out", extraBody);
@@ -779,6 +817,27 @@ export default function Punch() {
                     disabled={!isTimedIn || (!lunchActive && lunchElapsed > 0)}
                   />
                 </div>
+                {/* Auto-lunch banner */}
+                <AnimatePresence>
+                  {autoLunchDue && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      className="flex items-start gap-3 p-4 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700"
+                    >
+                      <Sandwich className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
+                          Lunch break recommended
+                        </p>
+                        <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                          You've been working for over {autoLunchConfig.afterHours}h. A {autoLunchConfig.durationMinutes}-minute lunch will be auto-applied on time-out if no manual lunch is taken.
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </CardContent>
 
               <CardFooter className="flex flex-col gap-6 pt-4 pb-8">
