@@ -16,6 +16,7 @@ export default function SignInPage() {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [users, setUsers] = useState([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
+  const [isSuperadminLogin, setIsSuperadminLogin] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -52,6 +53,10 @@ export default function SignInPage() {
         return;
       }
 
+      const superadmin = data.data.find(
+        (u) => u.companyId === null && u.role?.toLowerCase() === "superadmin"
+      );
+      if (superadmin) setIsSuperadminLogin(true);
       setUsers(data.data);
       setStep(2);
     } catch (err) {
@@ -69,7 +74,7 @@ export default function SignInPage() {
   const handleSignInWithPassword = async (e) => {
     e.preventDefault();
 
-    if (!formData.email || !formData.password || !selectedCompanyId) {
+    if (!formData.email || !formData.password || (!isSuperadminLogin && !selectedCompanyId)) {
       setError("Email, password, and company selection are required.");
       return;
     }
@@ -78,14 +83,13 @@ export default function SignInPage() {
     setLoading(true);
 
     try {
+      const body = { email: formData.email.trim().toLowerCase(), password: formData.password };
+      if (!isSuperadminLogin) body.companyId = selectedCompanyId;
+
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/account/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: formData.email.trim().toLowerCase(),
-          password: formData.password,
-          companyId: selectedCompanyId,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
 
@@ -283,48 +287,60 @@ export default function SignInPage() {
               </div>
             </div>
 
-            <div>
-              <h2 className="text-2xl font-semibold mb-4">Select your company</h2>
-              <div className="bg-neutral-50 dark:bg-neutral-700 rounded-xl p-3 mb-4">
-                <div className="flex justify-between items-center w-full text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase border-b border-neutral-200 dark:border-neutral-600 pb-2 mb-2">
-                  <span>Company</span>
-                  <span>Username</span>
-                  <span>Role</span>
-                </div>
-                <div className="max-h-48 overflow-y-auto space-y-2">
-                  {users.map((u) => (
-                    <button
-                      key={u.companyId}
-                      onClick={() => handleCompanySelect(u.companyId)}
-                      disabled={loading}
-                      className={`w-full p-3 text-sm font-medium flex items-center justify-between rounded-lg transition-all duration-200 ${
-                        loading ? "opacity-70 cursor-not-allowed" : "hover:bg-neutral-100 dark:hover:bg-neutral-600"
-                      } ${
-                        selectedCompanyId === u.companyId
-                          ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-l-4 border-orange-500"
-                          : "bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between w-full">
-                        <span className="font-medium">{u.companyName || "No Name"}</span>
-                        <span className="text-neutral-600 dark:text-neutral-400">{u.username}</span>
-                        <span
-                          className={`p-1.5 rounded-full ${
-                            selectedCompanyId === u.companyId
-                              ? "bg-orange-200 dark:bg-orange-800/50 text-orange-700 dark:text-orange-400"
-                              : "bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400"
-                          }`}
-                        >
-                          {getRoleIcon("admin")}
-                        </span>
-                      </div>
-                    </button>
-                  ))}
+            {!isSuperadminLogin && (
+              <div>
+                <h2 className="text-2xl font-semibold mb-4">Select your company</h2>
+                <div className="bg-neutral-50 dark:bg-neutral-700 rounded-xl p-3 mb-4">
+                  <div className="flex justify-between items-center w-full text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase border-b border-neutral-200 dark:border-neutral-600 pb-2 mb-2">
+                    <span>Company</span>
+                    <span>Username</span>
+                    <span>Role</span>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-2">
+                    {users.map((u) => (
+                      <button
+                        key={u.companyId}
+                        onClick={() => handleCompanySelect(u.companyId)}
+                        disabled={loading}
+                        className={`w-full p-3 text-sm font-medium flex items-center justify-between rounded-lg transition-all duration-200 ${
+                          loading ? "opacity-70 cursor-not-allowed" : "hover:bg-neutral-100 dark:hover:bg-neutral-600"
+                        } ${
+                          selectedCompanyId === u.companyId
+                            ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-l-4 border-orange-500"
+                            : "bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span className="font-medium">{u.companyName || "No Name"}</span>
+                          <span className="text-neutral-600 dark:text-neutral-400">{u.username}</span>
+                          <span
+                            className={`p-1.5 rounded-full ${
+                              selectedCompanyId === u.companyId
+                                ? "bg-orange-200 dark:bg-orange-800/50 text-orange-700 dark:text-orange-400"
+                                : "bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400"
+                            }`}
+                          >
+                            {getRoleIcon("admin")}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            {selectedCompanyId && (
+            {isSuperadminLogin && (
+              <div className="flex items-center gap-3 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl">
+                <Crown className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-orange-700 dark:text-orange-300">Super Admin</p>
+                  <p className="text-xs text-orange-600/70 dark:text-orange-400/70">No company assignment — platform-wide access</p>
+                </div>
+              </div>
+            )}
+
+            {(isSuperadminLogin || selectedCompanyId) && (
               <motion.form
                 onSubmit={handleSignInWithPassword}
                 className="space-y-4"

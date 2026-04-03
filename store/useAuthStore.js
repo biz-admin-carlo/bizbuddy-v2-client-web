@@ -8,13 +8,15 @@ const useAuthStore = create(
   persist(
     (set, get) => ({
       token: null,
+      activeCompanyId: null,
       isHydrated: false,
       login: (token) => {
         set({ token });
       },
       logout: () => {
-        set({ token: null });
+        set({ token: null, activeCompanyId: null });
       },
+      setActiveCompanyId: (id) => set({ activeCompanyId: id }),
       setHydrated: (hydrated) => set({ isHydrated: hydrated }),
       get user() {
         const { token } = get();
@@ -31,7 +33,7 @@ const useAuthStore = create(
     }),
     {
       name: "auth-storage",
-      partialize: (state) => ({ token: state.token }),
+      partialize: (state) => ({ token: state.token, activeCompanyId: state.activeCompanyId }),
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.setHydrated(true);

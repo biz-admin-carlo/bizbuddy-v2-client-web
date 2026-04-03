@@ -7,7 +7,7 @@ import useAuthStore from "@/store/useAuthStore";
 import { useEffect, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Lock, ChevronDown, Building2, User, Pin, PinOff } from "lucide-react";
+import { X, Lock, ChevronDown, Building2, User, Pin, PinOff, ChevronsUpDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -556,7 +556,7 @@ function SidebarHeader({ isSidebarPinned, togglePin, closeSidebar }) {
 // ---------------------------------------------------------------------------
 
 export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, isSidebarPinned, togglePin }) {
-  const { token } = useAuthStore();
+  const { token, activeCompanyId, setActiveCompanyId } = useAuthStore();
   const router    = useRouter();
   const pathname  = usePathname();
 
@@ -564,6 +564,7 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
   const [plan, setPlan]                             = useState("free");
   const [openDropdown, setOpenDropdown]             = useState(null);
   const [loading, setLoading]                       = useState(true);
+  const [companies, setCompanies]                   = useState([]);
   const [, startTransition]                         = useTransition();
 
   // ✅ All raw counts in one place
@@ -580,7 +581,12 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
   // Fetch pending counts
   useEffect(() => {
     if (!token) return;
+    const roleLowerEarly = profileData?.user?.role?.toLowerCase();
+    // Skip counts for superadmin with no company selected — nothing to count yet
+    if (roleLowerEarly === "superadmin" && !activeCompanyId) return;
+
     const h    = { Authorization: `Bearer ${token}` };
+    if (roleLowerEarly === "superadmin" && activeCompanyId) h["x-company-id"] = activeCompanyId;
     const base = process.env.NEXT_PUBLIC_API_URL;
 
     Promise.allSettled([
@@ -607,7 +613,7 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
           ? cutoff.value.data.filter((p) => p.status?.toLowerCase() === "locked").length : prev.cutoff,
       }));
     });
-  }, [token]);
+  }, [token, activeCompanyId, profileData]);
 
   // Fetch profile
   useEffect(() => {
@@ -620,7 +626,9 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
       .then((d) => {
         if (d.data) {
           setProfileData(d.data);
-          const p = d.data.subscription?.plan?.name?.toLowerCase() || "free";
+          const p = d.data.user?.role?.toLowerCase() === "superadmin"
+            ? "pro"
+            : d.data.subscription?.plan?.name?.toLowerCase() || "free";
           setPlan(p);
           useAuthStore.setState((state) => ({ ...state, plan: p }));
           const endDate = d.data.subscription?.endDate;
@@ -634,6 +642,19 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
       .finally(() => setLoading(false));
   }, [token]);
 
+  // Fetch all companies for superadmin company switcher
+  useEffect(() => {
+    if (!token) return;
+    const role = profileData?.user?.role?.toLowerCase();
+    if (role !== "superadmin") return;
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/company/all`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((d) => { if (Array.isArray(d.data)) setCompanies(d.data); })
+      .catch(() => {});
+  }, [token, profileData]);
+
   // ✅ Build the single unified notify map
   const notifyMap = buildNotifyMap(counts);
 
@@ -645,9 +666,13 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
 
   const role    = profileData?.user?.role || "employee";
   const roleLower = role.toLowerCase();
+  const isSuperadmin = roleLower === "superadmin";
 
   const payrollItem            = getPayrollItems(role);
   const employeePanelWithPayroll = [...EmployeePanelItems, payrollItem];
+
+  // Superadmin with no company selected → clean slate (no panels)
+  const showPanels = !isSuperadmin || !!activeCompanyId;
 
   const features  = applyPlanLock(employeePanelWithPayroll, plan);
   const settings  = applyPlanLock(filterCompanyPanelByRole(CompanyPanelItems, roleLower), plan);
@@ -692,37 +717,70 @@ export default function Sidebar({ isSidebarOpen, closeSidebar, onNavigateStart, 
 
               <SidebarUserInfo profileData={profileData} plan={plan} />
 
+              {/* Company Switcher — superadmin only */}
+              {isSuperadmin && (
+                <div className="px-3 sm:px-4 py-3 border-b border-neutral-200 dark:border-neutral-700">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-2">
+                    Active Company
+                  </p>
+                  <div className="relative">
+                    <select
+                      value={activeCompanyId || ""}
+                      onChange={(e) => setActiveCompanyId(e.target.value || null)}
+                      className="w-full appearance-none rounded-xl border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2.5 pr-8 text-sm text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-orange-500/50 transition-all duration-200"
+                    >
+                      <option value="">Select a company...</option>
+                      {companies.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    <ChevronsUpDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
+                  </div>
+                </div>
+              )}
+
               <div className="flex-1 overflow-y-auto px-2 sm:px-3 lg:px-4 py-3 sm:py-4 lg:py-6 space-y-3 sm:space-y-4 lg:space-y-6 scrollbar-thin scrollbar-thumb-neutral-300 dark:scrollbar-thumb-neutral-600">
 
+                {/* Superadmin clean slate — prompt to select a company */}
+                {isSuperadmin && !activeCompanyId && (
+                  <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                    <Building2 className="h-10 w-10 text-neutral-300 dark:text-neutral-600 mb-3" />
+                    <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">No company selected</p>
+                    <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Pick a company above to get started</p>
+                  </div>
+                )}
+
                 {/* Employee Panel */}
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                  <h2 className="mb-1 sm:mb-2 px-1 sm:px-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1 sm:gap-2">
-                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-orange-500 rounded-full flex-shrink-0" />
-                    <span className="truncate">Employee Panel</span>
-                  </h2>
-                  <ul className="space-y-0.5 sm:space-y-1">
-                    {features.map((g, index) => (
-                      <motion.div
-                        key={g.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.1 + index * 0.05 }}
-                      >
-                        <CollapsibleNavItem
-                          item={g}
-                          currentPath={pathname}
-                          onNavigate={navigate}
-                          expanded={openDropdown === g.id}
-                          onToggle={toggle}
-                          notifyMap={notifyMap}
-                        />
-                      </motion.div>
-                    ))}
-                  </ul>
-                </motion.div>
+                {showPanels && (
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                    <h2 className="mb-1 sm:mb-2 px-1 sm:px-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1 sm:gap-2">
+                      <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-orange-500 rounded-full flex-shrink-0" />
+                      <span className="truncate">Employee Panel</span>
+                    </h2>
+                    <ul className="space-y-0.5 sm:space-y-1">
+                      {features.map((g, index) => (
+                        <motion.div
+                          key={g.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.1 + index * 0.05 }}
+                        >
+                          <CollapsibleNavItem
+                            item={g}
+                            currentPath={pathname}
+                            onNavigate={navigate}
+                            expanded={openDropdown === g.id}
+                            onToggle={toggle}
+                            notifyMap={notifyMap}
+                          />
+                        </motion.div>
+                      ))}
+                    </ul>
+                  </motion.div>
+                )}
 
                 {/* Company Panel */}
-                {settings.length > 0 && (
+                {showPanels && settings.length > 0 && (
                   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
                     <h2 className="mb-1 sm:mb-2 px-1 sm:px-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1 sm:gap-2">
                       <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-orange-500 rounded-full flex-shrink-0" />
