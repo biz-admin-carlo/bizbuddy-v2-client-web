@@ -24,7 +24,6 @@ import {
   Activity,
   ChevronRight,
   MoreHorizontal,
-  Trash2,
   AlarmClockPlus,
   Car,
   UserCheck,
@@ -49,7 +48,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import TableSkeleton from "@/components/common/TableSkeleton";
 import { ContestDialog } from "./ContestDialog";
-import ConfirmDeleteDialog from "@/components/common/ConfirmDeleteDialog";
 import FormDialog from "@/components/common/FormDialog";
 import OrangeLoadingSpinner from "@/components/common/Spinner";
 
@@ -261,9 +259,6 @@ export default function PunchLogs() {
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting,  setExporting]  = useState(false);
-  const [delOpen,    setDelOpen]    = useState(false);
-  const [selected,   setSelected]   = useState(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
   const [expandedRow,   setExpandedRow]   = useState(null);
 
   const [otDialogOpen,  setOtDialogOpen]  = useState(false);
@@ -794,22 +789,6 @@ export default function PunchLogs() {
     return filteredSorted.slice(start, start + rowsPerPage);
   }, [filteredSorted, page, rowsPerPage]);
 
-  const deleteLog = async () => {
-    if (!selected) return;
-    setDeleteLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/api/timelogs/delete/${selected.id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || "Delete failed");
-      setLogs((l) => l.filter((x) => x.id !== selected.id));
-      toast.message("Deleted");
-      setDelOpen(false);
-    } catch (err) { toast.message(err.message); }
-    setDeleteLoading(false);
-  };
 
   const submitContestPolicy = async (clockInISO, clockOutISO) => {
     const errors = {};
@@ -1295,7 +1274,6 @@ export default function PunchLogs() {
                             setOtApprover(""); setOtHoursEdit(""); setOtReason("");
                             setOtDialogOpen(true);
                           }}
-                          onDelete={(l) => { setSelected(l); setDelOpen(true); }}
                           onLocation={(list) => { setLocDialogList(list); setLocDialogOpen(true); }}
                         />
                       ))}
@@ -1351,21 +1329,6 @@ export default function PunchLogs() {
         </Card>
 
         {/* ── Dialogs ── */}
-        <ConfirmDeleteDialog
-          open={delOpen} setOpen={setDelOpen}
-          title="Delete Punch Log"
-          description={selected ? `Remove timelog ${selected.id} – ${safeDate(selected.timeIn)}?` : ""}
-          loading={deleteLoading}
-          onConfirm={deleteLog}
-        >
-          {selected && (
-            <div className="space-y-1 text-sm">
-              <p><strong>Date:</strong> {safeDate(selected.timeIn)}</p>
-              <p><strong>Time In:</strong> {safeTime(selected.timeIn)}</p>
-              <p><strong>Time Out:</strong> {safeTime(selected.timeOut)}</p>
-            </div>
-          )}
-        </ConfirmDeleteDialog>
 
         {/* OT Dialog */}
         <FormDialog
@@ -1608,7 +1571,7 @@ export default function PunchLogs() {
 }
 
 // ── TimelogRow ─────────────────────────────────────────────────────────────────
-function TimelogRow({ log, columnVisibility, isDayCare, expanded, onToggleExpand, onSchedule, onRequestOT, onDelete, onLocation }) {
+function TimelogRow({ log, columnVisibility, isDayCare, expanded, onToggleExpand, onSchedule, onRequestOT, onLocation }) {
   const locIn  = getLocation(log, "in");
   const locOut = getLocation(log, "out");
 
@@ -1692,11 +1655,6 @@ function TimelogRow({ log, columnVisibility, isDayCare, expanded, onToggleExpand
               {log.isLocRestricted && (
                 <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onLocation(log.locList); }}>
                   <MapPin className="h-4 w-4 mr-2" /> View Location
-                </DropdownMenuItem>
-              )}
-              {!log.status && (
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(log); }} className="text-red-600">
-                  <Trash2 className="h-4 w-4 mr-2" /> Delete
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>
