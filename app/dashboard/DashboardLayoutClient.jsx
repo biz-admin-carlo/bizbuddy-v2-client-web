@@ -140,7 +140,7 @@ export default function DashboardLayoutClient({ children }) {
           togglePin={togglePin}
         />
 
-        <FeedbackWidget />
+        <FeedbackWidget isSidebarOpen={isSidebarOpen} />
 
         <motion.main
           initial={{ opacity: 0 }}

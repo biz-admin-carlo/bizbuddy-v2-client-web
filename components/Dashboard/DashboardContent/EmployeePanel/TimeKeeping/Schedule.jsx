@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { format, parseISO, isSameDay, isValid, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday } from "date-fns";
+import ModernCalendar from "@/components/common/ModernCalendar";
 import { toZonedTime, formatInTimeZone } from 'date-fns-tz';
 import Link from "next/link";
 import useAuthStore from "@/store/useAuthStore";
@@ -118,214 +119,6 @@ function TimezoneBadge({ timezone, compact = false }) {
   );
 }
 
-// Enhanced Calendar Component with Multi-Shift Support
-function ModernCalendar({ 
-  selectedDate, 
-  onDateSelect, 
-  currentMonth, 
-  onMonthChange, 
-  shiftsByDate,
-  loading 
-}) {
-  const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(currentMonth);
-  const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
-
-  // Pad with previous month days
-  const startDay = monthStart.getDay();
-  const prevMonthDays = [];
-  for (let i = startDay - 1; i >= 0; i--) {
-    const prevDay = new Date(monthStart);
-    prevDay.setDate(prevDay.getDate() - (i + 1));
-    prevMonthDays.push(prevDay);
-  }
-
-  // Pad with next month days
-  const nextMonthDays = [];
-  const totalCells = 42; // 6 rows × 7 days
-  const remainingCells = totalCells - (prevMonthDays.length + calendarDays.length);
-  for (let i = 1; i <= remainingCells; i++) {
-    const nextDay = new Date(monthEnd);
-    nextDay.setDate(nextDay.getDate() + i);
-    nextMonthDays.push(nextDay);
-  }
-
-  const allDays = [...prevMonthDays, ...calendarDays, ...nextMonthDays];
-
-  const getShiftsForDate = (date) => {
-    const dateKey = format(date, 'yyyy-MM-dd');
-    return shiftsByDate[dateKey] || [];
-  };
-
-  const getShiftIndicatorColors = (shifts) => {
-    const colors = ['bg-orange-500', 'bg-blue-500', 'bg-green-500', 'bg-purple-500'];
-    return shifts.slice(0, 4).map((_, index) => colors[index % colors.length]);
-  };
-
-  const navigateMonth = (direction) => {
-    const newMonth = new Date(currentMonth);
-    newMonth.setMonth(newMonth.getMonth() + direction);
-    onMonthChange(newMonth);
-  };
-
-  return (
-    <div className="w-full">
-      {/* Calendar Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-          {format(currentMonth, 'MMMM yyyy')}
-        </h3>
-        <div className="flex gap-1">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigateMonth(-1)}
-            className="h-8 w-8 p-0"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigateMonth(1)}
-            className="h-8 w-8 p-0"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Calendar Grid */}
-      <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800">
-        {/* Weekday Headers */}
-        <div className="grid grid-cols-7 bg-gray-50 dark:bg-gray-800">
-          {weekDays.map((day) => (
-            <div
-              key={day}
-              className="p-3 text-center text-xs font-medium text-gray-600 dark:text-gray-400 border-r border-gray-200 dark:border-gray-700 last:border-r-0"
-            >
-              {day}
-            </div>
-          ))}
-        </div>
-
-        {/* Calendar Days */}
-        <div className="grid grid-cols-7">
-          {allDays.map((day, index) => {
-            const shifts = getShiftsForDate(day);
-            const isCurrentMonth = isSameMonth(day, currentMonth);
-            const isSelected = isSameDay(day, selectedDate);
-            const isTodayDate = isToday(day);
-            const hasShifts = shifts.length > 0;
-
-            // Check if shifts have different timezones
-            const timezones = [...new Set(shifts.map(s => s.shift?.timeZone).filter(Boolean))];
-            const hasMultipleTimezones = timezones.length > 1;
-
-            return (
-              <TooltipProvider key={index}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => onDateSelect(day)}
-                      className={`
-                        relative p-2 h-16 border-r border-b border-gray-200 dark:border-gray-700 
-                        last-in-row:border-r-0 transition-all duration-200 group
-                        ${!isCurrentMonth 
-                          ? 'bg-gray-50 dark:bg-gray-900 text-gray-400 dark:text-gray-600' 
-                          : 'bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700'
-                        }
-                        ${isSelected 
-                          ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800 ring-2 ring-orange-500 ring-inset' 
-                          : ''
-                        }
-                        ${isTodayDate && isCurrentMonth 
-                          ? 'bg-blue-50 dark:bg-blue-900/20' 
-                          : ''
-                        }
-                      `}
-                      disabled={loading}
-                    >
-                      {/* Date Number */}
-                      <div className={`
-                        text-sm font-medium mb-1
-                        ${isSelected 
-                          ? 'text-orange-700 dark:text-orange-300' 
-                          : isTodayDate && isCurrentMonth
-                          ? 'text-blue-700 dark:text-blue-300'
-                          : isCurrentMonth 
-                          ? 'text-gray-900 dark:text-gray-100' 
-                          : 'text-gray-400 dark:text-gray-600'
-                        }
-                      `}>
-                        {day.getDate()}
-                      </div>
-
-                      {/* Shift Indicators */}
-                      {hasShifts && isCurrentMonth && (
-                        <div className="absolute bottom-1 left-1 right-1">
-                          {shifts.length <= 3 ? (
-                            <div className="flex gap-0.5 justify-center">
-                              {getShiftIndicatorColors(shifts).map((color, i) => (
-                                <div
-                                  key={i}
-                                  className={`w-1.5 h-1.5 rounded-full ${color}`}
-                                />
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-center">
-                              <div className="text-xs font-bold text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30 px-1 py-0.5 rounded">
-                                {shifts.length}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Today Indicator */}
-                      {isTodayDate && isCurrentMonth && (
-                        <div className="absolute top-1 right-1">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                        </div>
-                      )}
-
-                      {/* Multi-timezone indicator */}
-                      {hasMultipleTimezones && isCurrentMonth && (
-                        <div className="absolute top-1 left-1">
-                          <Globe className="h-3 w-3 text-orange-500" />
-                        </div>
-                      )}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <div className="text-sm">
-                      <div className="font-medium">{format(day, 'MMM d, yyyy')}</div>
-                      {hasShifts && (
-                        <>
-                          <div className="mt-1 text-xs">
-                            {shifts.length} shift{shifts.length !== 1 ? 's' : ''} scheduled
-                          </div>
-                          {hasMultipleTimezones && (
-                            <div className="mt-1 text-xs flex items-center gap-1 text-orange-400">
-                              <Globe className="h-3 w-3" />
-                              <span>Multiple timezones</span>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // Enhanced Shift Card Component with Timezone
 function ShiftCard({ shift, index, compact = false, showLocalTime = false }) {
@@ -723,8 +516,37 @@ export default function ModernSchedule() {
                   onDateSelect={setSelectedDate}
                   currentMonth={currentMonth}
                   onMonthChange={setCurrentMonth}
-                  shiftsByDate={shiftsByDate}
                   loading={loading}
+                  getDayIndicators={(date) => {
+                    const shifts = shiftsByDate[format(date, 'yyyy-MM-dd')] || [];
+                    const colors = ['bg-orange-500', 'bg-blue-500', 'bg-green-500', 'bg-purple-500'];
+                    return shifts.map((_, i) => ({ color: colors[i % colors.length] }));
+                  }}
+                  getDayTooltip={(date) => {
+                    const shifts = shiftsByDate[format(date, 'yyyy-MM-dd')] || [];
+                    const timezones = [...new Set(shifts.map(s => s.shift?.timeZone).filter(Boolean))];
+                    return (
+                      <div className="text-sm">
+                        <div className="font-medium">{format(date, 'MMM d, yyyy')}</div>
+                        {shifts.length > 0 && (
+                          <>
+                            <div className="mt-1 text-xs">{shifts.length} shift{shifts.length !== 1 ? 's' : ''} scheduled</div>
+                            {timezones.length > 1 && (
+                              <div className="mt-1 text-xs flex items-center gap-1 text-orange-400">
+                                <Globe className="h-3 w-3" />
+                                <span>Multiple timezones</span>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  }}
+                  getDayExtras={(date) => {
+                    const shifts = shiftsByDate[format(date, 'yyyy-MM-dd')] || [];
+                    const timezones = [...new Set(shifts.map(s => s.shift?.timeZone).filter(Boolean))];
+                    return timezones.length > 1 ? <Globe className="h-3 w-3 text-orange-500" /> : null;
+                  }}
                 />
               </CardContent>
             </Card>

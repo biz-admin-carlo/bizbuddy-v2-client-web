@@ -33,7 +33,7 @@ const CATEGORIES = [
   { value: "other",      label: "Other",       icon: MessageSquare, color: "text-gray-500"   },
 ];
 
-export default function FeedbackWidget() {
+export default function FeedbackWidget({ isSidebarOpen = false }) {
   const { user, token } = useAuthStore();
   const pathname = usePathname();
   const API = process.env.NEXT_PUBLIC_API_URL;
@@ -121,8 +121,13 @@ export default function FeedbackWidget() {
 
   return (
     <div id="feedback-widget-root">
-      {/* ── Left-edge tab ──────────────────────────────────────────────── */}
-      <div className="fixed left-0 top-1/2 -translate-y-1/2 z-40">
+      {/* ── Bottom-left tab ────────────────────────────────────────────── */}
+      <div
+        className={[
+          "fixed bottom-6 left-0 z-40 transition-all duration-300 ease-in-out",
+          isSidebarOpen ? "md:left-80" : "",
+        ].join(" ")}
+      >
         <motion.button
           whileHover={{ x: 4 }}
           whileTap={{ scale: 0.96 }}

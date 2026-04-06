@@ -1002,6 +1002,243 @@ function DayCareSettingsCard({ loading, draft, setDraft }) {
   );
 }
 
+// ── Leave Accrual Card ───────────────────────────────────────────────────────
+
+const MONTH_OPTIONS = [
+  { value: 1,  label: "January" },
+  { value: 2,  label: "February" },
+  { value: 3,  label: "March" },
+  { value: 4,  label: "April" },
+  { value: 5,  label: "May" },
+  { value: 6,  label: "June" },
+  { value: 7,  label: "July" },
+  { value: 8,  label: "August" },
+  { value: 9,  label: "September" },
+  { value: 10, label: "October" },
+  { value: 11, label: "November" },
+  { value: 12, label: "December" },
+];
+
+function LeaveAccrualCard({ loading, draft, setDraft }) {
+  const enabled  = draft?.accrualEnabled      ?? false;
+  const month    = draft?.leaveYearStartMonth ?? 1;
+  const catchUp  = draft?.newEmployeeCatchUp  ?? false;
+
+  return (
+    <Card className="border-[1.5px] shadow-md overflow-hidden">
+      <CardStripe />
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2.5 text-[15px] font-extrabold">
+          <SectionIcon icon={Calendar} color="green" />
+          Leave Accrual
+        </CardTitle>
+        <p className="text-xs text-neutral-500 mt-0.5">
+          Automatically accumulate leave credits for employees over time based on a yearly cycle.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {loading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : (
+          <>
+            {/* Enable toggle */}
+            <div className="flex items-center justify-between p-4 rounded-xl border-2 border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
+              <div>
+                <p className="text-sm font-semibold">Enable Leave Accrual</p>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  When on, employees earn leave credits automatically each accrual period.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDraft((o) => ({ ...o, accrualEnabled: !enabled }))}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 ${
+                  enabled ? "bg-green-500" : "bg-neutral-300 dark:bg-neutral-600"
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  enabled ? "translate-x-6" : "translate-x-1"
+                }`} />
+              </button>
+            </div>
+
+            {/* Fields — only shown when enabled */}
+            {enabled && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pl-1">
+                {/* Year start month */}
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-orange-500" />
+                    Accrual Year Start Month
+                  </Label>
+                  <Select
+                    value={String(month)}
+                    onValueChange={(v) => setDraft((o) => ({ ...o, leaveYearStartMonth: Number(v) }))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTH_OPTIONS.map((m) => (
+                        <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-neutral-400">The month each accrual year resets (e.g. January = Jan 1).</p>
+                </div>
+
+                {/* Catch-up toggle */}
+                <div className="flex items-start justify-between p-4 rounded-xl border-2 border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 h-fit">
+                  <div>
+                    <p className="text-sm font-semibold">Credit New Employees for Elapsed Months</p>
+                    <p className="text-xs text-neutral-500 mt-0.5">
+                      When on, new employees are credited for all months already passed in the current leave year instead of starting from zero.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDraft((o) => ({ ...o, newEmployeeCatchUp: !catchUp }))}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full ml-4 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 ${
+                      catchUp ? "bg-green-500" : "bg-neutral-300 dark:bg-neutral-600"
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      catchUp ? "translate-x-6" : "translate-x-1"
+                    }`} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Info callout */}
+            <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex gap-3 items-start">
+              <Info className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[12px] font-bold text-green-900 mb-1.5">How Leave Accrual Works</p>
+                <ul className="text-[11px] text-green-700 space-y-0.5">
+                  <li>• Credits are earned incrementally each period rather than granted all at once</li>
+                  <li>• The accrual year resets on the first day of the selected start month</li>
+                  <li>• Catch-up accrual ensures mid-year hires are not penalized for joining late</li>
+                  <li>• Balances are now capped at policy maximums — carry-over executes automatically at year-end</li>
+                </ul>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Leave Approval Card ──────────────────────────────────────────────────────
+function LeaveApprovalCard({ loading, draft, setDraft, approvers, loadingApprovers }) {
+  const enabled     = draft?.multiApprovalEnabled ?? false;
+  const approverId  = draft?.secondaryApproverId  ?? "";
+
+  return (
+    <Card className="border-[1.5px] shadow-md overflow-hidden">
+      <CardStripe />
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2.5 text-[15px] font-extrabold">
+          <SectionIcon icon={Users} color="blue" />
+          Leave Approval
+        </CardTitle>
+        <p className="text-xs text-neutral-500 mt-0.5">
+          Configure how leave requests are approved before they take effect.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {loading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : (
+          <>
+            {/* Multi-approval enable toggle */}
+            <div className="flex items-center justify-between p-4 rounded-xl border-2 border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
+              <div>
+                <p className="text-sm font-semibold">Enable Two-Step Leave Approval</p>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  When enabled, leave requests are approved by the employee's selected supervisor first, then by a company-wide final approver.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDraft((o) => ({ ...o, multiApprovalEnabled: !enabled }))}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 ml-4 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 ${
+                  enabled ? "bg-green-500" : "bg-neutral-300 dark:bg-neutral-600"
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  enabled ? "translate-x-6" : "translate-x-1"
+                }`} />
+              </button>
+            </div>
+
+            {/* Final approver picker — only shown when enabled */}
+            {enabled && (
+              <div className="space-y-1.5 max-w-sm">
+                <Label className="text-sm font-semibold flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-orange-500" />
+                  Final Approver <span className="text-orange-500">*</span>
+                </Label>
+                <Select
+                  value={approverId ? String(approverId) : ""}
+                  onValueChange={(v) => setDraft((o) => ({ ...o, secondaryApproverId: v }))}
+                  disabled={loadingApprovers}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={loadingApprovers ? "Loading..." : "Select final approver"} />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {loadingApprovers ? (
+                      <div className="flex items-center justify-center py-4 gap-2 text-sm text-neutral-400">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+                      </div>
+                    ) : approvers.length === 0 ? (
+                      <div className="text-sm text-neutral-400 py-4 text-center">No approvers available</div>
+                    ) : (
+                      approvers.map((a) => (
+                        <SelectItem key={a.id} value={String(a.id)}>
+                          <div className="flex items-center gap-2">
+                            <span>{a.email || a.username}</span>
+                            <span className="text-xs text-neutral-400">({a.role})</span>
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-neutral-400">
+                  The account that gives the final approval on all leave requests. Required when two-step approval is on.
+                </p>
+                {enabled && !approverId && (
+                  <p className="text-xs text-amber-600 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" /> A final approver must be selected before saving.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Info callout */}
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 items-start">
+              <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[12px] font-bold text-blue-900 mb-1.5">How Two-Step Approval Works</p>
+                <ul className="text-[11px] text-blue-700 space-y-0.5">
+                  <li>• Employee submits a leave request and selects their direct supervisor as approver</li>
+                  <li>• Supervisor approves → status moves to <strong>Pending Final Approval</strong></li>
+                  <li>• Final approver gives the last sign-off → status moves to <strong>Approved</strong></li>
+                  <li>• Either approver can reject at any stage — request is immediately rejected</li>
+                  <li>• When disabled, the supervisor's approval is final</li>
+                </ul>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Leave Types Card ─────────────────────────────────────────────────────────
 function LeaveTypesCard({ API, token, policies, reload }) {
   const [createModal, setCreateModal] = useState(false);
@@ -1355,6 +1592,8 @@ export default function ModernCompanyConfigurations() {
   const [pendingTimezone,         setPendingTimezone]         = useState(null);
   const [currentTime,             setCurrentTime]             = useState("");
   const [guideOpen,               setGuideOpen]               = useState(false);
+  const [approvers,               setApprovers]               = useState([]);
+  const [loadingApprovers,        setLoadingApprovers]        = useState(false);
 
   // ── Stats ────────────────────────────────────────────────────────────────
   const stats = useMemo(() => {
@@ -1542,8 +1781,19 @@ export default function ModernCompanyConfigurations() {
     setRefreshing(false);
   };
 
+  const loadApprovers = async () => {
+    setLoadingApprovers(true);
+    try {
+      const r = await fetch(`${API}/api/leaves/approvers`, { headers: { Authorization: `Bearer ${token}` } });
+      const j = await r.json();
+      if (r.ok) setApprovers(Array.isArray(j.data) ? j.data : []);
+      else toast.error(j.message || "Failed to load approvers");
+    } catch { toast.error("Network error loading approvers"); }
+    setLoadingApprovers(false);
+  };
+
   useEffect(() => {
-    if (token) { loadSettings(); loadData(); loadDepartments(); }
+    if (token) { loadSettings(); loadData(); loadDepartments(); loadApprovers(); }
   }, [token]);
 
   // ── DayCare detection ────────────────────────────────────────────────────
@@ -1630,6 +1880,11 @@ export default function ModernCompanyConfigurations() {
         loading={loadingDepartments}
       />
       <CheckSettings />
+      <LeaveAccrualCard loading={loadingSettings} draft={draft} setDraft={setDraft} />
+      <LeaveApprovalCard
+        loading={loadingSettings} draft={draft} setDraft={setDraft}
+        approvers={approvers} loadingApprovers={loadingApprovers}
+      />
       <LeaveTypesCard API={API} token={token} policies={policies} reload={loadData} />
       <LeaveAdminCard
         token={token} API={API} leaveTypes={leaveTypes} matrix={matrix}

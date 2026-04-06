@@ -124,7 +124,7 @@ const Footer = () => {
                     placeholder="Your email"
                   />
                 </div>
-                <button type="submit" className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg text-white p-2.5 text-sm font-bold w-full">
+                <button type="submit" className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl text-white py-3 px-5 text-sm font-semibold w-full shadow-md hover:from-orange-600 hover:to-orange-700 hover:shadow-lg transition-all duration-200">
                   <span className="flex items-center justify-center">
                     <span className="mr-2">Subscribe</span>
                     <FiArrowRight className="w-5 h-5" />

@@ -19,6 +19,7 @@ import {
   Heart,
   Umbrella,
   Baby,
+  DollarSign,
 } from "lucide-react";
 import { toast } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
@@ -37,18 +38,28 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 const statusConfig = {
   pending: {
-    label: "Pending",
+    label: "Pending Approval",
     color: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
     icon: Clock,
   },
+  pending_secondary: {
+    label: "Pending Final Approval",
+    color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+    icon: Clock,
+  },
   approved: {
-    label: "Approved", 
+    label: "Approved",
     color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
     icon: CheckCircle2,
   },
   rejected: {
     label: "Rejected",
-    color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400", 
+    color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+    icon: XCircle,
+  },
+  cancelled: {
+    label: "Cancelled",
+    color: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
     icon: XCircle,
   },
 };
@@ -94,6 +105,7 @@ export default function EmployeeLeaveRequests() {
   const [reason, setReason] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
+  const [isPaid, setIsPaid] = useState(true);
   const [balance, setBalance] = useState(null);
   const [shiftHours, setShiftHours] = useState(8);
   const [approvers, setApprovers] = useState([]);
@@ -109,6 +121,7 @@ export default function EmployeeLeaveRequests() {
   const stats = useMemo(() => {
     const total = leaves.length;
     const pending = leaves.filter(r => r.status === "pending").length;
+    const pendingSecondary = leaves.filter(r => r.status === "pending_secondary").length;
     const approved = leaves.filter(r => r.status === "approved").length;
     const rejected = leaves.filter(r => r.status === "rejected").length;
     const totalDays = leaves
@@ -124,13 +137,14 @@ export default function EmployeeLeaveRequests() {
         return sum;
       }, 0);
 
-    return { total, pending, approved, rejected, totalDays };
+    return { total, pending, pendingSecondary, approved, rejected, totalDays };
   }, [leaves]);
 
   // Status tabs for the table
   const statusTabs = useMemo(() => [
     { label: "All", value: "all", count: stats.total },
     { label: "Pending", value: "pending", count: stats.pending },
+    { label: "Pending Final", value: "pending_secondary", count: stats.pendingSecondary },
     { label: "Approved", value: "approved", count: stats.approved },
     { label: "Rejected", value: "rejected", count: stats.rejected },
   ], [leaves, stats]);
@@ -182,6 +196,21 @@ export default function EmployeeLeaveRequests() {
       label: "Status",
       render: (status) => <StatusBadge status={status} />,
       sortable: true,
+    },
+    {
+      key: "isPaid",
+      label: "Pay Type",
+      render: (isPaid) => isPaid === undefined ? (
+        <span className="text-xs text-muted-foreground">—</span>
+      ) : (
+        <Badge variant="secondary" className={isPaid
+          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0"
+          : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-0"
+        }>
+          <DollarSign className="h-3 w-3 mr-1" />
+          {isPaid ? "Paid" : "Unpaid"}
+        </Badge>
+      ),
     },
     {
       key: "approver",
@@ -384,6 +413,7 @@ export default function EmployeeLeaveRequests() {
     setReason("");
     setStart("");
     setEnd("");
+    setIsPaid(true);
     setBalance(null);
     setProgress(0);
     setErrors({});
@@ -421,6 +451,7 @@ export default function EmployeeLeaveRequests() {
           leaveReason: reason,
           fromDate: start,
           toDate: end,
+          isPaid,
         }),
       });
 
@@ -464,17 +495,15 @@ export default function EmployeeLeaveRequests() {
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Leave Requests</h1>
           <p className="text-muted-foreground">Submit and track your leave requests</p>
         </div>
-        <div className="flex items-center gap-3">
-          <Button onClick={() => setModalOpen(true)} className="bg-orange-500 hover:bg-orange-600 text-white">
-            <Plus className="h-4 w-4 mr-2" />
-            New Request
-          </Button>
-        </div>
+        <Button onClick={() => setModalOpen(true)} className="bg-orange-500 hover:bg-orange-600 text-white self-start sm:self-auto">
+          <Plus className="h-4 w-4 mr-2" />
+          New Request
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -722,7 +751,19 @@ export default function EmployeeLeaveRequests() {
             <div className="space-y-6">
               {/* Status and Leave Type */}
               <div className="flex items-center justify-between">
-                <StatusBadge status={detailDialog.request.status} />
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={detailDialog.request.status} />
+                  {detailDialog.request.isPaid !== undefined && (
+                    <Badge variant="secondary" className={
+                      detailDialog.request.isPaid
+                        ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0"
+                        : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-0"
+                    }>
+                      <DollarSign className="h-3 w-3 mr-1" />
+                      {detailDialog.request.isPaid ? "Paid" : "Unpaid"}
+                    </Badge>
+                  )}
+                </div>
                 <div className="text-right">
                   <div className="text-lg font-bold">{detailDialog.request.leaveType}</div>
                   <div className="text-sm text-muted-foreground">Leave Type</div>
@@ -932,6 +973,41 @@ export default function EmployeeLeaveRequests() {
                 <DateTimePicker value={end} onChange={(v) => { setEnd(v); setErrors((e) => ({ ...e, end: undefined })); }} placeholder="Select end" />
                 {errors.end && <p className="text-red-500 text-xs flex items-center gap-1"><AlertCircle className="h-3 w-3" />{errors.end}</p>}
               </div>
+            </div>
+
+            {/* Paid / Unpaid toggle */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-orange-500" />
+                Leave Pay Type
+              </label>
+              <div className="flex items-center gap-1 p-1 bg-muted rounded-xl w-fit">
+                <button
+                  type="button"
+                  onClick={() => setIsPaid(true)}
+                  className={`flex items-center gap-1.5 px-5 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                    isPaid
+                      ? "bg-green-500 text-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Paid
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPaid(false)}
+                  className={`flex items-center gap-1.5 px-5 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                    !isPaid
+                      ? "bg-red-500 text-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Unpaid
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {isPaid ? "This leave will be compensated." : "This leave will not be compensated."}
+              </p>
             </div>
 
             <div className="space-y-2">

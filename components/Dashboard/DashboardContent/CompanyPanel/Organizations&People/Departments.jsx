@@ -456,14 +456,14 @@ export default function Departments() {
         <Toaster position="top-center" />
 
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Company Departments</h1>
             <p className="text-muted-foreground">Manage organizational structure and teams</p>
           </div>
           <Button
             onClick={() => setShowCreateModal(true)}
-            className="bg-orange-500 hover:bg-orange-600 text-white"
+            className="bg-orange-500 hover:bg-orange-600 text-white self-start sm:self-auto"
           >
             <Plus className="h-4 w-4 mr-2" />
             New Department
