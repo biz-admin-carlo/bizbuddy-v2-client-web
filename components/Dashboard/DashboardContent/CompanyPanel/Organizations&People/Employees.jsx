@@ -26,6 +26,7 @@ import {
   CalendarDays,
   CheckSquare,
   Square,
+  Car,
 } from "lucide-react";
 import Papa from "papaparse";
 import { toast, Toaster } from "sonner";
@@ -80,9 +81,14 @@ John,Doe,john.doe@example.com,Pa55word!,employee,,EMP001,2025-06-19,Engineer,ful
 Jane,Smith,jane.smith@example.com,S3cret12,supervisor,,EMP002,2025-06-20,Designer,part_time,non_exempt,contractor_1099,remote,,Asia/Manila
 `;
 
+const DAYCARE_COMPANY_IDS = (process.env.NEXT_PUBLIC_DAYCARE_COMPANY_IDS || "")
+  .split(",").map((id) => id.trim()).filter(Boolean);
+
 export default function ModernEmployees() {
-  const { token, user } = useAuthStore();
+  const { token } = useAuthStore();
   const API = process.env.NEXT_PUBLIC_API_URL;
+  const [companyId, setCompanyId] = useState(null);
+  const isDayCare = companyId ? DAYCARE_COMPANY_IDS.includes(companyId) : false;
 
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -148,6 +154,7 @@ export default function ModernEmployees() {
     workLocation: "none",
     probationEndDate: "",
     timeZone: "",
+    isDriver: false,
   });
   const [editLoading, setEditLoading] = useState(false);
 
@@ -226,6 +233,7 @@ export default function ModernEmployees() {
         supervisorName: supervisorName || "—",
         supervisorType: directSupervisor ? "direct" : deptSupervisor ? "department" : "none",
         hireDate: emp.hireDate,
+        isDriver: emp.employmentDetail?.isDriver ?? false,
         jobTitle: emp.employmentDetail?.jobTitle || "—",
         employmentStatus: emp.employmentDetail?.employmentStatus || "—",
         exemptStatus: emp.employmentDetail?.exemptStatus || "—",
@@ -264,7 +272,10 @@ export default function ModernEmployees() {
             <Users className="h-4 w-4 text-green-600 dark:text-green-400" />
           </div>
           <div>
-            <div className="font-medium">{row.fullName || "—"}</div>
+            <div className="font-medium flex items-center gap-1.5">
+              {row.fullName || "—"}
+              {row.isDriver && <Car className="h-3.5 w-3.5 text-green-500 shrink-0" />}
+            </div>
             <div className="text-xs text-muted-foreground">{row.email}</div>
           </div>
         </div>
@@ -387,6 +398,10 @@ export default function ModernEmployees() {
     if (!token) return;
     fetchEmployees();
     fetchDepartments();
+    fetch(`${API}/api/company/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((j) => { if (j.data?.id) setCompanyId(j.data.id); })
+      .catch(() => {});
   }, [token]);
 
   const fetchEmployees = async () => {
@@ -557,12 +572,13 @@ export default function ModernEmployees() {
       workLocation: employee.employmentDetail?.workLocation || "none",
       probationEndDate: employee.employmentDetail?.probationEndDate ? employee.employmentDetail.probationEndDate.split('T')[0] : "",
       timeZone: employee.employmentDetail?.timeZone || "",
+      isDriver: employee.employmentDetail?.isDriver ?? false,
     });
     setShowEditModal(true);
   };
 
   const handleSaveEdit = async () => {
-    const { id, firstName, lastName, email, password, role, status, departmentId, employeeId, hireDate, ...employment } = editForm;
+    const { id, firstName, lastName, email, password, role, status, departmentId, employeeId, hireDate, isDriver, ...employment } = editForm;
     
     if (!val(firstName) || !val(lastName) || !val(email)) {
       toast.error("First name, last name, and email are required.");
@@ -580,6 +596,7 @@ export default function ModernEmployees() {
       employeeId: val(employeeId),
       hireDate: val(hireDate),
       ...Object.fromEntries(Object.entries(employment).map(([k, v]) => [k, v === "none" ? undefined : val(v)])),
+      ...(isDayCare && { isDriver }),
     };
 
     if (val(password)) payload.password = val(password);
@@ -1301,6 +1318,27 @@ export default function ModernEmployees() {
                   </div>
                 </div>
 
+                {isDayCare && (
+                  <div className="pt-2 border-t dark:border-white/10">
+                    <p className="text-xs font-semibold text-orange-500 uppercase tracking-wide mb-3">DayCare Settings</p>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Driver Schedule</p>
+                        <p className="text-xs text-muted-foreground">Employee follows a driver shift — punch type is auto-assigned at shift boundaries</p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={editForm.isDriver}
+                        onClick={() => setEditForm({ ...editForm, isDriver: !editForm.isDriver })}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${editForm.isDriver ? "bg-orange-500" : "bg-gray-200"}`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${editForm.isDriver ? "translate-x-6" : "translate-x-1"}`} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Employment Details */}
                 <div className="space-y-4 pt-4 border-t dark:border-white/10">
                   <h3 className="text-lg font-medium flex items-center gap-2">
@@ -1470,7 +1508,10 @@ export default function ModernEmployees() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-muted-foreground">Full Name:</span>
-                        <div className="font-medium">{selectedEmployee.fullName || "—"}</div>
+                        <div className="font-medium flex items-center gap-1.5">
+                          {selectedEmployee.fullName || "—"}
+                          {selectedEmployee.isDriver && <Car className="h-3.5 w-3.5 text-green-500 shrink-0" />}
+                        </div>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Username:</span>

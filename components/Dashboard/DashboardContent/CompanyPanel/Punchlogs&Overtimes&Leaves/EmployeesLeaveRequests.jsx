@@ -16,6 +16,7 @@ import {
   LayoutList,
   CalendarDays,
   DollarSign,
+  CreditCard,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast, Toaster } from "sonner";
@@ -27,6 +28,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -88,6 +91,17 @@ export default function SupervisorLeaveRequests() {
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  // Leave credits matrix
+  const [leaveMatrix, setLeaveMatrix] = useState([]); // [{ email, balances: { [type]: { credits, used, available } } }]
+  const [leaveTypes, setLeaveTypes] = useState([]);
+  const [matrixLoading, setMatrixLoading] = useState(false);
+
+  const matrixByEmail = useMemo(() => {
+    const map = {};
+    leaveMatrix.forEach((row) => { if (row.email) map[row.email.toLowerCase()] = row; });
+    return map;
+  }, [leaveMatrix]);
+
   // View mode
   const [viewMode, setViewMode] = useState("table"); // "table" | "calendar"
 
@@ -102,6 +116,12 @@ export default function SupervisorLeaveRequests() {
   const [deleteDialog, setDeleteDialog] = useState({ open: false, request: null });
   const [comment, setComment] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Two-step approval
+  const [multiApprovalEnabled, setMultiApprovalEnabled] = useState(false);
+  const [approvers, setApprovers] = useState([]);
+  const [requireSecondApproval, setRequireSecondApproval] = useState(false);
+  const [escalateTo, setEscalateTo] = useState("");
 
   // ── Stats ─────────────────────────────────────────────────────────────────
 
@@ -249,25 +269,37 @@ export default function SupervisorLeaveRequests() {
       label: "Approve",
       icon: CheckCircle2,
       onClick: (request) => setActionDialog({ open: true, type: "approve", request }),
-      condition: (request) => request.status === "pending" || request.status === "pending_secondary",
+      condition: (request) => (request.status === "pending" || request.status === "pending_secondary") && request.canAct === true,
       className: "text-green-600 hover:text-green-700",
     },
     {
       label: "Reject",
       icon: XCircle,
       onClick: (request) => setActionDialog({ open: true, type: "reject", request }),
-      condition: (request) => request.status === "pending" || request.status === "pending_secondary",
-      className: "text-red-600 hover:text-red-700",
-    },
-    {
-      label: "Delete",
-      icon: Trash2,
-      onClick: (request) => setDeleteDialog({ open: true, request }),
+      condition: (request) => (request.status === "pending" || request.status === "pending_secondary") && request.canAct === true,
       className: "text-red-600 hover:text-red-700",
     },
   ];
 
   // ── API handlers ──────────────────────────────────────────────────────────
+
+  const fetchCompanySettings = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/company-settings/`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (res.ok) setMultiApprovalEnabled(data.data?.multiApprovalEnabled ?? false);
+    } catch (_) {}
+  }, [token]);
+
+  const fetchApprovers = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/leaves/approvers`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (res.ok) setApprovers(data.data || []);
+    } catch (_) {}
+  }, [token]);
 
   const fetchLeaves = useCallback(async () => {
     if (!token) return;
@@ -286,21 +318,58 @@ export default function SupervisorLeaveRequests() {
     }
   }, [token]);
 
+  const fetchLeaveMatrix = useCallback(async () => {
+    if (!token) return;
+    setMatrixLoading(true);
+    try {
+      const [mRes, pRes] = await Promise.all([
+        fetch(`${API_URL}/api/leave-balances/matrix`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/api/leave-policies`,         { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      const [mData, pData] = await Promise.all([mRes.json(), pRes.json()]);
+      if (!mRes.ok || !pRes.ok) return;
+      const types = Array.isArray(pData.data) ? pData.data.map((p) => p.leaveType) : [];
+      const rows  = Array.isArray(mData.data) ? mData.data : [];
+      setLeaveTypes(types);
+      setLeaveMatrix(rows.map((row) => {
+        const balances = {};
+        types.forEach((t) => {
+          const credits   = Number(row.balances?.[t]    || 0);
+          const used      = Number(row.usedBalances?.[t] || 0);
+          balances[t] = { credits, used, available: Math.max(credits - used, 0) };
+        });
+        return { ...row, balances };
+      }));
+    } catch (_) {
+      // silently fail — credits are supplemental info
+    } finally {
+      setMatrixLoading(false);
+    }
+  }, [token]);
+
+  const closeActionDialog = () => {
+    setActionDialog({ open: false, type: null, request: null });
+    setComment("");
+    setRequireSecondApproval(false);
+    setEscalateTo("");
+  };
+
   const handleAction = async () => {
     if (!actionDialog.request || !actionDialog.type) return;
     const employeeEmail = actionDialog.request.requester?.email || actionDialog.request.User?.email || "the employee";
     const type = actionDialog.type;
     setActionLoading(true);
     try {
+      const body = { approverComments: comment.trim() || null };
+      if (type === "approve" && requireSecondApproval && escalateTo) body.escalateTo = escalateTo;
       const res = await fetch(`${API_URL}/api/leaves/${actionDialog.request.id}/${type}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ approverComments: comment.trim() || null }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) {
-        setActionDialog({ open: false, type: null, request: null });
-        setComment("");
+        closeActionDialog();
         if (data.debug?.available !== undefined) {
           toast("Insufficient Leave Balance", {
             description: `${employeeEmail} has ${data.debug.available}h available but needs ${data.debug.requested}h for ${data.debug.leaveType || "this leave"}.`,
@@ -314,12 +383,11 @@ export default function SupervisorLeaveRequests() {
         return;
       }
       toast.success(`Leave request ${type}d successfully!`);
-      setActionDialog({ open: false, type: null, request: null });
-      setComment("");
+      closeActionDialog();
       fetchLeaves();
+      fetchLeaveMatrix();
     } catch (err) {
-      setActionDialog({ open: false, type: null, request: null });
-      setComment("");
+      closeActionDialog();
       toast.error(err.message || `Failed to ${type} leave request`);
     } finally {
       setActionLoading(false);
@@ -346,7 +414,12 @@ export default function SupervisorLeaveRequests() {
     }
   };
 
-  useEffect(() => { fetchLeaves(); }, [fetchLeaves]);
+  useEffect(() => {
+    fetchLeaves();
+    fetchLeaveMatrix();
+    fetchCompanySettings();
+    fetchApprovers();
+  }, [fetchLeaves, fetchLeaveMatrix, fetchCompanySettings, fetchApprovers]);
 
   const goToToday = () => {
     setCalendarMonth(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -732,6 +805,48 @@ export default function SupervisorLeaveRequests() {
                   </div>
                 </div>
 
+                {/* Leave Credits */}
+                {(() => {
+                  const email = (detailDialog.request.requester?.email || detailDialog.request.User?.email || "").toLowerCase();
+                  const row   = matrixByEmail[email];
+                  if (!row && !matrixLoading) return null;
+                  return (
+                    <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg border border-purple-200 dark:border-purple-800">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="h-4 w-4 text-purple-600" />
+                          <div className="font-medium text-purple-700 dark:text-purple-300">Leave Credits</div>
+                        </div>
+                        {matrixLoading && <Loader2 className="h-3 w-3 animate-spin text-purple-400" />}
+                      </div>
+                      {row ? (
+                        <div className="space-y-2">
+                          {leaveTypes.map((type) => {
+                            const bal = row.balances?.[type] || { credits: 0, used: 0, available: 0 };
+                            const isRequested = type === detailDialog.request.leaveType;
+                            return (
+                              <div key={type} className={`flex items-center justify-between text-sm rounded px-2 py-1 ${isRequested ? "bg-purple-100 dark:bg-purple-800/30 font-semibold" : ""}`}>
+                                <span className={isRequested ? "text-purple-700 dark:text-purple-300" : "text-muted-foreground"}>
+                                  {isRequested && "▶ "}{type}
+                                </span>
+                                <div className="flex items-center gap-3 text-xs">
+                                  <span className="text-muted-foreground">{bal.credits}h total</span>
+                                  <span className="text-amber-600">{bal.used}h used</span>
+                                  <span className={`font-bold ${bal.available > 0 ? "text-green-600 dark:text-green-400" : "text-red-500"}`}>
+                                    {bal.available}h left
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Loading credits...</p>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-lg border border-orange-200 dark:border-orange-800">
                   <div className="flex items-center gap-2 mb-3">
                     <Calendar className="h-4 w-4 text-orange-600" />
@@ -799,7 +914,7 @@ export default function SupervisorLeaveRequests() {
             )}
 
             <DialogFooter>
-              {(detailDialog.request?.status === "pending" || detailDialog.request?.status === "pending_secondary") ? (
+              {(detailDialog.request?.status === "pending" || detailDialog.request?.status === "pending_secondary") && detailDialog.request?.canAct === true ? (
                 <>
                   <Button
                     variant="outline"
@@ -823,7 +938,7 @@ export default function SupervisorLeaveRequests() {
         </Dialog>
 
         {/* ── Approve/Reject Dialog ── */}
-        <Dialog open={actionDialog.open} onOpenChange={(open) => !open && setActionDialog({ open: false, type: null, request: null })}>
+        <Dialog open={actionDialog.open} onOpenChange={(open) => !open && closeActionDialog()}>
           <DialogContent className="sm:max-w-md">
             <div className={`h-1 w-full -mt-6 mb-4 ${actionDialog.type === "approve" ? "bg-green-500" : "bg-red-500"}`} />
             <DialogHeader>
@@ -883,6 +998,62 @@ export default function SupervisorLeaveRequests() {
               </>
             )}
 
+            {/* Credit balance for the requested leave type */}
+            {actionDialog.request && (() => {
+              const email = (actionDialog.request.requester?.email || actionDialog.request.User?.email || "").toLowerCase();
+              const row   = matrixByEmail[email];
+              const type  = actionDialog.request.leaveType;
+              const bal   = row?.balances?.[type];
+              if (!bal && !matrixLoading) return null;
+              const s = new Date(actionDialog.request.startDate); s.setHours(0,0,0,0);
+              const e = new Date(actionDialog.request.endDate);   e.setHours(0,0,0,0);
+              const days = Math.floor((e - s) / 86400000) + 1;
+              const requestedHours = days * 8;
+              const willExceed = bal && bal.available < requestedHours;
+              return (
+                <div className={`p-4 rounded-md border ${willExceed ? "bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800" : "bg-purple-50 border-purple-200 dark:bg-purple-900/20 dark:border-purple-800"}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className={`h-4 w-4 ${willExceed ? "text-red-600" : "text-purple-600"}`} />
+                      <div className={`font-semibold text-sm ${willExceed ? "text-red-700 dark:text-red-300" : "text-purple-700 dark:text-purple-300"}`}>
+                        {type} Balance
+                      </div>
+                    </div>
+                    {matrixLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                  </div>
+                  {bal ? (
+                    <div className="space-y-1.5 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Total Credits:</span>
+                        <span className="font-medium">{bal.credits}h</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Already Used:</span>
+                        <span className="font-medium text-amber-600">{bal.used}h</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Available:</span>
+                        <span className={`font-bold ${bal.available > 0 ? "text-green-600 dark:text-green-400" : "text-red-500"}`}>{bal.available}h</span>
+                      </div>
+                      <div className="h-px bg-current opacity-10 my-1" />
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">This Request:</span>
+                        <span className="font-semibold">{requestedHours}h ({days}d)</span>
+                      </div>
+                      {willExceed && (
+                        <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400 text-xs mt-1 font-medium">
+                          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                          Exceeds available balance by {requestedHours - bal.available}h
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Loading credits...</p>
+                  )}
+                </div>
+              );
+            })()}
+
             <div className="space-y-2">
               <label className="text-sm font-medium">Comments <span className="text-muted-foreground">(optional)</span></label>
               <Textarea
@@ -893,11 +1064,40 @@ export default function SupervisorLeaveRequests() {
               />
             </div>
 
+            {actionDialog.type === "approve" && multiApprovalEnabled && (
+              <div className="space-y-3 border rounded-md p-3 bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="requireSecondApproval"
+                    checked={requireSecondApproval}
+                    onCheckedChange={(v) => { setRequireSecondApproval(!!v); if (!v) setEscalateTo(""); }}
+                  />
+                  <label htmlFor="requireSecondApproval" className="text-sm font-medium text-blue-700 dark:text-blue-300 cursor-pointer">
+                    Require second approval
+                  </label>
+                </div>
+                {requireSecondApproval && (
+                  <Select value={escalateTo} onValueChange={setEscalateTo}>
+                    <SelectTrigger className="bg-white dark:bg-neutral-900">
+                      <SelectValue placeholder="Select second approver…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {approvers.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.name || a.email} {a.role ? `(${a.role})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            )}
+
             <DialogFooter>
-              <Button variant="outline" onClick={() => setActionDialog({ open: false, type: null, request: null })}>Cancel</Button>
+              <Button variant="outline" onClick={closeActionDialog}>Cancel</Button>
               <Button
                 onClick={handleAction}
-                disabled={actionLoading}
+                disabled={actionLoading || (actionDialog.type === "approve" && requireSecondApproval && !escalateTo)}
                 className={actionDialog.type === "approve" ? "bg-green-500 hover:bg-green-600" : "bg-red-500 hover:bg-red-600"}
               >
                 {actionLoading ? (

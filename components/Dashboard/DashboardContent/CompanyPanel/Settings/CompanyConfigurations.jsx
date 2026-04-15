@@ -134,10 +134,11 @@ const GUIDE_SECTIONS = [
   {
     icon: Timer, color: "blue", title: "DayCare Settings", badge: "DayCare Only", badgeColor: "purple",
     who: "Admin / Superadmin", dayCareOnly: true,
-    desc: "Controls the driver-aide threshold that triggers the AM/PM punch-type modal for non-driver employees.",
+    desc: "Controls DayCare-specific punch behaviour for both driver and non-driver employees.",
     bullets: [
-      "Driver-Aide Threshold — minutes early on time-in or late on time-out before the modal appears",
-      "Only affects non-driver / non-aide DayCare employees",
+      "Driver-Aide Threshold — minutes early on time-in or late on time-out before the AM/PM modal appears (non-driver employees)",
+      "Shift Assignment Window — minutes around a shift boundary where a driver's punch is auto-assigned and snapped to scheduled time, no prompt shown",
+      "Only affects DayCare employees",
       "Actual drivers always punch as Driver/Aide regardless of this setting",
       "Defaults to <strong>45 minutes</strong> if not configured",
     ],
@@ -954,6 +955,95 @@ function DepartmentCoffeeBreakPolicyCard({ departments, departmentCoffeeSettings
   );
 }
 
+// ── Auto Clock-Out Card ───────────────────────────────────────────────────────
+function AutoClockOutCard({ loading, draft, setDraft }) {
+  const [emailInput, setEmailInput] = useState("");
+  const emails = draft?.autoClockOutNotifyEmails ?? [];
+
+  const addEmail = () => {
+    const val = emailInput.trim();
+    if (!val || !val.includes("@")) return;
+    if (emails.includes(val)) { setEmailInput(""); return; }
+    setDraft((o) => ({ ...o, autoClockOutNotifyEmails: [...emails, val] }));
+    setEmailInput("");
+  };
+
+  const removeEmail = (email) => {
+    setDraft((o) => ({ ...o, autoClockOutNotifyEmails: emails.filter((e) => e !== email) }));
+  };
+
+  return (
+    <Card className="border-[1.5px] shadow-md overflow-hidden">
+      <CardStripe />
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2.5 text-[15px] font-extrabold">
+          <SectionIcon icon={Timer} color="orange" />
+          Auto Clock-Out
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <NumberField
+                label="Warning Hours Before Shift End"
+                value={draft?.autoClockOutWarningHours ?? 0.5}
+                onChange={(v) => setDraft((o) => ({ ...o, autoClockOutWarningHours: v }))}
+                step="0.25"
+                icon={Clock}
+                helpText="Employee is notified this many hours before their shift ends"
+              />
+              <NumberField
+                label="Grace Hours After Shift End"
+                value={draft?.autoClockOutGraceHours ?? 1}
+                onChange={(v) => setDraft((o) => ({ ...o, autoClockOutGraceHours: v }))}
+                step="0.25"
+                icon={Clock}
+                helpText="System auto-closes the session this many hours after shift end"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold flex items-center gap-1.5 text-neutral-700 dark:text-neutral-300">
+                <Clock className="w-3.5 h-3.5 text-orange-500" />
+                Notify Emails
+              </label>
+              <p className="text-xs text-neutral-400 italic">Supervisors notified when an auto clock-out fires</p>
+              <div className="flex gap-2">
+                <Input
+                  type="email"
+                  placeholder="supervisor@example.com"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addEmail(); } }}
+                  className="flex-1"
+                />
+                <Button variant="outline" size="sm" onClick={addEmail} type="button">Add</Button>
+              </div>
+              {emails.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {emails.map((email) => (
+                    <Badge key={email} variant="secondary" className="flex items-center gap-1 pr-1">
+                      {email}
+                      <button onClick={() => removeEmail(email)} className="ml-1 hover:text-red-500 transition-colors">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── DayCare Settings Card ─────────────────────────────────────────────────────
 function DayCareSettingsCard({ loading, draft, setDraft }) {
   return (
@@ -973,9 +1063,9 @@ function DayCareSettingsCard({ loading, draft, setDraft }) {
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (
-          <Skeleton className="h-16 w-full" />
+          <div className="grid sm:grid-cols-2 gap-4"><Skeleton className="h-16" /><Skeleton className="h-16" /></div>
         ) : (
-          <div className="max-w-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <NumberField
               label="Driver-Aide Threshold (minutes)"
               value={draft?.driverAideThresholdMinutes ?? 45}
@@ -983,6 +1073,14 @@ function DayCareSettingsCard({ loading, draft, setDraft }) {
               step="5"
               icon={Timer}
               helpText="Minutes early on time-in or late on time-out that triggers the AM/PM Driver-Aide modal for non-driver employees"
+            />
+            <NumberField
+              label="Shift Assignment Window (minutes)"
+              value={draft?.shiftAssignmentWindowMinutes ?? 30}
+              onChange={(v) => setDraft((o) => ({ ...o, shiftAssignmentWindowMinutes: v }))}
+              step="5"
+              icon={Zap}
+              helpText="Minutes before/after a shift boundary where a driver's punch is auto-assigned and snapped to the scheduled time — no prompt shown"
             />
           </div>
         )}
@@ -1862,6 +1960,7 @@ export default function ModernCompanyConfigurations() {
       />
       <TimeDefaultsCard loading={loadingSettings} draft={draft} setDraft={setDraft} />
       <OvertimeConfigCard loading={loadingSettings} draft={draft} setDraft={setDraft} />
+      <AutoClockOutCard loading={loadingSettings} draft={draft} setDraft={setDraft} />
       {isDayCare && (
         <DayCareSettingsCard loading={loadingSettings} draft={draft} setDraft={setDraft} />
       )}

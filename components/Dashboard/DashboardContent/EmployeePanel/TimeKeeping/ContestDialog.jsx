@@ -41,15 +41,15 @@ import { safeTime } from "./PunchLogs";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-/** Format a JS Date (or timestamp string) to local "HH:MM" for a time input. */
-function toLocalTimeInput(dateStr) {
+/** Format a JS Date (or timestamp string) to "HH:MM" in the given timezone. */
+function toLocalTimeInput(dateStr, tz) {
   if (!dateStr) return "";
-  const d = new Date(dateStr);
-  return (
-    String(d.getHours()).padStart(2, "0") +
-    ":" +
-    String(d.getMinutes()).padStart(2, "0")
-  );
+  const str = new Date(dateStr).toLocaleTimeString("en-US", {
+    hour: "2-digit", minute: "2-digit", hour12: false,
+    ...(tz ? { timeZone: tz } : {}),
+  });
+  // toLocaleTimeString with hour12:false may return "24:xx" for midnight — normalise
+  return str === "24:00" ? "00:00" : str;
 }
 
 /** Format "HH:MM" to "hh:mm AM/PM" for the comparison strip labels. */
@@ -70,13 +70,12 @@ function netHours(inTime, outTime) {
 }
 
 /**
- * Reconstruct a full local ISO string from the log's date + a "HH:MM" string.
- * e.g. logDateStr="2026-03-25", timeStr="13:56" → "2026-03-25T13:56:00"
- * new Date() interprets this as LOCAL time, then .toISOString() sends UTC to API.
+ * Reconstruct a UTC ISO string from the log's date (in company tz) + a "HH:MM" string.
+ * Uses the company timezone so the date boundary is correct regardless of viewer's locale.
  */
-function buildISO(logTimeIn, timeStr) {
+function buildISO(logTimeIn, timeStr, tz) {
   if (!logTimeIn || !timeStr) return null;
-  const dateOnly = new Date(logTimeIn).toLocaleDateString("en-CA"); // "YYYY-MM-DD"
+  const dateOnly = new Date(logTimeIn).toLocaleDateString("en-CA", { timeZone: tz || "UTC" }); // "YYYY-MM-DD"
   return new Date(`${dateOnly}T${timeStr}:00`).toISOString();
 }
 
@@ -85,6 +84,7 @@ function buildISO(logTimeIn, timeStr) {
 export function ContestDialog({
   open,
   onOpenChange,
+  companyTimezone,
 
   // State values (from PunchLogs parent)
   filteredSorted,
@@ -105,7 +105,7 @@ export function ContestDialog({
   const selectedLog = filteredSorted.find((l) => l.id === contestLogId) ?? null;
 
   const origHours = selectedLog
-    ? netHours(toLocalTimeInput(selectedLog.timeIn), toLocalTimeInput(selectedLog.timeOut))
+    ? netHours(toLocalTimeInput(selectedLog.timeIn, companyTimezone), toLocalTimeInput(selectedLog.timeOut, companyTimezone))
     : null;
   const reqHours = netHours(contestRequestedClockIn, contestRequestedClockOut);
   const delta = origHours !== null && reqHours !== null ? reqHours - origHours : null;
@@ -129,14 +129,14 @@ export function ContestDialog({
     setContestErrors((e) => ({ ...e, logId: undefined }));
     const log = filteredSorted.find((l) => l.id === id);
     if (log) {
-      setContestRequestedClockIn(toLocalTimeInput(log.timeIn));
-      setContestRequestedClockOut(toLocalTimeInput(log.timeOut));
+      setContestRequestedClockIn(toLocalTimeInput(log.timeIn, companyTimezone));
+      setContestRequestedClockOut(toLocalTimeInput(log.timeOut, companyTimezone));
     }
   };
 
   const handleSubmit = () => {
-    const clockInISO  = buildISO(selectedLog?.timeIn, contestRequestedClockIn);
-    const clockOutISO = buildISO(selectedLog?.timeIn, contestRequestedClockOut);
+    const clockInISO  = buildISO(selectedLog?.timeIn, contestRequestedClockIn,  companyTimezone);
+    const clockOutISO = buildISO(selectedLog?.timeIn, contestRequestedClockOut, companyTimezone);
     onSubmit(clockInISO, clockOutISO);
   };
 
@@ -190,7 +190,7 @@ export function ContestDialog({
                               })
                             : "—"}
                           {" · "}
-                          {safeTime(l.timeIn)} – {safeTime(l.timeOut)}
+                          {safeTime(l.timeIn, companyTimezone)} – {safeTime(l.timeOut, companyTimezone)}
                           {" · "}
                           {l.duration}h
                         </span>
@@ -218,8 +218,8 @@ export function ContestDialog({
                   </div>
                   <div className="grid grid-cols-3 px-3 py-2.5 items-center border-t border-border bg-background">
                     <span className="text-xs font-medium text-muted-foreground">Recorded</span>
-                    <span className="font-medium tabular-nums">{safeTime(selectedLog.timeIn)}</span>
-                    <span className="font-medium tabular-nums">{safeTime(selectedLog.timeOut)}</span>
+                    <span className="font-medium tabular-nums">{safeTime(selectedLog.timeIn, companyTimezone)}</span>
+                    <span className="font-medium tabular-nums">{safeTime(selectedLog.timeOut, companyTimezone)}</span>
                   </div>
                   <div className="grid grid-cols-3 px-3 py-2.5 items-center border-t border-border bg-orange-50/50 dark:bg-orange-950/20">
                     <span className="text-xs font-medium text-orange-600 dark:text-orange-400">Requested</span>

@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import useAuthStore from "@/store/useAuthStore";
+import socketService from "@/lib/socketService";
 import DataTable from "@/components/common/DataTable";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -475,6 +476,13 @@ export default function EmployeeLeaveRequests() {
     fetchLeaves();
     fetchBalances();
   }, [fetchLeaves, fetchBalances]);
+
+  // ── Socket: re-fetch balances when leave is fully approved ───────────────
+  useEffect(() => {
+    const handler = () => fetchBalances();
+    socketService.on("leaveBalanceUpdated", handler);
+    return () => socketService.off("leaveBalanceUpdated", handler);
+  }, [fetchBalances]);
 
   // Calculate balance info for selected leave type
   const creditsForType = useMemo(() => {

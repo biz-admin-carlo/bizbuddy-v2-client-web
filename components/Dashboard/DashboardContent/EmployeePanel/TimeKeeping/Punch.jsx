@@ -2,7 +2,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import useAuthStore from "@/store/useAuthStore";
 import { toast, Toaster } from "sonner";
@@ -69,6 +69,18 @@ function fetchLocation() {
   });
 }
 
+// ── Haversine distance (meters) ────────────────────────────────────────────────
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // ── Punch type constants ───────────────────────────────────────────────────────
 const PUNCH_TYPES = {
   REGULAR:       "REGULAR",
@@ -117,9 +129,14 @@ export default function Punch() {
   // Location
   const [location, setLocation]               = useState({ latitude: null, longitude: null });
   const [locationLoading, setLocationLoading] = useState(true);
+  const [locationChecking, setLocationChecking] = useState(false);
+  const [assignedLocations, setAssignedLocations] = useState([]);
+  // "checking" | "inside" | "outside" | "unavailable" | null (null = no restrictions)
+  const [locationStatus, setLocationStatus] = useState(null);
+  const locationIntervalRef = useRef(null);
 
   // Employee info
-  const [employeeInfo, setEmployeeInfo]               = useState({ companyId: null, companyName: null, jobTitle: null });
+  const [employeeInfo, setEmployeeInfo]               = useState({ companyId: null, companyName: null, jobTitle: null, isDriver: false });
   const [employeeInfoLoading, setEmployeeInfoLoading] = useState(true);
 
   // Today's scheduled shift — fetched on mount alongside employee info
@@ -149,6 +166,13 @@ export default function Punch() {
   // Driver-aide threshold — loaded from company settings, defaults to 45
   const [driverAideThresholdMinutes, setDriverAideThresholdMinutes] = useState(45);
 
+  // Shift assignment window — loaded from company settings, defaults to 30
+  // Minutes before scheduled start where driver punch is auto-snapped to shift boundary
+  const [shiftAssignmentWindowMinutes, setShiftAssignmentWindowMinutes] = useState(30);
+
+  // When set, overrides localTimestamp in the time-in API call (driver snap-to-schedule)
+  const [pendingSnapTimestamp, setPendingSnapTimestamp] = useState(null);
+
   // Auto-lunch config — loaded from employment details (department settings)
   // null means not configured / dept has no paid lunch
   const [autoLunchConfig, setAutoLunchConfig] = useState(null);
@@ -161,14 +185,10 @@ export default function Punch() {
 
   const isDayCare = DAYCARE_COMPANY_IDS.includes(employeeInfo.companyId);
 
-  // Strict match — "driver" only (case-insensitive). "Driver Aide", "Aide" etc. are NOT drivers.
-  const isDriver = employeeInfo.jobTitle?.toLowerCase() === "driver";
-  const isDriverOrAide = ["driver", "aide"].includes(
-    employeeInfo.jobTitle?.toLowerCase()
-  );
+  const isDriver = employeeInfo.isDriver;
 
-  // Non-driver DayCare employee — the only group that sees the AM/PM modal
-  const isDayCareNonDriver = isDayCare && !isDriverOrAide;
+  // Non-driver DayCare employee — the only group that sees the Early/Late modal
+  const isDayCareNonDriver = isDayCare && !isDriver;
 
   // Auto-lunch is due when: timed in, threshold crossed, no lunch started or taken yet
   const autoLunchDue =
@@ -186,6 +206,31 @@ export default function Punch() {
       setLocationLoading(false);
     });
   }, []);
+
+  // ── Proactive location restriction check ─────────────────────────────────────
+  const checkLocationStatus = useCallback(async (locations) => {
+    if (!locations || locations.length === 0) { setLocationStatus(null); return; }
+    setLocationStatus("checking");
+    const coords = await fetchLocation();
+    setLocation(coords);
+    if (!coords.latitude || !coords.longitude) {
+      setLocationStatus("unavailable");
+      return;
+    }
+    const inside = locations.some((loc) =>
+      getDistance(parseFloat(loc.latitude), parseFloat(loc.longitude), coords.latitude, coords.longitude)
+        <= parseFloat(loc.radius)
+    );
+    setLocationStatus(inside ? "inside" : "outside");
+  }, []);
+
+  // Run once when assigned locations are loaded, then every 60 s
+  useEffect(() => {
+    if (assignedLocations.length === 0) { setLocationStatus(null); return; }
+    checkLocationStatus(assignedLocations);
+    locationIntervalRef.current = setInterval(() => checkLocationStatus(assignedLocations), 60000);
+    return () => clearInterval(locationIntervalRef.current);
+  }, [assignedLocations, checkLocationStatus]);
 
   // ── Employee info + today's shift on mount ────────────────────────────────────
   useEffect(() => {
@@ -206,19 +251,32 @@ export default function Punch() {
       fetch(`${API_URL}/api/company-settings`, {
         headers: { Authorization: `Bearer ${token}` },
       }).then((r) => r.json()).catch(() => null),
+      fetch(`${API_URL}/api/location/assigned`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((r) => r.json()).catch(() => null),
     ])
-      .then(([profileRes, employmentRes, shiftRes, settingsRes]) => {
+      .then(([profileRes, employmentRes, shiftRes, settingsRes, locationRes]) => {
         setEmployeeInfo({
           companyId:   profileRes?.data?.company?.id   || null,
           companyName: profileRes?.data?.company?.name || null,
           jobTitle:    employmentRes?.data?.jobTitle   || null,
+          isDriver:    employmentRes?.data?.isDriver   ?? false,
         });
+
+        // /api/location/assigned returns only locations assigned to the current user
+        if (Array.isArray(locationRes?.data)) {
+          setAssignedLocations(locationRes.data);
+        }
         // null = no shift today, object = shift found
         setTodayShift(shiftRes?.data ?? null);
         // Use configured threshold or fall back to 45
         const threshold = settingsRes?.data?.driverAideThresholdMinutes;
         if (typeof threshold === "number" && threshold > 0) {
           setDriverAideThresholdMinutes(threshold);
+        }
+        const assignmentWindow = settingsRes?.data?.shiftAssignmentWindowMinutes;
+        if (typeof assignmentWindow === "number" && assignmentWindow > 0) {
+          setShiftAssignmentWindowMinutes(assignmentWindow);
         }
 
         // Auto-lunch config from employment details (department settings)
@@ -313,6 +371,7 @@ export default function Punch() {
     setActivePunchType(null);
     setSelectedPunchType(null);
     setPunchTypeContext(null);
+    setPendingSnapTimestamp(null);
     setNoScheduleRemarks("");
   };
 
@@ -387,7 +446,7 @@ export default function Punch() {
   };
 
   // ── Core punch handler ────────────────────────────────────────────────────────
-  const handlePunch = () => {
+  const handlePunch = async () => {
     // Guard: can't time out while a break is active
     if (isTimedIn && (coffeeActive || lunchActive)) {
       toast.message("End active break first.", {
@@ -395,6 +454,27 @@ export default function Punch() {
         icon: <AlertCircle className="h-5 w-5 text-red-500" />,
       });
       return;
+    }
+
+    // ── Location restriction guard — re-verify live before proceeding ──────────
+    if (assignedLocations.length > 0) {
+      setLocationChecking(true);
+      const coords = await fetchLocation();
+      setLocation(coords);
+      setLocationChecking(false);
+
+      if (!coords.latitude || !coords.longitude) {
+        setLocationStatus("unavailable");
+        return;
+      }
+
+      const inside = assignedLocations.some((loc) =>
+        getDistance(parseFloat(loc.latitude), parseFloat(loc.longitude), coords.latitude, coords.longitude)
+          <= parseFloat(loc.radius)
+      );
+
+      setLocationStatus(inside ? "inside" : "outside");
+      if (!inside) return;
     }
 
     const action = isTimedIn ? "timeout" : "timein";
@@ -423,9 +503,18 @@ export default function Punch() {
 
   // ── Time-in routing ───────────────────────────────────────────────────────────
   const handleTimeInLogic = () => {
-    // Actual Driver → always DRIVER_AIDE, no modal, straight to confirmation
+    // Driver (DayCare) → always DRIVER_AIDE, no modal.
+    // If punching within the shift assignment window, snap time to scheduled start.
     if (isDayCare && isDriver) {
+      const earlyMins = minutesEarlyForTimeIn();
+      const withinWindow =
+        !!todayShift?.scheduledStartMs &&
+        earlyMins > 0 &&
+        earlyMins <= shiftAssignmentWindowMinutes;
       setSelectedPunchType(PUNCH_TYPES.DRIVER_AIDE);
+      setPendingSnapTimestamp(
+        withinWindow ? new Date(todayShift.scheduledStartMs).toISOString() : null
+      );
       setConfirmAction("timein");
       setConfirmDialogOpen(true);
       return;
@@ -498,6 +587,11 @@ export default function Punch() {
       }];
     }
 
+    // Snap-to-schedule for drivers within shift assignment window
+    if (isTimeIn && pendingSnapTimestamp) {
+      extraBody.localTimestamp = pendingSnapTimestamp;
+    }
+
     // Auto-lunch deduction signal — sent on time-out when threshold was crossed
     // and the employee never manually started a lunch break
     if (!isTimeIn && autoLunchDue && autoLunchConfig) {
@@ -522,6 +616,7 @@ export default function Punch() {
     setConfirmAction(null);
     setSelectedPunchType(null);
     setPunchTypeContext(null);
+    setPendingSnapTimestamp(null);
   };
 
   // ── Break handlers ────────────────────────────────────────────────────────────
@@ -737,33 +832,73 @@ export default function Punch() {
                     </AnimatePresence>
 
                     {/* Location badge */}
-                    <AnimatePresence>
-                      {locationLoading ? (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                          <Badge variant="outline" className="animate-pulse">
-                            <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Locating...
+                    <AnimatePresence mode="wait">
+                      {/* Has location restriction — show zone status */}
+                      {locationStatus === "checking" ? (
+                        <motion.div key="checking" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                          <Badge variant="outline" className="animate-pulse gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" /> Checking location...
+                          </Badge>
+                        </motion.div>
+                      ) : locationStatus === "inside" ? (
+                        <motion.div key="inside" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800 cursor-help gap-1">
+                                <Check className="h-3 w-3" /> Within Work Zone
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent><p>You are within your designated work location.</p></TooltipContent>
+                          </Tooltip>
+                        </motion.div>
+                      ) : locationStatus === "outside" ? (
+                        <motion.div key="outside" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 cursor-help gap-1">
+                                <AlertCircle className="h-3 w-3" /> Outside Work Zone
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent><p>You must be at your designated work location to punch.</p></TooltipContent>
+                          </Tooltip>
+                        </motion.div>
+                      ) : locationStatus === "unavailable" ? (
+                        <motion.div key="unavailable" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 cursor-help gap-1">
+                                <AlertCircle className="h-3 w-3" /> GPS Unavailable
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Enable location services to punch in/out.</p></TooltipContent>
+                          </Tooltip>
+                        </motion.div>
+                      ) : locationLoading ? (
+                        <motion.div key="locating" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                          <Badge variant="outline" className="animate-pulse gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" /> Locating...
                           </Badge>
                         </motion.div>
                       ) : location.latitude ? (
-                        <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
+                        <motion.div key="active" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800 cursor-help">
-                                <MapPin className="h-3 w-3 mr-1" /> Location Active
+                              <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800 cursor-help gap-1">
+                                <MapPin className="h-3 w-3" /> Location Active
                               </Badge>
                             </TooltipTrigger>
-                            <TooltipContent><p>GPS location is active and working</p></TooltipContent>
+                            <TooltipContent><p>GPS location is active and working.</p></TooltipContent>
                           </Tooltip>
                         </motion.div>
                       ) : (
-                        <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
+                        <motion.div key="disabled" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Badge className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 cursor-help">
-                                <AlertCircle className="h-3 w-3 mr-1" /> Location Required
+                              <Badge className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 cursor-help gap-1">
+                                <AlertCircle className="h-3 w-3" /> Location Required
                               </Badge>
                             </TooltipTrigger>
-                            <TooltipContent><p>Enable location services to punch in/out</p></TooltipContent>
+                            <TooltipContent><p>Enable location services to punch in/out.</p></TooltipContent>
                           </Tooltip>
                         </motion.div>
                       )}
@@ -841,20 +976,86 @@ export default function Punch() {
               </CardContent>
 
               <CardFooter className="flex flex-col gap-6 pt-4 pb-8">
-                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-full">
+                {/* Location restriction banners */}
+                <AnimatePresence>
+                  {locationStatus === "outside" && (
+                    <motion.div
+                      key="outside-banner"
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/40"
+                    >
+                      <MapPin className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-red-800 dark:text-red-200">
+                          Outside designated work location
+                        </p>
+                        <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">
+                          You must be within <span className="font-semibold">{assignedLocations.map((l) => l.name).join(" or ")}</span> to punch in or out.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => checkLocationStatus(assignedLocations)}
+                        className="shrink-0 text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 underline underline-offset-2 transition-colors"
+                      >
+                        Recheck
+                      </button>
+                    </motion.div>
+                  )}
+                  {locationStatus === "unavailable" && (
+                    <motion.div
+                      key="unavailable-banner"
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/40"
+                    >
+                      <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-orange-800 dark:text-orange-200">
+                          GPS unavailable
+                        </p>
+                        <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
+                          Your location is required to verify you're at your work site. Enable GPS and try again.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => checkLocationStatus(assignedLocations)}
+                        className="shrink-0 text-xs text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-200 underline underline-offset-2 transition-colors"
+                      >
+                        Retry
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <motion.div
+                  whileHover={{ scale: locationStatus === "outside" || locationStatus === "unavailable" ? 1 : 1.02 }}
+                  whileTap={{ scale: locationStatus === "outside" || locationStatus === "unavailable" ? 1 : 0.98 }}
+                  className="w-full"
+                >
                   <Button
                     size="lg"
                     className={`w-full text-xl font-bold h-16 transition-all shadow-lg ${
-                      employeeInfoLoading || todayShiftLoading
+                      locationStatus === "outside" || locationStatus === "unavailable"
+                        ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                        : employeeInfoLoading || todayShiftLoading
                         ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
                         : isTimedIn
                         ? "bg-red-500 hover:bg-red-600 text-white"
                         : "bg-gradient-to-r from-orange-500 to-orange-500 hover:from-orange-600 hover:to-orange-600 text-white"
                     }`}
-                    disabled={loading || employeeInfoLoading || todayShiftLoading}
+                    disabled={loading || locationChecking || employeeInfoLoading || todayShiftLoading || locationStatus === "outside" || locationStatus === "unavailable"}
                     onClick={handlePunch}
                   >
-                    {loading ? (
+                    {locationChecking || locationStatus === "checking" ? (
+                      <><Loader2 className="h-6 w-6 animate-spin mr-3" /> Checking Location...</>
+                    ) : locationStatus === "outside" ? (
+                      <><MapPin className="h-6 w-6 mr-3" /> Outside Work Zone</>
+                    ) : locationStatus === "unavailable" ? (
+                      <><AlertCircle className="h-6 w-6 mr-3" /> GPS Unavailable</>
+                    ) : loading ? (
                       <Loader2 className="h-6 w-6 animate-spin mr-3" />
                     ) : employeeInfoLoading || todayShiftLoading ? (
                       <><Loader2 className="h-6 w-6 animate-spin mr-3" /> Loading...</>
@@ -1185,15 +1386,15 @@ export default function Punch() {
               {selectedPunchType && (() => {
                 const meta = PUNCH_TYPE_LABELS[selectedPunchType] ?? PUNCH_TYPE_LABELS[PUNCH_TYPES.REGULAR];
                 const Icon = meta.icon;
-                const isDriver = meta.color === "blue";
+                const isDriverType = meta.color === "blue";
                 return (
                   <div className={`p-4 rounded-xl border ${
-                    isDriver
+                    isDriverType
                       ? "bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800"
                       : "bg-purple-50 dark:bg-purple-950 border-purple-200 dark:border-purple-800"
                   }`}>
                     <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg text-white ${isDriver ? "bg-blue-500" : "bg-purple-500"}`}>
+                      <div className={`p-2 rounded-lg text-white ${isDriverType ? "bg-blue-500" : "bg-purple-500"}`}>
                         <Icon className="h-4 w-4" />
                       </div>
                       <div>
@@ -1205,23 +1406,34 @@ export default function Punch() {
                 );
               })()}
 
-              {/* Current time */}
+              {/* Recognized time — shows snapped scheduled time for drivers within window */}
               <div className="p-4 rounded-xl bg-orange-100 dark:bg-orange-900 border border-orange-300 dark:border-orange-700">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-orange-500 text-white">
                     <Clock className="h-4 w-4" />
                   </div>
                   <div>
-                    <p className="font-medium">Current Time</p>
-                    <p className="text-sm text-muted-foreground">
-                      {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                    </p>
+                    {pendingSnapTimestamp ? (
+                      <>
+                        <p className="font-medium">Recognized Time <span className="text-xs font-normal text-muted-foreground">(snapped to schedule)</span></p>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date(pendingSnapTimestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-medium">Current Time</p>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
 
               <DialogFooter>
-                <Button variant="outline" onClick={() => setConfirmDialogOpen(false)} disabled={loading}>
+                <Button variant="outline" onClick={() => { setConfirmDialogOpen(false); setPendingSnapTimestamp(null); }} disabled={loading}>
                   Cancel
                 </Button>
                 <Button

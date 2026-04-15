@@ -39,6 +39,7 @@ const NOTIFICATION_CONFIG = {
 
   // ── Auto Clock-Out ────────────────────────────────────────────
   AUTO_CLOCK_OUT:            { title: 'Auto Clock-Out',           emoji: '🔒' },
+  CLOCK_OUT_WARNING:         { title: 'Time to Clock Out',        emoji: '⏰' },
 
   // ── Password ──────────────────────────────────────────────────
   PASSWORD_RESET_SUCCESS:    { title: 'Password Reset',           emoji: '🔑' },
@@ -331,12 +332,22 @@ export default function NotificationBell() {
     fetchUnreadCount();
 
     const handleNewNotification = (notification) => {
-      console.log('🔔 New notification:', notification);
-      
+      // console.log('🔔 New notification:', notification);
+
       // Update state
       setUnreadCount(prev => prev + 1);
       setNotifications(prev => [notification, ...prev].slice(0, 10));
-      
+
+      // Persistent toast for clock-out warning — time-sensitive, must not auto-dismiss
+      if (notification.notificationCode === 'CLOCK_OUT_WARNING') {
+        toast.warning(notification.message || 'Please clock out soon.', {
+          description: notification.title || 'Time to Clock Out',
+          duration: Infinity,
+          closeButton: true,
+        });
+        return;
+      }
+
       // Browser notification
       if (typeof window !== 'undefined' && Notification.permission === 'granted') {
         new Notification('BizBuddy', {
