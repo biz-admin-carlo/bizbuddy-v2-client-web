@@ -9,6 +9,7 @@ const useAuthStore = create(
     (set, get) => ({
       token: null,
       isHydrated: false,
+      sidebarOpen: false,
       login: (token) => {
         set({ token });
       },
@@ -16,6 +17,7 @@ const useAuthStore = create(
         set({ token: null });
       },
       setHydrated: (hydrated) => set({ isHydrated: hydrated }),
+      setSidebarOpen: (open) => set({ sidebarOpen: open }),
       get user() {
         const { token } = get();
         if (!token) {

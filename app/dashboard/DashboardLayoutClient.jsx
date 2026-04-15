@@ -13,7 +13,7 @@ import ErrorBoundary from "@/components/common/ErrorBoundary";
 import FeedbackWidget from "@/components/common/FeedbackWidget";
 
 export default function DashboardLayoutClient({ children }) {
-  const { token, login } = useAuthStore();
+  const { token, login, setSidebarOpen } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -32,6 +32,10 @@ export default function DashboardLayoutClient({ children }) {
   useEffect(() => {
     localStorage.setItem("sidebarPinned", isSidebarPinned);
   }, [isSidebarPinned]);
+
+  useEffect(() => {
+    setSidebarOpen(isSidebarOpen);
+  }, [isSidebarOpen, setSidebarOpen]);
 
   const togglePin = () => {
     setIsSidebarPinned((p) => {
