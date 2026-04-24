@@ -37,6 +37,11 @@ import { DateTimePicker } from "@/components/DateTimePicker";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+const toLocalDate = (dateStr) => {
+  const [y, m, d] = dateStr.slice(0, 10).split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
+
 const statusConfig = {
   pending: {
     label: "Pending Approval",
@@ -172,17 +177,14 @@ export default function EmployeeLeaveRequests() {
       label: "Date Range",
       render: (_, row) => (
         <div className="text-sm">
-          <div className="font-medium">{new Date(row.startDate).toLocaleDateString()}</div>
+          <div className="font-medium">{toLocalDate(row.startDate).toLocaleDateString()}</div>
           <div className="text-xs text-muted-foreground">
-            to {new Date(row.endDate).toLocaleDateString()}
+            to {toLocalDate(row.endDate).toLocaleDateString()}
           </div>
           <div className="text-xs text-orange-600 font-medium">
             {(() => {
-              const start = new Date(row.startDate);
-              const end = new Date(row.endDate);
-              // Reset time to avoid time zone issues
-              start.setHours(0, 0, 0, 0);
-              end.setHours(0, 0, 0, 0);
+              const start = toLocalDate(row.startDate);
+              const end = toLocalDate(row.endDate);
               const diffTime = end - start;
               const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
               return `${diffDays} day${diffDays === 1 ? '' : 's'}`;
@@ -787,11 +789,11 @@ export default function EmployeeLeaveRequests() {
                 <div className="grid grid-cols-1 gap-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Start Date:</span>
-                    <span className="font-medium">{new Date(detailDialog.request.startDate).toLocaleDateString()}</span>
+                    <span className="font-medium">{toLocalDate(detailDialog.request.startDate).toLocaleDateString()}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">End Date:</span>
-                    <span className="font-medium">{new Date(detailDialog.request.endDate).toLocaleDateString()}</span>
+                    <span className="font-medium">{toLocalDate(detailDialog.request.endDate).toLocaleDateString()}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Duration:</span>

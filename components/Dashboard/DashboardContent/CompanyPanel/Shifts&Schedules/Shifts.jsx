@@ -229,6 +229,11 @@ export default function Shifts() {
   const [refreshing, setRefreshing] = useState(false);
   const [companyTimezone, setCompanyTimezone] = useState("America/Los_Angeles");
   const [loadingTimezone, setLoadingTimezone] = useState(true);
+  const [autoBreakBasis, setAutoBreakBasis] = useState("department");
+  const [autoLunchEnabled, setAutoLunchEnabled] = useState(false);
+  const [autoCoffeeEnabled, setAutoCoffeeEnabled] = useState(false);
+  const [shiftAutoBreakEntitlement, setShiftAutoBreakEntitlement] = useState({});
+  const [shiftEntitlementLoading, setShiftEntitlementLoading] = useState({});
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -255,6 +260,14 @@ export default function Shifts() {
     endTime: "",
     differentialMultiplier: "1.0",
     timeZone: "",
+    autoLunchEntitled: false,
+    autoBreakLunchMinutes: 60,
+    autoBreakLunchAfterHours: 5,
+    autoBreakLunchDeductible: false,
+    autoCoffeeEntitled: false,
+    autoBreakCoffeeCount: 2,
+    autoBreakCoffeeMinutes: 15,
+    autoBreakCoffeeDeductible: false,
   });
 
   const [showDelete, setShowDelete] = useState(false);
@@ -276,8 +289,11 @@ export default function Shifts() {
         headers: { Authorization: `Bearer ${token}` }
       });
       const j = await r.json();
-      if (r.ok && j.data?.timezone) {
-        setCompanyTimezone(j.data.timezone);
+      if (r.ok && j.data) {
+        setCompanyTimezone(j.data.timezone || "America/Los_Angeles");
+        setAutoBreakBasis(j.data.autoBreakBasis || "department");
+        setAutoLunchEnabled(j.data.autoLunchEnabled || false);
+        setAutoCoffeeEnabled(j.data.autoCoffeeEnabled || false);
       } else {
         setCompanyTimezone("America/Los_Angeles");
       }
@@ -300,8 +316,24 @@ export default function Shifts() {
     try {
       const r = await fetch(`${API}/api/shifts`, { headers: { Authorization: `Bearer ${token}` } });
       const j = await r.json();
-      if (r.ok) setShifts(j.data || []);
-      else toast.error(j.message || "Failed to fetch shifts.");
+      if (r.ok) {
+        const data = j.data || [];
+        setShifts(data);
+        const entitlement = {};
+        data.forEach((s) => {
+          entitlement[s.id] = {
+            autoLunchEntitled:        s.autoLunchEntitled        || false,
+            autoBreakLunchMinutes:    s.autoBreakLunchMinutes    ?? 60,
+            autoBreakLunchAfterHours: s.autoBreakLunchAfterHours ?? 5,
+            autoBreakLunchDeductible: s.autoBreakLunchDeductible || false,
+            autoCoffeeEntitled:       s.autoCoffeeEntitled       || false,
+            autoBreakCoffeeCount:     s.autoBreakCoffeeCount     ?? 2,
+            autoBreakCoffeeMinutes:   s.autoBreakCoffeeMinutes   ?? 15,
+            autoBreakCoffeeDeductible:s.autoBreakCoffeeDeductible|| false,
+          };
+        });
+        setShiftAutoBreakEntitlement(entitlement);
+      } else toast.error(j.message || "Failed to fetch shifts.");
     } catch {
       toast.error("Failed to fetch shifts.");
     }
@@ -313,6 +345,24 @@ export default function Shifts() {
     await fetchShifts();
     toast.success("Shifts refreshed successfully");
     setRefreshing(false);
+  };
+
+  const updateShiftEntitlement = async (shiftId, updates) => {
+    const key = Object.keys(updates)[0];
+    setShiftEntitlementLoading((p) => ({ ...p, [`${key}_${shiftId}`]: true }));
+    try {
+      const r = await fetch(`${API}/api/shifts/${shiftId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(updates),
+      });
+      const j = await r.json();
+      if (r.ok) {
+        setShiftAutoBreakEntitlement((p) => ({ ...p, [shiftId]: { ...p[shiftId], ...updates } }));
+        toast.success("Shift auto-break entitlement updated");
+      } else toast.error(j.message || "Failed to update shift");
+    } catch { toast.error("Network error"); }
+    setShiftEntitlementLoading((p) => ({ ...p, [`${key}_${shiftId}`]: false }));
   };
 
   const filteredSorted = useMemo(() => {
@@ -511,12 +561,21 @@ export default function Shifts() {
   };
 
   const openEdit = (s) => {
+    const ab = shiftAutoBreakEntitlement[s.id] || {};
     setEditForm({
       id: s.id,
       shiftName: s.shiftName,
       startTime: fmtClock(s.startTime),
       endTime: fmtClock(s.endTime),
       differentialMultiplier: String(s.differentialMultiplier),
+      autoLunchEntitled:        ab.autoLunchEntitled        || false,
+      autoBreakLunchMinutes:    ab.autoBreakLunchMinutes    ?? 60,
+      autoBreakLunchAfterHours: ab.autoBreakLunchAfterHours ?? 5,
+      autoBreakLunchDeductible: ab.autoBreakLunchDeductible || false,
+      autoCoffeeEntitled:       ab.autoCoffeeEntitled       || false,
+      autoBreakCoffeeCount:     ab.autoBreakCoffeeCount     ?? 2,
+      autoBreakCoffeeMinutes:   ab.autoBreakCoffeeMinutes   ?? 15,
+      autoBreakCoffeeDeductible:ab.autoBreakCoffeeDeductible|| false,
     });
     setShowEdit(true);
   };
@@ -531,6 +590,14 @@ export default function Shifts() {
         endTime: editForm.endTime,
         differentialMultiplier: parseFloat(editForm.differentialMultiplier),
         timeZone: companyTimezone,
+        autoLunchEntitled:        editForm.autoLunchEntitled,
+        autoBreakLunchMinutes:    editForm.autoBreakLunchMinutes,
+        autoBreakLunchAfterHours: editForm.autoBreakLunchAfterHours,
+        autoBreakLunchDeductible: editForm.autoBreakLunchDeductible,
+        autoCoffeeEntitled:       editForm.autoCoffeeEntitled,
+        autoBreakCoffeeCount:     editForm.autoBreakCoffeeCount,
+        autoBreakCoffeeMinutes:   editForm.autoBreakCoffeeMinutes,
+        autoBreakCoffeeDeductible:editForm.autoBreakCoffeeDeductible,
       };
       const r = await fetch(`${API}/api/shifts/${editForm.id}`, {
         method: "PUT",
@@ -539,6 +606,19 @@ export default function Shifts() {
       });
       const j = await r.json();
       if (r.ok) {
+        setShiftAutoBreakEntitlement((p) => ({
+          ...p,
+          [editForm.id]: {
+            autoLunchEntitled:        editForm.autoLunchEntitled,
+            autoBreakLunchMinutes:    editForm.autoBreakLunchMinutes,
+            autoBreakLunchAfterHours: editForm.autoBreakLunchAfterHours,
+            autoBreakLunchDeductible: editForm.autoBreakLunchDeductible,
+            autoCoffeeEntitled:       editForm.autoCoffeeEntitled,
+            autoBreakCoffeeCount:     editForm.autoBreakCoffeeCount,
+            autoBreakCoffeeMinutes:   editForm.autoBreakCoffeeMinutes,
+            autoBreakCoffeeDeductible:editForm.autoBreakCoffeeDeductible,
+          },
+        }));
         toast.success(j.message || "Shift template updated successfully");
         setShowEdit(false);
         fetchShifts();
@@ -1610,6 +1690,134 @@ export default function Shifts() {
                   {parseFloat(editForm.differentialMultiplier) !== 1.0 && ` with ${editForm.differentialMultiplier}x pay rate`}
                 </AlertDescription>
               </Alert>
+            )}
+
+            {/* Auto-break config — only shown when company-level features are on and basis is shift */}
+            {autoBreakBasis === "shift" && (autoLunchEnabled || autoCoffeeEnabled) && (
+              <div className="space-y-3 pt-1">
+                <div className="h-px bg-neutral-200 dark:bg-neutral-700" />
+                <p className="text-xs font-bold text-neutral-500 uppercase tracking-wide">Auto-Break Config</p>
+
+                {/* Auto-Lunch */}
+                {autoLunchEnabled && (
+                  <div className="border border-green-200 rounded-xl p-3 space-y-3 bg-green-50/40 dark:bg-green-950/10">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-green-700 flex items-center gap-1.5">
+                        <Clock className="h-3 w-3" /> Auto-Lunch Injection
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditForm((p) => ({ ...p, autoLunchEntitled: !p.autoLunchEntitled }))}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 ${editForm.autoLunchEntitled ? "bg-green-500" : "bg-neutral-300"}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${editForm.autoLunchEntitled ? "translate-x-4" : "translate-x-0.5"}`} />
+                        </button>
+                        <span className={`text-xs font-semibold ${editForm.autoLunchEntitled ? "text-green-600" : "text-neutral-500"}`}>
+                          {editForm.autoLunchEntitled ? "Entitled" : "Not Entitled"}
+                        </span>
+                      </div>
+                    </div>
+                    {editForm.autoLunchEntitled && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-[11px]">Duration (min)</Label>
+                          <Input type="number" min="1" value={editForm.autoBreakLunchMinutes}
+                            onChange={(e) => setEditForm((p) => ({ ...p, autoBreakLunchMinutes: Math.max(1, parseInt(e.target.value) || 1) }))}
+                            className="h-8 text-sm font-mono" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px]">After (hours)</Label>
+                          <Input type="number" min="0.5" step="0.5" value={editForm.autoBreakLunchAfterHours}
+                            onChange={(e) => setEditForm((p) => ({ ...p, autoBreakLunchAfterHours: Math.max(0.5, parseFloat(e.target.value) || 0.5) }))}
+                            className="h-8 text-sm font-mono" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px]">Deductible</Label>
+                          <div className="flex items-center gap-2 h-8">
+                            <button
+                              type="button"
+                              onClick={() => setEditForm((p) => ({ ...p, autoBreakLunchDeductible: !p.autoBreakLunchDeductible }))}
+                              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${editForm.autoBreakLunchDeductible ? "bg-red-500" : "bg-green-500"}`}
+                            >
+                              <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${editForm.autoBreakLunchDeductible ? "translate-x-4" : "translate-x-0.5"}`} />
+                            </button>
+                            <span className={`text-[11px] font-semibold ${editForm.autoBreakLunchDeductible ? "text-red-600" : "text-green-600"}`}>
+                              {editForm.autoBreakLunchDeductible ? "Deducted" : "Paid"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px]">Preview</Label>
+                          <div className="h-8 border rounded-md bg-white flex items-center justify-center font-mono text-[11px] font-semibold text-neutral-700">
+                            {editForm.autoBreakLunchMinutes}m after {editForm.autoBreakLunchAfterHours}h
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Auto-Coffee */}
+                {autoCoffeeEnabled && (
+                  <div className="border border-amber-200 rounded-xl p-3 space-y-3 bg-amber-50/40 dark:bg-amber-950/10">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-amber-700 flex items-center gap-1.5">
+                        <Timer className="h-3 w-3" /> Auto-Coffee Injection
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditForm((p) => ({ ...p, autoCoffeeEntitled: !p.autoCoffeeEntitled }))}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 ${editForm.autoCoffeeEntitled ? "bg-green-500" : "bg-neutral-300"}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${editForm.autoCoffeeEntitled ? "translate-x-4" : "translate-x-0.5"}`} />
+                        </button>
+                        <span className={`text-xs font-semibold ${editForm.autoCoffeeEntitled ? "text-green-600" : "text-neutral-500"}`}>
+                          {editForm.autoCoffeeEntitled ? "Entitled" : "Not Entitled"}
+                        </span>
+                      </div>
+                    </div>
+                    {editForm.autoCoffeeEntitled && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-[11px]">Breaks</Label>
+                          <Input type="number" min="1" max="10" value={editForm.autoBreakCoffeeCount}
+                            onChange={(e) => setEditForm((p) => ({ ...p, autoBreakCoffeeCount: Math.min(10, Math.max(1, parseInt(e.target.value) || 1)) }))}
+                            className="h-8 text-sm font-mono" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px]">Min/Break</Label>
+                          <Input type="number" min="1" value={editForm.autoBreakCoffeeMinutes}
+                            onChange={(e) => setEditForm((p) => ({ ...p, autoBreakCoffeeMinutes: Math.max(1, parseInt(e.target.value) || 1) }))}
+                            className="h-8 text-sm font-mono" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px]">Deductible</Label>
+                          <div className="flex items-center gap-2 h-8">
+                            <button
+                              type="button"
+                              onClick={() => setEditForm((p) => ({ ...p, autoBreakCoffeeDeductible: !p.autoBreakCoffeeDeductible }))}
+                              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${editForm.autoBreakCoffeeDeductible ? "bg-red-500" : "bg-green-500"}`}
+                            >
+                              <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${editForm.autoBreakCoffeeDeductible ? "translate-x-4" : "translate-x-0.5"}`} />
+                            </button>
+                            <span className={`text-[11px] font-semibold ${editForm.autoBreakCoffeeDeductible ? "text-red-600" : "text-green-600"}`}>
+                              {editForm.autoBreakCoffeeDeductible ? "Deducted" : "Paid"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px]">Total</Label>
+                          <div className="h-8 border rounded-md bg-white flex items-center justify-center font-mono text-[11px] font-semibold text-neutral-700">
+                            {editForm.autoBreakCoffeeCount} × {editForm.autoBreakCoffeeMinutes}m
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
 

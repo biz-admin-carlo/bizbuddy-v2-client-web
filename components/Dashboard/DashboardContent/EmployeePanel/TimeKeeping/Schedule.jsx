@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { format, parseISO, isSameDay, isValid, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday } from "date-fns";
+import { format, isSameDay, isValid, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday } from "date-fns";
 import ModernCalendar from "@/components/common/ModernCalendar";
 import { toZonedTime, formatInTimeZone } from 'date-fns-tz';
 import Link from "next/link";
@@ -66,6 +66,11 @@ const formatNaiveTime = (dateString) => {
     console.error('Error formatting time:', error);
     return 'Invalid';
   }
+};
+
+const toLocalDate = (dateStr) => {
+  const [y, m, d] = dateStr.slice(0, 10).split("-").map(Number);
+  return new Date(y, m - 1, d);
 };
 
 function hoursBetween(startISO, endISO, timezone) {
@@ -285,9 +290,7 @@ export default function ModernSchedule() {
     const grouped = {};
     allShifts.forEach((shift) => {
       if (!shift.assignedDate) return;
-      const date = parseISO(shift.assignedDate);
-      if (isNaN(date.getTime())) return;
-      const dateKey = format(date, 'yyyy-MM-dd');
+      const dateKey = shift.assignedDate.slice(0, 10);
       if (!grouped[dateKey]) grouped[dateKey] = [];
       grouped[dateKey].push(shift);
     });
@@ -314,8 +317,7 @@ export default function ModernSchedule() {
     return allShifts
       .filter(shift => {
         if (!shift.assignedDate) return false;
-        const shiftDate = parseISO(shift.assignedDate);
-        return isSameMonth(shiftDate, selectedDate);
+        return isSameMonth(toLocalDate(shift.assignedDate), selectedDate);
       })
       .reduce((total, shift) => {
         const hours = parseFloat(hoursBetween(shift.shift.startTime, shift.shift.endTime, shift.shift?.timeZone));
@@ -669,7 +671,7 @@ export default function ModernSchedule() {
                                 {shift.shift.shiftName}
                               </TableCell>
                               <TableCell className="font-mono text-sm">
-                                {format(parseISO(shift.assignedDate), 'MMM d, yyyy')}
+                                {format(toLocalDate(shift.assignedDate), 'MMM d, yyyy')}
                               </TableCell>
                               <TableCell>
                                 <TimezoneBadge timezone={timezone} compact />
