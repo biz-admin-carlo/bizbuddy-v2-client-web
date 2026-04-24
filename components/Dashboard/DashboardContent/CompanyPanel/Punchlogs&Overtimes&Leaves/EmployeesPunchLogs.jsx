@@ -1031,8 +1031,12 @@ export default function EmployeesPunchLogs() {
             dateKey,
             punchType,
             isDA, isDA_AM, isDA_PM, isAnyDA,
-            isScheduled: false,
-            scheduleList: [],
+            isScheduled: !!(t.shiftToday),
+            scheduleList: (() => {
+              const raw = t.userShifts?.length ? t.userShifts : (t.userShift ? [t.userShift] : []);
+              const seen = new Set();
+              return raw.filter((s) => { const key = s.shift?.id || s.id; if (seen.has(key)) return false; seen.add(key); return true; });
+            })(),
             duration,
             lateHours,
             otHours,
@@ -1045,7 +1049,7 @@ export default function EmployeesPunchLogs() {
             overtimeRec: overtimeArr[0] ?? null,
             fullDevIn:  fmtDevice(t.deviceIn)  || "—",
             fullDevOut: fmtDevice(t.deviceOut) || "—",
-            shiftName:  t.shiftName || "—",
+            shiftName:  t.shiftToday || "—",
             schedOut:   "—",
             isLocRestricted: locList.length > 0,
             locList,
@@ -1626,10 +1630,14 @@ export default function EmployeesPunchLogs() {
                             return <TableCell key="dateTimeOut" className="text-center"><DualTimeDisplay datetime={t.timeOut} userTz={userTimezone} companyTz={companyTimezone} /></TableCell>;
                           case "duration":
                             return <TableCell key="duration" className="text-center text-sm font-medium"><TimeDisplayWithTooltip time={t.duration} type="duration" /></TableCell>;
-                          case "coffee":
-                            return <TableCell key="coffee" className="text-center text-sm"><div className="flex items-center justify-center gap-1"><Coffee className="w-3 h-3 text-amber-600" /><TimeDisplayWithTooltip time={t.coffeeMins} type="coffee" /></div></TableCell>;
-                          case "lunch":
-                            return <TableCell key="lunch" className="text-center text-sm"><TimeDisplayWithTooltip time={t.lunchMins} type="lunch" /></TableCell>;
+                          case "coffee": {
+                            const coffeeAuto = t.autoCoffeeApplied || t.coffeeBreaks?.some(b => b.auto);
+                            return <TableCell key="coffee" className="text-center text-sm"><div className="flex items-center justify-center gap-1"><Coffee className="w-3 h-3 text-amber-600" /><TimeDisplayWithTooltip time={t.coffeeMins} type="coffee" />{coffeeAuto && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}</div></TableCell>;
+                          }
+                          case "lunch": {
+                            const lunchAuto = t.autoLunchApplied || t.lunchBreak?.auto;
+                            return <TableCell key="lunch" className="text-center text-sm"><div className="flex items-center justify-center gap-1"><TimeDisplayWithTooltip time={t.lunchMins} type="lunch" />{lunchAuto && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}</div></TableCell>;
+                          }
                           case "ot":
                             return <TableCell key="ot" className="text-center text-sm font-medium"><TimeDisplayWithTooltip time={parseFloat(t.otHours) > 0 ? t.otHours : null} type="overtime" /></TableCell>;
                           case "otStatus":
@@ -1813,11 +1821,17 @@ export default function EmployeesPunchLogs() {
                                         <div className="space-y-2 text-sm">
                                           <div className="flex justify-between">
                                             <span className="text-muted-foreground">Coffee Break:</span>
-                                            <span className="font-medium">{t.coffeeMins}h</span>
+                                            <span className="font-medium flex items-center gap-1">
+                                              {t.coffeeMins}h
+                                              {(t.autoCoffeeApplied || t.coffeeBreaks?.some(b => b.auto)) && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}
+                                            </span>
                                           </div>
                                           <div className="flex justify-between">
                                             <span className="text-muted-foreground">Lunch Break:</span>
-                                            <span className="font-medium">{t.lunchMins}h</span>
+                                            <span className="font-medium flex items-center gap-1">
+                                              {t.lunchMins}h
+                                              {(t.autoLunchApplied || t.lunchBreak?.auto) && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}
+                                            </span>
                                           </div>
                                           <div className="flex justify-between">
                                             <span className="text-muted-foreground">Late Hours:</span>

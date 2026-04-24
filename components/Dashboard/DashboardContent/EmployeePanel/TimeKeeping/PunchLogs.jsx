@@ -311,7 +311,8 @@ export default function PunchLogs() {
   const [schedForDialog,  setSchedForDialog]  = useState([]);
   const [locDialogOpen,   setLocDialogOpen]   = useState(false);
   const [locDialogList,   setLocDialogList]   = useState([]);
-  const [isStandaloneOT,  setIsStandaloneOT]  = useState(false);
+  const [thresholdStatus, setThresholdStatus] = useState(null);
+  const [otSelectedLogId, setOtSelectedLogId] = useState(null);
   const [supervisors,     setSupervisors]     = useState([]);
   const [myRequests,      setMyRequests]      = useState([]);
   const [requestsExpanded,setRequestsExpanded]= useState(true);
@@ -576,6 +577,15 @@ export default function PunchLogs() {
     } catch { setSupervisors([]); }
   }, [token, API_URL]);
 
+  const fetchThresholdStatus = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/overtime/threshold-status`, { headers: { Authorization: `Bearer ${token}` } });
+      const j = await res.json();
+      if (res.ok) setThresholdStatus(j);
+    } catch {}
+  }, [token, API_URL]);
+
   useEffect(() => {
     if (!token) return;
     fetchCompanySettings();
@@ -585,7 +595,8 @@ export default function PunchLogs() {
     fetchMyRequests();
     fetchUserShifts();
     fetchEmployeeDetails();
-  }, [token, fetchApprovers, fetchCompanySettings, fetchLocations, fetchEmployeeDetails]);
+    fetchThresholdStatus();
+  }, [token, fetchApprovers, fetchCompanySettings, fetchLocations, fetchEmployeeDetails, fetchThresholdStatus]);
 
   // Re-fetch logs whenever queryParams changes (filter change, page change, etc.)
   useEffect(() => {
@@ -631,7 +642,10 @@ export default function PunchLogs() {
       const daRawOtHours       = isAnyDA ? rawOtMins / 60 : 0;
 
       // ── OT — unified across all punch types ───────────────────────────────
-      const otEligible = rawOtMins > 0;
+      const inThresholdPeriod = thresholdStatus?.data?.logs?.some(l => l.timeLogId === log.id);
+      const otEligible = otBasis === "daily"
+        ? rawOtMins > 0
+        : !!(thresholdStatus?.data?.eligible && inThresholdPeriod);
       const otHours    = (rawOtMins / 60).toFixed(2);
 
       // OT status display
@@ -657,7 +671,7 @@ export default function PunchLogs() {
         isDA_AM,
         isDA_PM,
         isAnyDA,
-        isScheduled: false,
+        isScheduled: scheduleList.length > 0,
         isLocRestricted: locList.length > 0,
         locList,
         scheduleList,
@@ -677,7 +691,7 @@ export default function PunchLogs() {
         cutoffApproval: log.cutoffApproval ?? null,
       };
     });
-  }, [logs, smartLogs, viewMode, locList, userShifts, companyTimezone]);
+  }, [logs, smartLogs, viewMode, locList, userShifts, companyTimezone, thresholdStatus, otBasis]);
 
   // ── OT Consumption — computed from logs within the active window ─────────────
   const otConsumptionData = useMemo(() => {
@@ -1142,6 +1156,46 @@ export default function PunchLogs() {
           </CardContent>
         </Card>
 
+        {/* Pre-eligibility threshold progress — weekly / cutoff only, before threshold is met */}
+        {otBasis !== "daily" && thresholdStatus?.data && !thresholdStatus.data.eligible && (
+          <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
+            <div className="h-1 w-full bg-purple-500" />
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-2 font-medium">
+                  <TrendingUp className="h-4 w-4 text-purple-500" />
+                  OT Threshold Progress
+                </div>
+                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                  {otBasis === "weekly" ? "Weekly" : "Cutoff"} — Not Yet Eligible
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>
+                    {thresholdStatus.data.periodStart && thresholdStatus.data.periodEnd
+                      ? `${thresholdStatus.data.periodStart} – ${thresholdStatus.data.periodEnd}`
+                      : "Current period"}
+                  </span>
+                  <span className="font-mono font-bold text-foreground">
+                    {Number(thresholdStatus.data.accumulatedHours).toFixed(2)}h
+                    <span className="text-muted-foreground font-normal"> / {Number(thresholdStatus.data.threshold).toFixed(2)}h</span>
+                  </span>
+                </div>
+                <div className="h-2 w-full bg-neutral-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-purple-500 transition-all duration-500"
+                    style={{ width: `${Math.min(100, (thresholdStatus.data.accumulatedHours / thresholdStatus.data.threshold) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {(thresholdStatus.data.threshold - thresholdStatus.data.accumulatedHours).toFixed(2)}h more needed to unlock OT requests
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Filters */}
         <Card className="border-2 shadow-md overflow-hidden dark:border-white/10">
           <div className="h-1 w-full bg-orange-500" />
@@ -1361,8 +1415,8 @@ export default function PunchLogs() {
                           onToggleExpand={() => setExpandedRow(expandedRow === log.id ? null : log.id)}
                           onSchedule={(list) => { setSchedForDialog(list); setSchedDialogOpen(true); }}
                           onRequestOT={(l) => {
-                            setIsStandaloneOT(false);
                             setOtForLog(l);
+                            setOtSelectedLogId(l.id);
                             setOtApprover(""); setOtHoursEdit(""); setOtReason("");
                             setOtDialogOpen(true);
                           }}
@@ -1417,7 +1471,7 @@ export default function PunchLogs() {
         {/* OT Dialog */}
         <FormDialog
           open={otDialogOpen}
-          setOpen={(open) => { setOtDialogOpen(open); if (!open) { setIsStandaloneOT(false); setOtForLog(null); setOtHoursEdit(""); setOtApprover(""); setOtReason(""); } }}
+          setOpen={(open) => { setOtDialogOpen(open); if (!open) { setOtForLog(null); setOtSelectedLogId(null); setOtHoursEdit(""); setOtApprover(""); setOtReason(""); } }}
           icon={Send}
           title="Request Overtime Approval"
           subtitle={otForLog ? `For ${safeDate(otForLog.timeIn, companyTimezone)} — ${otForLog.isAnyDA ? "Driver/Aide PM segment" : "Overtime hours"}` : "Select a punch log"}
@@ -1429,16 +1483,24 @@ export default function PunchLogs() {
               setOtSubmitting(true);
               const decimalHours = convertTimeToDecimal(otHoursEdit);
               if (decimalHours <= 0) { toast.error("Please enter valid overtime hours"); setOtSubmitting(false); return; }
+              const maxOtHours = thresholdStatus?.data?.otEligibleHours;
+              if (maxOtHours != null && decimalHours > maxOtHours) {
+                toast.error(`Cannot exceed eligible OT hours (${maxOtHours.toFixed(2)}h)`);
+                setOtSubmitting(false);
+                return;
+              }
+              const submitLogId = otSelectedLogId || otForLog?.id;
               const res = await fetch(`${API_URL}/api/overtime/submit`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ timeLogId: otForLog.id, approverId: otApprover, requestedHours: decimalHours, requesterReason: otReason || null }),
+                body: JSON.stringify({ timeLogId: submitLogId, approverId: otApprover, requestedHours: decimalHours, requesterReason: otReason || null }),
               });
               const result = await res.json();
               if (res.ok) {
                 toast.success("Overtime request submitted!");
-                setOtDialogOpen(false); setOtForLog(null); setOtHoursEdit(""); setOtApprover(""); setOtReason(""); setIsStandaloneOT(false);
+                setOtDialogOpen(false); setOtForLog(null); setOtSelectedLogId(null); setOtHoursEdit(""); setOtApprover(""); setOtReason("");
                 fetchLogs(queryParams);
+                fetchThresholdStatus();
               } else {
                 if (result.message?.includes("already exists")) { toast.error("Already submitted an OT request for this log"); setOtDialogOpen(false); }
                 else toast.error(result.message || "Failed to submit OT request");
@@ -1463,8 +1525,41 @@ export default function PunchLogs() {
                 </div>
               </div>
             )}
+            {/* Log selector — shown for weekly/cutoff basis when threshold data has multiple eligible logs */}
+            {otBasis !== "daily" && thresholdStatus?.data?.logs?.length > 0 && (
+              <div className="space-y-2">
+                <label className="block font-medium">Punch Log <span className="text-orange-500">*</span></label>
+                <Select value={otSelectedLogId || ""} onValueChange={setOtSelectedLogId}>
+                  <SelectTrigger><SelectValue placeholder="Select punch log" /></SelectTrigger>
+                  <SelectContent>
+                    {thresholdStatus.data.logs.map((l) => {
+                      const dayLabel = (() => {
+                        try {
+                          const [y, m, d] = l.date.split("-").map(Number);
+                          return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                        } catch { return l.date; }
+                      })();
+                      const timeLabel = l.timeIn ? new Date(l.timeIn).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "";
+                      const typeLabel = l.punchType === "DRIVER_AIDE" ? "Driver/Aide" : l.punchType === "DRIVER_AIDE_AM" ? "DA AM" : l.punchType === "DRIVER_AIDE_PM" ? "DA PM" : "Regular";
+                      return (
+                        <SelectItem key={l.timeLogId} value={l.timeLogId}>
+                          {dayLabel}{timeLabel ? ` · ${timeLabel}` : ""} · {typeLabel}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-3">
-              <label className="block font-medium">OT Hours <span className="text-orange-500">*</span></label>
+              <label className="block font-medium">
+                OT Hours <span className="text-orange-500">*</span>
+                {thresholdStatus?.data?.otEligibleHours != null && (
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    max {Number(thresholdStatus.data.otEligibleHours).toFixed(2)}h eligible
+                  </span>
+                )}
+              </label>
               <Input
                 type="text"
                 value={otHoursEdit}
@@ -1859,19 +1954,25 @@ function TimelogRow({ log, columnVisibility, isDayCare, companyTimezone, userTim
                     <div className="pt-2 space-y-1">
                       <div className="flex justify-between text-xs text-muted-foreground">
                         <span>Coffee Break</span>
-                        <span>{log.coffeeMins}h</span>
+                        <span className="flex items-center gap-1">
+                          {log.coffeeMins}h
+                          {(log.autoCoffeeApplied || log.coffeeBreaks?.some(b => b.auto)) && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}
+                        </span>
                       </div>
                       <div className="flex justify-between text-xs text-muted-foreground">
                         <span>Lunch Break</span>
-                        <span>{log.lunchMins}h</span>
+                        <span className="flex items-center gap-1">
+                          {log.lunchMins}h
+                          {(log.autoLunchApplied || log.lunchBreak?.auto) && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}
+                        </span>
                       </div>
                     </div>
                   </div>
                 ) : (
                   /* ── Regular breakdown ── */
                   <div className="space-y-1 text-sm">
-                    <div className="flex justify-between py-1"><span className="text-muted-foreground">Coffee Break</span><span className="font-medium tabular-nums">{log.coffeeMins}h</span></div>
-                    <div className="flex justify-between py-1"><span className="text-muted-foreground">Lunch Break</span><span className="font-medium tabular-nums">{log.lunchMins}h</span></div>
+                    <div className="flex justify-between py-1"><span className="text-muted-foreground">Coffee Break</span><span className="font-medium tabular-nums flex items-center gap-1">{log.coffeeMins}h{(log.autoCoffeeApplied || log.coffeeBreaks?.some(b => b.auto)) && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}</span></div>
+                    <div className="flex justify-between py-1"><span className="text-muted-foreground">Lunch Break</span><span className="font-medium tabular-nums flex items-center gap-1">{log.lunchMins}h{(log.autoLunchApplied || log.lunchBreak?.auto) && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}</span></div>
                     <div className="flex justify-between py-1"><span className="text-muted-foreground">Late Hours</span><span className="font-medium tabular-nums">{log.lateHours}h</span></div>
                     <div className="flex justify-between py-1"><span className="text-muted-foreground">Period Hours</span><span className="font-medium tabular-nums">{log.periodHours}h</span></div>
                   </div>

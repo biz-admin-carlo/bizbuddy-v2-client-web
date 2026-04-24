@@ -567,10 +567,37 @@ const OT_BASIS = {
   cutoff: { label: "Cutoff OT Threshold", field: "cutoffOtThresholdHours", default: 80, step: "1",    unit: "hours / cutoff", example: "e.g. 80h → cumulative cutoff hours past 80 trigger OT" },
 };
 
+function toLocalDate(str) {
+  if (!str) return null;
+  const [y, m, d] = String(str).slice(0, 10).split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function cadenceLabel(days) {
+  if (days === 7)  return "Weekly";
+  if (days === 14) return "Bi-weekly";
+  if (days === 15 || days === 16) return "Semi-monthly";
+  if (days >= 28 && days <= 31) return "Monthly";
+  return `Every ${days} days`;
+}
+
 function OvertimeConfigCard({ loading, draft, setDraft }) {
   const basis  = draft?.otBasis ?? "daily";
   const active = OT_BASIS[basis];
   const val    = draft?.[active.field] ?? active.default;
+
+  const cutoffSeedStr = draft?.cutoffSettings?.seedStartDate
+    ? String(draft.cutoffSettings.seedStartDate).slice(0, 10)
+    : "";
+  const cutoffDuration = draft?.cutoffSettings?.durationDays ?? 14;
+
+  const periodEndDate = (() => {
+    if (!cutoffSeedStr) return "";
+    const d = toLocalDate(cutoffSeedStr);
+    if (!d) return "";
+    d.setDate(d.getDate() + cutoffDuration - 1);
+    return d.toLocaleDateString("en-CA");
+  })();
 
   return (
     <Card className="border-[1.5px] shadow-md overflow-hidden">
@@ -641,6 +668,70 @@ function OvertimeConfigCard({ loading, draft, setDraft }) {
               <p className="text-xs text-neutral-400 italic">{active.example}</p>
             </div>
 
+            {/* Cutoff seed date — only when basis is cutoff */}
+            {basis === "cutoff" && (
+              <div className="border border-orange-200 bg-orange-50/40 dark:bg-orange-950/10 dark:border-orange-800/40 rounded-xl p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-orange-500" />
+                  <span className="text-sm font-semibold">Cutoff Period Seed</span>
+                  {cutoffSeedStr && cutoffDuration > 0 && (
+                    <span className="ml-auto text-[11px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">
+                      {cadenceLabel(cutoffDuration)}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-neutral-600 dark:text-neutral-400">Period Start</Label>
+                    <Input
+                      type="date"
+                      value={cutoffSeedStr}
+                      onChange={(e) => {
+                        const newSeed = e.target.value;
+                        setDraft((prev) => ({
+                          ...prev,
+                          cutoffSettings: {
+                            ...(prev.cutoffSettings || {}),
+                            seedStartDate: newSeed,
+                            durationDays: prev.cutoffSettings?.durationDays ?? 14,
+                          },
+                        }));
+                      }}
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-neutral-600 dark:text-neutral-400">Period End (derived)</Label>
+                    <Input
+                      type="date"
+                      value={periodEndDate}
+                      onChange={(e) => {
+                        if (!cutoffSeedStr) return;
+                        const start = toLocalDate(cutoffSeedStr);
+                        const end   = toLocalDate(e.target.value);
+                        if (!start || !end || end < start) return;
+                        const days = Math.round((end - start) / 86400000) + 1;
+                        setDraft((prev) => ({
+                          ...prev,
+                          cutoffSettings: {
+                            ...(prev.cutoffSettings || {}),
+                            seedStartDate: prev.cutoffSettings?.seedStartDate,
+                            durationDays: days,
+                          },
+                        }));
+                      }}
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                </div>
+                {cutoffSeedStr && cutoffDuration > 0 && (
+                  <p className="text-[11px] text-neutral-500">
+                    Each cutoff runs <strong>{cutoffDuration} days</strong> starting from this seed date, then repeats.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Info callout */}
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 items-start">
               <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -662,7 +753,7 @@ function OvertimeConfigCard({ loading, draft, setDraft }) {
 }
 
 // ── Dept Lunch Break Card ────────────────────────────────────────────────────
-function DepartmentBreakPolicyCard({ departments, departmentBreakSettings, departmentAutoLunchSettings, setDepartmentAutoLunchSettings, departmentLoading, updateDepartmentBreakSetting, updateDepartmentAutoLunchSetting, loading }) {
+function DepartmentBreakPolicyCard({ departments, departmentBreakSettings, departmentAutoLunchSettings, setDepartmentAutoLunchSettings, departmentLoading, updateDepartmentBreakSetting, updateDepartmentAutoLunchSetting, loading, autoBreakBasis, autoLunchEnabled, departmentAutoBreakEntitlement, setDepartmentAutoBreakEntitlement, updateDepartmentAutoBreakConfig }) {
   const paid   = Object.values(departmentBreakSettings).filter(Boolean).length;
   const unpaid = departments.length - paid;
 
@@ -788,6 +879,83 @@ function DepartmentBreakPolicyCard({ departments, departmentBreakSettings, depar
                       </div>
                     );
                   })()}
+
+                  {/* Auto-break lunch config — only when company autoLunchEnabled + dept basis */}
+                  {autoBreakBasis === "department" && autoLunchEnabled && (() => {
+                    const cfg = departmentAutoBreakEntitlement[dept.id] || {};
+                    const isEntitledLoading    = !!departmentLoading[`autobreak_autoLunchEntitled_${dept.id}`];
+                    const isDeductibleLoading  = !!departmentLoading[`autobreak_autoBreakLunchDeductible_${dept.id}`];
+                    return (
+                      <div className="mt-3 pt-3 border-t border-blue-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[11px] font-semibold text-blue-700 flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> Auto-Lunch Injection
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <Toggle
+                              on={cfg.autoLunchEntitled || false}
+                              loading={isEntitledLoading}
+                              onChange={(v) => updateDepartmentAutoBreakConfig(dept.id, { autoLunchEntitled: v })}
+                            />
+                            <span className={`text-xs font-semibold ${cfg.autoLunchEntitled ? "text-green-600" : "text-neutral-500"}`}>
+                              {isEntitledLoading ? "Saving…" : cfg.autoLunchEntitled ? "Entitled" : "Not Entitled"}
+                            </span>
+                          </div>
+                        </div>
+                        {cfg.autoLunchEntitled && (
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
+                            <div>
+                              <label className="text-[11px] font-semibold text-neutral-600 mb-1 flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-blue-500" /> Duration (min)
+                              </label>
+                              <Input
+                                type="number" min="1" value={cfg.autoBreakLunchMinutes ?? 60}
+                                className="h-9 text-sm font-mono"
+                                onChange={(e) => {
+                                  const v = Math.max(1, parseInt(e.target.value) || 1);
+                                  setDepartmentAutoBreakEntitlement((p) => ({ ...p, [dept.id]: { ...p[dept.id], autoBreakLunchMinutes: v } }));
+                                }}
+                                onBlur={() => updateDepartmentAutoBreakConfig(dept.id, { autoBreakLunchMinutes: cfg.autoBreakLunchMinutes ?? 60 })}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[11px] font-semibold text-neutral-600 mb-1 flex items-center gap-1">
+                                <Timer className="w-3 h-3 text-blue-500" /> After (hours)
+                              </label>
+                              <Input
+                                type="number" min="0.5" step="0.5" value={cfg.autoBreakLunchAfterHours ?? 5}
+                                className="h-9 text-sm font-mono"
+                                onChange={(e) => {
+                                  const v = Math.max(0.5, parseFloat(e.target.value) || 0.5);
+                                  setDepartmentAutoBreakEntitlement((p) => ({ ...p, [dept.id]: { ...p[dept.id], autoBreakLunchAfterHours: v } }));
+                                }}
+                                onBlur={() => updateDepartmentAutoBreakConfig(dept.id, { autoBreakLunchAfterHours: cfg.autoBreakLunchAfterHours ?? 5 })}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[11px] font-semibold text-neutral-600 mb-1 block">Deductible</label>
+                              <div className="flex items-center gap-2 h-9">
+                                <Toggle
+                                  on={cfg.autoBreakLunchDeductible || false}
+                                  loading={isDeductibleLoading}
+                                  onChange={(v) => updateDepartmentAutoBreakConfig(dept.id, { autoBreakLunchDeductible: v })}
+                                />
+                                <span className={`text-[11px] font-semibold ${cfg.autoBreakLunchDeductible ? "text-red-600" : "text-green-600"}`}>
+                                  {cfg.autoBreakLunchDeductible ? "Deducted" : "Paid"}
+                                </span>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-[11px] font-semibold text-neutral-600 mb-1 block">Preview</label>
+                              <div className="h-9 border rounded-lg bg-white flex items-center justify-center font-mono text-xs font-semibold text-neutral-700 px-2 text-center">
+                                {cfg.autoBreakLunchMinutes ?? 60}m after {cfg.autoBreakLunchAfterHours ?? 5}h
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -812,7 +980,7 @@ function DepartmentBreakPolicyCard({ departments, departmentBreakSettings, depar
 }
 
 // ── Dept Coffee Break Card ───────────────────────────────────────────────────
-function DepartmentCoffeeBreakPolicyCard({ departments, departmentCoffeeSettings, departmentLoading, updateDepartmentCoffeeSetting, loading }) {
+function DepartmentCoffeeBreakPolicyCard({ departments, departmentCoffeeSettings, departmentLoading, updateDepartmentCoffeeSetting, loading, autoBreakBasis, autoCoffeeEnabled, departmentAutoBreakEntitlement, setDepartmentAutoBreakEntitlement, updateDepartmentAutoBreakConfig }) {
   const withBreaks = Object.values(departmentCoffeeSettings).filter((s) => s.coffeeBreakMaxCount > 0).length;
   const paidCount  = Object.values(departmentCoffeeSettings).filter((s) => s.coffeeBreakPaid && s.coffeeBreakMaxCount > 0).length;
   const totalMins  = Object.values(departmentCoffeeSettings).reduce((a, s) => a + (s.coffeeBreakMaxCount * s.coffeeBreakMinutes), 0);
@@ -932,6 +1100,83 @@ function DepartmentCoffeeBreakPolicyCard({ departments, departmentCoffeeSettings
                       </div>
                     </div>
                   </div>
+
+                  {/* Auto-break coffee config — only when company autoCoffeeEnabled + dept basis */}
+                  {autoBreakBasis === "department" && autoCoffeeEnabled && (() => {
+                    const cfg = departmentAutoBreakEntitlement[dept.id] || {};
+                    const isEntitledLoading   = !!departmentLoading[`autobreak_autoCoffeeEntitled_${dept.id}`];
+                    const isDeductibleLoading = !!departmentLoading[`autobreak_autoBreakCoffeeDeductible_${dept.id}`];
+                    return (
+                      <div className="mt-3 pt-3 border-t border-amber-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[11px] font-semibold text-amber-700 flex items-center gap-1">
+                            <Coffee className="w-3 h-3" /> Auto-Coffee Injection
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <Toggle
+                              on={cfg.autoCoffeeEntitled || false}
+                              loading={isEntitledLoading}
+                              onChange={(v) => updateDepartmentAutoBreakConfig(dept.id, { autoCoffeeEntitled: v })}
+                            />
+                            <span className={`text-xs font-semibold ${cfg.autoCoffeeEntitled ? "text-green-600" : "text-neutral-500"}`}>
+                              {isEntitledLoading ? "Saving…" : cfg.autoCoffeeEntitled ? "Entitled" : "Not Entitled"}
+                            </span>
+                          </div>
+                        </div>
+                        {cfg.autoCoffeeEntitled && (
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
+                            <div>
+                              <label className="text-[11px] font-semibold text-neutral-600 mb-1 flex items-center gap-1">
+                                <Coffee className="w-3 h-3 text-amber-500" /> Breaks
+                              </label>
+                              <Input
+                                type="number" min="1" max="10" value={cfg.autoBreakCoffeeCount ?? 2}
+                                className="h-9 text-sm font-mono"
+                                onChange={(e) => {
+                                  const v = Math.min(10, Math.max(1, parseInt(e.target.value) || 1));
+                                  setDepartmentAutoBreakEntitlement((p) => ({ ...p, [dept.id]: { ...p[dept.id], autoBreakCoffeeCount: v } }));
+                                }}
+                                onBlur={() => updateDepartmentAutoBreakConfig(dept.id, { autoBreakCoffeeCount: cfg.autoBreakCoffeeCount ?? 2 })}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[11px] font-semibold text-neutral-600 mb-1 flex items-center gap-1">
+                                <Timer className="w-3 h-3 text-amber-500" /> Min/Break
+                              </label>
+                              <Input
+                                type="number" min="1" value={cfg.autoBreakCoffeeMinutes ?? 15}
+                                className="h-9 text-sm font-mono"
+                                onChange={(e) => {
+                                  const v = Math.max(1, parseInt(e.target.value) || 1);
+                                  setDepartmentAutoBreakEntitlement((p) => ({ ...p, [dept.id]: { ...p[dept.id], autoBreakCoffeeMinutes: v } }));
+                                }}
+                                onBlur={() => updateDepartmentAutoBreakConfig(dept.id, { autoBreakCoffeeMinutes: cfg.autoBreakCoffeeMinutes ?? 15 })}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[11px] font-semibold text-neutral-600 mb-1 block">Deductible</label>
+                              <div className="flex items-center gap-2 h-9">
+                                <Toggle
+                                  on={cfg.autoBreakCoffeeDeductible || false}
+                                  loading={isDeductibleLoading}
+                                  onChange={(v) => updateDepartmentAutoBreakConfig(dept.id, { autoBreakCoffeeDeductible: v })}
+                                />
+                                <span className={`text-[11px] font-semibold ${cfg.autoBreakCoffeeDeductible ? "text-red-600" : "text-green-600"}`}>
+                                  {cfg.autoBreakCoffeeDeductible ? "Deducted" : "Paid"}
+                                </span>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-[11px] font-semibold text-neutral-600 mb-1 block">Total</label>
+                              <div className="h-9 border rounded-lg bg-white flex items-center justify-center font-mono text-xs font-semibold text-neutral-700 px-2 text-center">
+                                {(cfg.autoBreakCoffeeCount ?? 2)} × {(cfg.autoBreakCoffeeMinutes ?? 15)}m
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -1659,6 +1904,118 @@ function LeaveAdminCard({ token, API, leaveTypes, matrix, loadingMatrix, errorMe
   );
 }
 
+// ── Auto-Break Policy Card ────────────────────────────────────────────────────
+function AutoBreakPolicyCard({ loading, draft, setDraft }) {
+  const lunchOn  = draft?.autoLunchEnabled  ?? false;
+  const coffeeOn = draft?.autoCoffeeEnabled ?? false;
+  const anyOn    = lunchOn || coffeeOn;
+  const basis    = draft?.autoBreakBasis    ?? "department";
+
+  return (
+    <Card className="border-[1.5px] shadow-md overflow-hidden">
+      <CardStripe />
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2.5 text-[15px] font-extrabold">
+          <SectionIcon icon={Coffee} color="amber" />
+          Auto-Break Policy
+        </CardTitle>
+        <p className="text-xs text-neutral-500 mt-0.5">
+          Automatically inject lunch and coffee breaks into employee time logs. Entitlements are set per department or per shift template below.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {loading ? (
+          <Skeleton className="h-32 w-full" />
+        ) : (
+          <>
+            {/* Break Basis — only shown when at least one feature is on */}
+            {anyOn && (
+              <div className="space-y-2">
+                <label className="text-sm font-semibold flex items-center gap-1.5 text-neutral-700 dark:text-neutral-300">
+                  <Building2 className="w-3.5 h-3.5 text-orange-500" />
+                  Break Basis
+                </label>
+                <div className="flex gap-2">
+                  {["department", "shift"].map((b) => (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => setDraft((p) => ({ ...p, autoBreakBasis: b }))}
+                      className={`px-4 py-2 rounded-lg border-2 text-sm font-semibold capitalize transition-all focus:outline-none focus:ring-2 focus:ring-orange-400 ${
+                        basis === b
+                          ? "border-orange-400 bg-orange-50 text-orange-700 dark:bg-orange-950/20"
+                          : "border-neutral-200 bg-white text-neutral-600 hover:border-orange-200 dark:bg-neutral-900 dark:border-neutral-700"
+                      }`}
+                    >
+                      {b.charAt(0).toUpperCase() + b.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-neutral-400">
+                  {basis === "department"
+                    ? "Entitlement is toggled per department in the Lunch/Coffee policy sections below."
+                    : "Entitlement is toggled per shift template in Shift Management."}
+                </p>
+              </div>
+            )}
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              {/* Auto-Lunch enable */}
+              <div className="flex items-center justify-between p-4 rounded-xl border-2 border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-green-500" />
+                  <div>
+                    <p className="text-sm font-semibold">Auto-Lunch</p>
+                    <p className="text-xs text-neutral-500 mt-0.5">Duration &amp; config set per {basis}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Toggle on={lunchOn} loading={false} onChange={(v) => setDraft((p) => ({ ...p, autoLunchEnabled: v }))} />
+                  <span className={`text-sm font-semibold ${lunchOn ? "text-green-600" : "text-neutral-500"}`}>
+                    {lunchOn ? "On" : "Off"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Auto-Coffee enable */}
+              <div className="flex items-center justify-between p-4 rounded-xl border-2 border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
+                <div className="flex items-center gap-2">
+                  <Coffee className="w-4 h-4 text-amber-500" />
+                  <div>
+                    <p className="text-sm font-semibold">Auto-Coffee</p>
+                    <p className="text-xs text-neutral-500 mt-0.5">Count &amp; config set per {basis}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Toggle on={coffeeOn} loading={false} onChange={(v) => setDraft((p) => ({ ...p, autoCoffeeEnabled: v }))} />
+                  <span className={`text-sm font-semibold ${coffeeOn ? "text-green-600" : "text-neutral-500"}`}>
+                    {coffeeOn ? "On" : "Off"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Info callout */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 items-start">
+              <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[12px] font-bold text-amber-900 mb-1">How Auto-Break Policy Works</p>
+                <ul className="text-[11px] text-amber-800 space-y-0.5">
+                  <li>• Breaks are <strong>automatically injected server-side</strong> at clock-out — no employee action needed</li>
+                  <li>• <strong>Department basis:</strong> entitlement toggled per department in the Lunch/Coffee sections below</li>
+                  <li>• <strong>Shift basis:</strong> entitlement toggled per shift template in Shift Management</li>
+                  <li>• Injected breaks are labelled <strong>"Auto-injected"</strong> in time log detail views</li>
+                  <li>• Switching basis does not clear entitlement flags — server only evaluates the active basis</li>
+                </ul>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 export default function ModernCompanyConfigurations() {
   const { token, role } = useAuthStore();
@@ -1678,6 +2035,7 @@ export default function ModernCompanyConfigurations() {
   const [departmentBreakSettings,     setDepartmentBreakSettings]     = useState({});
   const [departmentCoffeeSettings,    setDepartmentCoffeeSettings]    = useState({});
   const [departmentAutoLunchSettings, setDepartmentAutoLunchSettings] = useState({});
+  const [departmentAutoBreakEntitlement, setDepartmentAutoBreakEntitlement] = useState({});
   const [departmentLoading,       setDepartmentLoading]       = useState({});
   const [loadingDepartments,      setLoadingDepartments]      = useState(true);
   const [loadingMatrix,           setLoadingMatrix]           = useState(true);
@@ -1742,7 +2100,7 @@ export default function ModernCompanyConfigurations() {
       const j = await r.json();
       if (r.ok && j.data) {
         setDepartments(j.data);
-        const bs = {}, cs = {}, als = {};
+        const bs = {}, cs = {}, als = {}, abe = {};
         j.data.forEach((d) => {
           bs[d.id] = d.paidBreak || false;
           cs[d.id] = {
@@ -1754,10 +2112,21 @@ export default function ModernCompanyConfigurations() {
             autoLunchDurationMinutes: d.autoLunchDurationMinutes ?? 60,
             autoLunchAfterHours:      d.autoLunchAfterHours      ?? 4,
           };
+          abe[d.id] = {
+            autoLunchEntitled:        d.autoLunchEntitled        || false,
+            autoBreakLunchMinutes:    d.autoBreakLunchMinutes    ?? 60,
+            autoBreakLunchAfterHours: d.autoBreakLunchAfterHours ?? 5,
+            autoBreakLunchDeductible: d.autoBreakLunchDeductible || false,
+            autoCoffeeEntitled:       d.autoCoffeeEntitled       || false,
+            autoBreakCoffeeCount:     d.autoBreakCoffeeCount     ?? 2,
+            autoBreakCoffeeMinutes:   d.autoBreakCoffeeMinutes   ?? 15,
+            autoBreakCoffeeDeductible:d.autoBreakCoffeeDeductible|| false,
+          };
         });
         setDepartmentBreakSettings(bs);
         setDepartmentCoffeeSettings(cs);
         setDepartmentAutoLunchSettings(als);
+        setDepartmentAutoBreakEntitlement(abe);
       } else toast.error(j.message || "Failed to load departments");
     } catch { toast.error("Network error loading departments"); }
     setLoadingDepartments(false);
@@ -1845,6 +2214,26 @@ export default function ModernCompanyConfigurations() {
       } else toast.error(j.message || "Failed to update");
     } catch { toast.error("Network error"); }
     setDepartmentLoading((p) => ({ ...p, [`autolunch_${deptId}`]: false }));
+  };
+
+  // ── API: PUT /api/departments/update/:id (auto-break config) ────────────
+  const updateDepartmentAutoBreakConfig = async (deptId, updates) => {
+    const firstKey = Object.keys(updates)[0];
+    const loadingKey = `autobreak_${firstKey}_${deptId}`;
+    setDepartmentLoading((p) => ({ ...p, [loadingKey]: true }));
+    try {
+      const r = await fetch(`${API}/api/departments/update/${deptId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(updates),
+      });
+      const j = await r.json();
+      if (r.ok) {
+        setDepartmentAutoBreakEntitlement((p) => ({ ...p, [deptId]: { ...p[deptId], ...updates } }));
+        toast.success("Department auto-break config updated");
+      } else toast.error(j.message || "Failed to update");
+    } catch { toast.error("Network error"); }
+    setDepartmentLoading((p) => ({ ...p, [loadingKey]: false }));
   };
 
   // ── API: PATCH /api/company-settings ─────────────────────────────────────
@@ -1964,6 +2353,7 @@ export default function ModernCompanyConfigurations() {
       {isDayCare && (
         <DayCareSettingsCard loading={loadingSettings} draft={draft} setDraft={setDraft} />
       )}
+      <AutoBreakPolicyCard loading={loadingSettings} draft={draft} setDraft={setDraft} />
       <DepartmentBreakPolicyCard
         departments={departments} departmentBreakSettings={departmentBreakSettings}
         departmentAutoLunchSettings={departmentAutoLunchSettings}
@@ -1972,11 +2362,21 @@ export default function ModernCompanyConfigurations() {
         updateDepartmentBreakSetting={updateDepartmentBreakSetting}
         updateDepartmentAutoLunchSetting={updateDepartmentAutoLunchSetting}
         loading={loadingDepartments}
+        autoBreakBasis={draft?.autoBreakBasis ?? "department"}
+        autoLunchEnabled={draft?.autoLunchEnabled ?? false}
+        departmentAutoBreakEntitlement={departmentAutoBreakEntitlement}
+        setDepartmentAutoBreakEntitlement={setDepartmentAutoBreakEntitlement}
+        updateDepartmentAutoBreakConfig={updateDepartmentAutoBreakConfig}
       />
       <DepartmentCoffeeBreakPolicyCard
         departments={departments} departmentCoffeeSettings={departmentCoffeeSettings}
         departmentLoading={departmentLoading} updateDepartmentCoffeeSetting={updateDepartmentCoffeeSetting}
         loading={loadingDepartments}
+        autoBreakBasis={draft?.autoBreakBasis ?? "department"}
+        autoCoffeeEnabled={draft?.autoCoffeeEnabled ?? false}
+        departmentAutoBreakEntitlement={departmentAutoBreakEntitlement}
+        setDepartmentAutoBreakEntitlement={setDepartmentAutoBreakEntitlement}
+        updateDepartmentAutoBreakConfig={updateDepartmentAutoBreakConfig}
       />
       <CheckSettings />
       <LeaveAccrualCard loading={loadingSettings} draft={draft} setDraft={setDraft} />

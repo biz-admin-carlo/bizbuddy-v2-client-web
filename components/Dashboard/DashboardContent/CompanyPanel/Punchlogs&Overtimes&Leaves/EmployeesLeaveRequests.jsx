@@ -204,10 +204,8 @@ export default function SupervisorLeaveRequests() {
       key: "dateRange",
       label: "Date Range",
       render: (_, row) => {
-        const start = new Date(row.startDate);
-        const end = new Date(row.endDate);
-        start.setHours(0, 0, 0, 0);
-        end.setHours(0, 0, 0, 0);
+        const start = toLocalDate(row.startDate);
+        const end = toLocalDate(row.endDate);
         const diffDays = Math.floor((end - start) / 86400000) + 1;
         return (
           <div className="text-sm">
@@ -708,7 +706,7 @@ export default function SupervisorLeaveRequests() {
                           </div>
 
                           {/* Actions */}
-                          {(leave.status === "pending" || leave.status === "pending_secondary") && (
+                          {(leave.status === "pending" || leave.status === "pending_secondary") && leave.canAct === true && (
                             <p className="text-[11px] text-muted-foreground mt-2 italic">
                               {leave.status === "pending_secondary"
                                 ? "Awaiting your final approval"
@@ -725,7 +723,7 @@ export default function SupervisorLeaveRequests() {
                               <Eye className="h-3 w-3 mr-1" />
                               View
                             </Button>
-                            {(leave.status === "pending" || leave.status === "pending_secondary") && (
+                            {(leave.status === "pending" || leave.status === "pending_secondary") && leave.canAct === true && (
                               <>
                                 <Button
                                   size="sm"
@@ -794,6 +792,16 @@ export default function SupervisorLeaveRequests() {
                     <div className="font-medium text-blue-700 dark:text-blue-300">Employee Information</div>
                   </div>
                   <div className="grid grid-cols-1 gap-2 text-sm">
+                    {(() => {
+                      const req = detailDialog.request.requester || detailDialog.request.User;
+                      const fullName = req?.name || [req?.profile?.firstName, req?.profile?.lastName].filter(Boolean).join(" ") || [req?.firstName, req?.lastName].filter(Boolean).join(" ");
+                      return fullName ? (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Name:</span>
+                          <span className="font-medium">{fullName}</span>
+                        </div>
+                      ) : null;
+                    })()}
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Email:</span>
                       <span className="font-medium">{detailDialog.request.requester?.email || detailDialog.request.User?.email || "Unknown"}</span>
@@ -804,6 +812,34 @@ export default function SupervisorLeaveRequests() {
                     </div>
                   </div>
                 </div>
+
+                {(() => {
+                  const primary = detailDialog.request.approver;
+                  const secondary = detailDialog.request.secondApprover;
+                  if (!primary && !secondary) return null;
+                  return (
+                    <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                      <div className="flex items-center gap-2 mb-3">
+                        <CheckCircle2 className="h-4 w-4 text-indigo-600" />
+                        <div className="font-medium text-indigo-700 dark:text-indigo-300">Approver</div>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 text-sm">
+                        {primary && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Primary:</span>
+                            <span className="font-medium">{primary.name || primary.email || "—"}</span>
+                          </div>
+                        )}
+                        {secondary && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Secondary:</span>
+                            <span className="font-medium">{secondary.name || secondary.email || "—"}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Leave Credits */}
                 {(() => {
@@ -855,18 +891,18 @@ export default function SupervisorLeaveRequests() {
                   <div className="grid grid-cols-1 gap-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Start Date:</span>
-                      <span className="font-medium">{new Date(detailDialog.request.startDate).toLocaleDateString()}</span>
+                      <span className="font-medium">{toLocalDate(detailDialog.request.startDate).toLocaleDateString()}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">End Date:</span>
-                      <span className="font-medium">{new Date(detailDialog.request.endDate).toLocaleDateString()}</span>
+                      <span className="font-medium">{toLocalDate(detailDialog.request.endDate).toLocaleDateString()}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Duration:</span>
                       <span className="font-medium text-orange-600">
                         {(() => {
-                          const s = new Date(detailDialog.request.startDate); s.setHours(0,0,0,0);
-                          const e = new Date(detailDialog.request.endDate);   e.setHours(0,0,0,0);
+                          const s = toLocalDate(detailDialog.request.startDate);
+                          const e = toLocalDate(detailDialog.request.endDate);
                           const d = Math.floor((e - s) / 86400000) + 1;
                           return `${d} day${d === 1 ? "" : "s"}`;
                         })()}
@@ -975,16 +1011,16 @@ export default function SupervisorLeaveRequests() {
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Start:</span>
-                      <span className="font-medium">{new Date(actionDialog.request.startDate).toLocaleDateString()} at {new Date(actionDialog.request.startDate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                      <span className="font-medium">{toLocalDate(actionDialog.request.startDate).toLocaleDateString()}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">End:</span>
-                      <span className="font-medium">{new Date(actionDialog.request.endDate).toLocaleDateString()} at {new Date(actionDialog.request.endDate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                      <span className="font-medium">{toLocalDate(actionDialog.request.endDate).toLocaleDateString()}</span>
                     </div>
                     <div className="h-px bg-orange-200 dark:bg-orange-800 my-1" />
                     {(() => {
-                      const s = new Date(actionDialog.request.startDate); s.setHours(0,0,0,0);
-                      const e = new Date(actionDialog.request.endDate);   e.setHours(0,0,0,0);
+                      const s = toLocalDate(actionDialog.request.startDate);
+                      const e = toLocalDate(actionDialog.request.endDate);
                       const d = Math.floor((e - s) / 86400000) + 1;
                       return (
                         <>
@@ -1005,8 +1041,8 @@ export default function SupervisorLeaveRequests() {
               const type  = actionDialog.request.leaveType;
               const bal   = row?.balances?.[type];
               if (!bal && !matrixLoading) return null;
-              const s = new Date(actionDialog.request.startDate); s.setHours(0,0,0,0);
-              const e = new Date(actionDialog.request.endDate);   e.setHours(0,0,0,0);
+              const s = toLocalDate(actionDialog.request.startDate);
+              const e = toLocalDate(actionDialog.request.endDate);
               const days = Math.floor((e - s) / 86400000) + 1;
               const requestedHours = days * 8;
               const willExceed = bal && bal.available < requestedHours;
@@ -1128,7 +1164,7 @@ export default function SupervisorLeaveRequests() {
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4 text-sm space-y-1 text-red-600 dark:text-red-400">
                 <div><strong>Employee:</strong> {deleteDialog.request.requester?.email || deleteDialog.request.User?.email || "Unknown"}</div>
                 <div><strong>Leave Type:</strong> {deleteDialog.request.leaveType}</div>
-                <div><strong>Duration:</strong> {new Date(deleteDialog.request.startDate).toLocaleDateString()} to {new Date(deleteDialog.request.endDate).toLocaleDateString()}</div>
+                <div><strong>Duration:</strong> {toLocalDate(deleteDialog.request.startDate).toLocaleDateString()} to {toLocalDate(deleteDialog.request.endDate).toLocaleDateString()}</div>
                 <div><strong>Status:</strong> {deleteDialog.request.status}</div>
               </div>
             )}
