@@ -82,10 +82,13 @@ const GENERATE_MODES = [
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
-const formatDate = (d) =>
-  d
-    ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-    : "—";
+const formatDate = (d) => {
+  if (!d) return "—";
+  const [year, month, day] = d.slice(0, 10).split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+  });
+};
 
 const initConfigForm = () => ({
   departmentId: "",

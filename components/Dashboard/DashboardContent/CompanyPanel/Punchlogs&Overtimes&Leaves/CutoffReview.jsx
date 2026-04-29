@@ -80,8 +80,24 @@ const EXCLUDE_REASONS = [
   "Other",
 ];
 
-const formatDate = (d) =>
-  d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+const TAG_TOOLTIPS = {
+  snap: "Clock-in will snap to scheduled start — within the grace period.",
+  late: "Clocked in after the grace period ended. Late minutes flagged for review.",
+  flag: "This record has been flagged and needs attention.",
+  ot:   "Approved overtime included. Extra hours added to total payable.",
+  auto: "System auto clock-out triggered — no manual clock-out recorded.",
+};
+
+const SEGMENT_LABELS = { driver_am: "Driver AM", regular: "Regular", driver_pm: "Driver PM" };
+const SEGMENT_ORDER  = { driver_am: 0, regular: 1, driver_pm: 2 };
+
+const formatDate = (d) => {
+  if (!d) return "—";
+  const [year, month, day] = d.slice(0, 10).split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+  });
+};
 
 /** Inline info tooltip — renders below the icon to avoid overflow clipping */
 const InfoTooltip = ({ text, side = "bottom" }) => (
@@ -109,8 +125,8 @@ const InfoTooltip = ({ text, side = "bottom" }) => (
   </span>
 );
 
-const formatDateTime = (d) =>
-  d ? new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true }) : "—";
+const formatDateTime = (d, tz = "UTC") =>
+  d ? new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZone: tz }) : "—";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SUB-COMPONENTS
@@ -310,14 +326,6 @@ const TimelineRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflic
   const isLocked         = ["approved", "excluded", "resolved"].includes(rec.localStatus);
   const isRestOrPreApproved = rec.type === "rest" || rec.actions?.includes("pre-approved");
 
-  const TAG_TOOLTIPS = {
-    snap: "Clock-in will snap to scheduled start — within the grace period.",
-    late: "Clocked in after the grace period ended. Late minutes flagged for review.",
-    flag: "This record has been flagged and needs attention.",
-    ot:   "Approved overtime included. Extra hours added to total payable.",
-    auto: "System auto clock-out triggered — no manual clock-out recorded.",
-  };
-
   return (
     <tr className={`border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 transition-colors ${cfg.rowBg}`}>
 
@@ -339,14 +347,7 @@ const TimelineRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflic
 
         {/* Schedule strip */}
         {rec.scheduleInfo && (
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-600 border border-purple-100">
-              <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-              {rec.scheduleInfo.shiftName}
-            </span>
-            <span className="text-[10px] text-neutral-400 tabular-nums">
-              {rec.scheduleInfo.scheduledStart} → {rec.scheduleInfo.scheduledEnd}
-            </span>
+          <div className="flex items-center gap-2 mb-2">
             <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-neutral-500">
               {rec.scheduleInfo.scheduledHours}h scheduled
               <InfoTooltip text="Total hours in this shift. Payable hours are calculated from this baseline after applying snap rules and break deductions." />
@@ -466,13 +467,101 @@ const TimelineRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflic
   );
 };
 
+/** Single segment row inside a driver day group */
+const DriverSegmentRow = ({ seg, onApprove, onApproveOT, onExclude }) => {
+  const isLocked = ["approved", "excluded", "resolved"].includes(seg.localStatus);
+  return (
+    <tr className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 bg-white dark:bg-neutral-900">
+      <td className="px-4 py-2.5 w-20 align-top">
+        <span className="font-mono text-[10px] text-neutral-300 pl-2">└</span>
+      </td>
+      <td className="px-3 py-2.5 w-28 align-top">
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-violet-50 dark:bg-violet-900/20 whitespace-nowrap">
+          <Clock className="w-3 h-3 text-violet-600" />
+          <span className="text-violet-600">{SEGMENT_LABELS[seg.segmentType] || seg.segmentType}</span>
+        </div>
+      </td>
+      <td className="px-3 py-2.5 align-top">
+        <div className="text-[12px] font-medium text-neutral-700 dark:text-neutral-300 mb-1.5"
+          dangerouslySetInnerHTML={{ __html: seg.detail }} />
+        {seg.tags?.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {seg.tags.map((t, i) => (
+              <TagPill key={i} cls={t.cls} label={t.label} tooltip={TAG_TOOLTIPS[t.cls]} />
+            ))}
+          </div>
+        )}
+      </td>
+      <td className="px-3 py-2.5 w-24 text-right align-top">
+        {seg.hours > 0 ? (
+          <span className="font-mono text-sm font-extrabold text-neutral-800 dark:text-neutral-100">
+            {parseFloat(seg.hours).toFixed(2).replace(/\.?0+$/, "")}h
+          </span>
+        ) : (
+          <span className="text-neutral-300 text-sm">—</span>
+        )}
+      </td>
+      <td className="px-3 py-2.5 w-52 align-top">
+        {isLocked ? (
+          <div className="flex justify-end">
+            {seg.localStatus === "excluded"
+              ? <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-neutral-100 text-neutral-400 border border-neutral-200"><XCircle className="w-3 h-3" /> Excluded</span>
+              : <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200"><Check className="w-3 h-3" /> Approved</span>
+            }
+          </div>
+        ) : (
+          <div className="flex flex-col items-end gap-1.5">
+            <div className="flex items-center gap-1.5">
+              {seg.actions?.includes("approve")    && <ActionBtn color="green"  icon={Check} label="Approve" onClick={() => onApprove(seg.id)} />}
+              {seg.actions?.includes("approve-ot") && <ActionBtn color="purple" icon={Zap}   label="+ OT"    onClick={() => onApproveOT(seg.id)} />}
+            </div>
+            {seg.actions?.includes("exclude") && (
+              <ActionBtn color="red" icon={X} label="Exclude" onClick={() => onExclude(seg.id)} />
+            )}
+          </div>
+        )}
+      </td>
+    </tr>
+  );
+};
+
+/** Driver day group — header row + one DriverSegmentRow per segment */
+const DriverGroupRow = ({ group, onApprove, onApproveOT, onExclude }) => (
+  <>
+    <tr className="bg-violet-50/40 dark:bg-violet-900/10 border-b border-violet-100 dark:border-violet-900/20">
+      <td className="px-4 py-2 w-20 align-middle">
+        <span className="font-mono text-[11px] font-medium text-neutral-400">{group.date}</span>
+      </td>
+      <td colSpan={3} className="px-3 py-2 align-middle">
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-violet-600">
+          <Timer className="w-3 h-3" /> Driver Day — {group.segments.length} segments
+        </span>
+      </td>
+      <td className="px-3 py-2 text-right align-middle">
+        <span className="font-mono text-sm font-extrabold text-neutral-600 dark:text-neutral-300">
+          {parseFloat(group.hours).toFixed(2).replace(/\.?0+$/, "")}h total
+        </span>
+      </td>
+    </tr>
+    {group.segments.map((seg) => (
+      <DriverSegmentRow key={seg.id} seg={seg} onApprove={onApprove} onApproveOT={onApproveOT} onExclude={onExclude} />
+    ))}
+  </>
+);
+
 /** Employee card */
 const EmployeeCard = ({ emp, onApprove, onApproveOT, onEdit, onExclude, onConflict, onBulkApprove }) => {
   const [expanded, setExpanded] = useState(false);
   const hasConflict  = emp.records.some((r) => r.type === "conflict" && !r.localStatus);
-  const hasFlag      = emp.records.some((r) => (r.type === "unscheduled" || r.tags?.length) && !r.localStatus);
+  const hasFlag      = emp.records.some((r) => {
+    if (r.type === "driver_group") return r.segments.some((s) => s.tags?.length && !s.localStatus);
+    return (r.type === "unscheduled" || r.tags?.length) && !r.localStatus;
+  });
   const allDone      = emp.pending === 0;
-  const punchCount   = emp.records.filter((r) => !["rest", "leave"].includes(r.type)).length;
+  const punchCount   = emp.records.reduce((n, r) => {
+    if (r.type === "driver_group") return n + r.segments.length;
+    return ["rest", "leave"].includes(r.type) ? n : n + 1;
+  }, 0);
   const leaveCount   = emp.records.filter((r) => r.type === "leave").length;
 
   const cardBorder = hasConflict
@@ -571,17 +660,27 @@ const EmployeeCard = ({ emp, onApprove, onApproveOT, onEdit, onExclude, onConfli
                   </tr>
                 </thead>
                 <tbody>
-                  {emp.records.map((rec) => (
-                    <TimelineRow
-                      key={rec.id}
-                      rec={rec}
-                      onApprove={onApprove}
-                      onApproveOT={onApproveOT}
-                      onEdit={onEdit}
-                      onExclude={onExclude}
-                      onConflict={onConflict}
-                    />
-                  ))}
+                  {emp.records.map((rec) =>
+                    rec.type === "driver_group" ? (
+                      <DriverGroupRow
+                        key={rec.id}
+                        group={rec}
+                        onApprove={onApprove}
+                        onApproveOT={onApproveOT}
+                        onExclude={onExclude}
+                      />
+                    ) : (
+                      <TimelineRow
+                        key={rec.id}
+                        rec={rec}
+                        onApprove={onApprove}
+                        onApproveOT={onApproveOT}
+                        onEdit={onEdit}
+                        onExclude={onExclude}
+                        onConflict={onConflict}
+                      />
+                    )
+                  )}
                 </tbody>
               </table>
             </div>
@@ -619,11 +718,12 @@ export default function CutoffReview({ cutoffId }) {
   const router = useRouter();
 
   // ── Server data ──
-  const [cutoff,       setCutoff]       = useState(null);
-  const [departments,  setDepartments]  = useState([]);
-  const [employees,    setEmployees]    = useState([]); // processed employee objects
-  const [isLoading,    setIsLoading]    = useState(true);
-  const [syncing,      setSyncing]      = useState(false);
+  const [cutoff,           setCutoff]           = useState(null);
+  const [departments,      setDepartments]      = useState([]);
+  const [employees,        setEmployees]        = useState([]); // processed employee objects
+  const [isLoading,        setIsLoading]        = useState(true);
+  const [syncing,          setSyncing]          = useState(false);
+  const [companyTimezone,  setCompanyTimezone]  = useState("UTC");
 
   // ── Local action state (optimistic UI) ──
   const [localStatus,  setLocalStatus]  = useState({}); // { [recId]: 'approved'|'excluded'|'resolved' }
@@ -654,20 +754,29 @@ export default function CutoffReview({ cutoffId }) {
     if (!token || !cutoffId) return;
     try {
       setIsLoading(true);
-      const [cutoffRes, deptRes, approvalsRes] = await Promise.all([
+      const [cutoffRes, deptRes, approvalsRes, settingsRes] = await Promise.all([
         fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods/${cutoffId}`,         { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/departments`,                         { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods/${cutoffId}/approvals`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/company-settings/`,                   { headers: { Authorization: `Bearer ${token}` } }),
       ]);
 
-      const [cutoffData, deptData, approvalsData] = await Promise.all([
+      const [cutoffData, deptData, approvalsData, settingsData] = await Promise.all([
         cutoffRes.ok    ? cutoffRes.json()    : { data: null },
         deptRes.ok      ? deptRes.json()      : { data: [] },
         approvalsRes.ok ? approvalsRes.json() : { data: [] },
+        settingsRes.ok  ? settingsRes.json()  : { data: {} },
       ]);
 
       setCutoff(cutoffData.data);
       setDepartments(deptData.data || []);
+      // prefer timezone embedded in approvals payload; fall back to company settings
+      setCompanyTimezone(
+        approvalsData.companyTimezone ||
+        settingsData.data?.timezone ||
+        settingsData.data?.companyTimezone ||
+        "UTC"
+      );
 
       // Transform approvals into employee-grouped records
       const empMap = {};
@@ -725,14 +834,14 @@ export default function CutoffReview({ cutoffId }) {
 
         empMap[userId].records.push({
           id:           leaveRow.id,
-          approvalId:   null,
           timeLogId:    null,
-          date:         new Date(leaveRow.leaveDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+          segmentType:  null,
+          date:         new Date(leaveRow.leaveDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: companyTimezone }),
           type:         "leave",
           detail:       `${leaveRow.leave.leaveType} — <strong>Approved</strong>`,
           tags:         [],
           actions:      ["pre-approved"],
-          hours:        8, // default — could be enhanced with actual leave hours
+          hours:        8,
           scheduledHours: 0,
           scheduleInfo: null,
           hasOT:        false,
@@ -743,7 +852,10 @@ export default function CutoffReview({ cutoffId }) {
         });
       });
 
-      setEmployees(Object.values(empMap));
+      setEmployees(Object.values(empMap).map((emp) => ({
+        ...emp,
+        records: groupDriverRecords(emp.records),
+      })));
     } catch (err) {
       console.error("CutoffReview fetchData:", err);
       toast.error("Failed to load review data");
@@ -789,7 +901,7 @@ export default function CutoffReview({ cutoffId }) {
     const schedule = approval.schedule;
     const calc     = approval.calculatedData || {};
     const payroll  = approval.payrollSummary || {};
-    const date     = tl.timeIn ? new Date(tl.timeIn).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—";
+    const date     = tl.timeIn ? new Date(tl.timeIn).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: companyTimezone }) : "—";
 
     const isLate        = calc.lateMinutes > 0 && calc.lateStatus === "beyond_grace";
     const withinGrace   = calc.lateMinutes > 0 && calc.lateStatus === "within_grace";
@@ -804,8 +916,8 @@ export default function CutoffReview({ cutoffId }) {
     else if (isUnscheduled) type = "unscheduled";
 
     // Build detail HTML
-    const inTime  = tl.timeIn  ? formatDateTime(tl.timeIn)  : "—";
-    const outTime = tl.timeOut ? formatDateTime(tl.timeOut) : "Not clocked out";
+    const inTime  = tl.timeIn  ? formatDateTime(tl.timeIn,  companyTimezone) : "—";
+    const outTime = tl.timeOut ? formatDateTime(tl.timeOut, companyTimezone) : "Not clocked out";
     let detail = `<strong>In: ${inTime}</strong> &rarr; <strong>Out: ${outTime}</strong>`;
     if (isConflict && approval.leaveRecord) {
       detail = `<strong>Punch:</strong> ${inTime} &rarr; ${outTime} &nbsp;|&nbsp; <strong>Leave:</strong> ${approval.leaveRecord.leaveType} (Approved)`;
@@ -837,12 +949,7 @@ export default function CutoffReview({ cutoffId }) {
     const totalPayable  = payroll.totalPayableHours   || payableHours;
 
     const scheduleInfo = schedule
-      ? {
-          shiftName:      schedule.shiftName || "Shift",
-          scheduledStart: schedule.scheduledStart ? formatDateTime(schedule.scheduledStart) : "—",
-          scheduledEnd:   schedule.scheduledEnd   ? formatDateTime(schedule.scheduledEnd)   : "—",
-          scheduledHours: schedule.scheduledHours || 0,
-        }
+      ? { scheduledHours: schedule.scheduledHours || 0 }
       : null;
 
     // Extract no_schedule remark from TimeLog.remarks JSON array
@@ -851,8 +958,8 @@ export default function CutoffReview({ cutoffId }) {
 
     return {
       id:           approval.id,
-      approvalId:   approval.id,
       timeLogId:    tl.id,
+      segmentType:  approval.segmentType ?? null,
       date,
       type,
       detail,
@@ -871,21 +978,61 @@ export default function CutoffReview({ cutoffId }) {
   }
 
   // ─────────────────────────────────────────────────────────────────────
+  // DRIVER RECORD GROUPING
+  // ─────────────────────────────────────────────────────────────────────
+  function groupDriverRecords(records) {
+    const result = [];
+    const driverGroupMap = {};
+
+    for (const rec of records) {
+      if (rec.segmentType !== null) {
+        if (!driverGroupMap[rec.date]) {
+          const group = { id: `driver-group-${rec.date}`, type: "driver_group", date: rec.date, segments: [], hours: 0 };
+          driverGroupMap[rec.date] = group;
+          result.push(group);
+        }
+        const group = driverGroupMap[rec.date];
+        group.segments.push(rec);
+        group.hours += rec.hours || 0;
+      } else {
+        result.push(rec);
+      }
+    }
+
+    for (const group of Object.values(driverGroupMap)) {
+      group.segments.sort((a, b) => (SEGMENT_ORDER[a.segmentType] ?? 99) - (SEGMENT_ORDER[b.segmentType] ?? 99));
+    }
+
+    return result;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
   // DERIVED — MERGE LOCAL STATUS INTO EMPLOYEE RECORDS
   // ─────────────────────────────────────────────────────────────────────
   const mergedEmployees = useMemo(() =>
     employees.map((emp) => {
-      const records = emp.records.map((r) => ({
-        ...r,
-        localStatus: localStatus[r.id] ?? r.localStatus,
-      }));
-      const actionable = records.filter((r) =>
-        !["rest", "leave"].includes(r.type) && !r.actions?.includes("pre-approved")
-      );
-      const approved  = actionable.filter((r) => r.localStatus === "approved" || r.localStatus === "resolved").length;
-      const pending   = actionable.filter((r) => !r.localStatus).length;
-      const punchHours = records.filter((r) => r.type !== "leave").reduce((s, r) => s + (r.hours || 0), 0);
-      const leaveHours = records.filter((r) => r.type === "leave").reduce((s,  r) => s + (r.hours || 0), 0);
+      const records = emp.records.map((r) => {
+        if (r.type === "driver_group") {
+          const segments = r.segments.map((s) => ({ ...s, localStatus: localStatus[s.id] ?? s.localStatus }));
+          return { ...r, segments, hours: segments.reduce((sum, s) => sum + (s.hours || 0), 0) };
+        }
+        return { ...r, localStatus: localStatus[r.id] ?? r.localStatus };
+      });
+
+      // Flatten actionable records — driver segments counted individually
+      const actionableFlat = [];
+      records.forEach((r) => {
+        if (r.type === "driver_group") {
+          r.segments.forEach((s) => actionableFlat.push(s));
+        } else if (!["rest", "leave"].includes(r.type) && !r.actions?.includes("pre-approved")) {
+          actionableFlat.push(r);
+        }
+      });
+
+      const approved   = actionableFlat.filter((r) => r.localStatus === "approved" || r.localStatus === "resolved").length;
+      const pending    = actionableFlat.filter((r) => !r.localStatus).length;
+      const punchHours = records.reduce((s, r) => r.type === "leave" ? s : s + (r.hours || 0), 0);
+      const leaveHours = records.filter((r) => r.type === "leave").reduce((s, r) => s + (r.hours || 0), 0);
       return { ...emp, records, approved, pending, totalHours: punchHours + leaveHours, punchHours, leaveHours };
     }),
   [employees, localStatus]);
@@ -897,7 +1044,10 @@ export default function CutoffReview({ cutoffId }) {
     const totalPending    = mergedEmployees.reduce((s, e) => s + e.pending, 0);
     const totalHours      = mergedEmployees.reduce((s, e) => s + e.totalHours, 0);
     const totalFlagged    = mergedEmployees.filter((e) =>
-      e.records.some((r) => (r.type === "conflict" || r.type === "unscheduled" || r.tags?.length) && !r.localStatus)
+      e.records.some((r) => {
+        if (r.type === "driver_group") return r.segments.some((s) => s.tags?.length && !s.localStatus);
+        return (r.type === "conflict" || r.type === "unscheduled" || r.tags?.length) && !r.localStatus;
+      })
     ).length;
     const pct = totalActionable > 0 ? Math.round(((totalApproved) / totalActionable) * 100) : 0;
     return { totalActionable, totalApproved, totalPending, totalHours, totalFlagged, pct };
@@ -926,7 +1076,7 @@ export default function CutoffReview({ cutoffId }) {
       // Search
       if (search && !emp.name.toLowerCase().includes(search.toLowerCase()) && !emp.email.toLowerCase().includes(search.toLowerCase())) return false;
       // Chips
-      if (activeChips.includes("late")        && !emp.records.some((r) => r.tags?.some((t) => t.cls === "late")))   return false;
+      if (activeChips.includes("late")        && !emp.records.some((r) => r.type === "driver_group" ? r.segments.some((s) => s.tags?.some((t) => t.cls === "late")) : r.tags?.some((t) => t.cls === "late")))   return false;
       if (activeChips.includes("unscheduled") && !emp.records.some((r) => r.type === "unscheduled"))                return false;
       if (activeChips.includes("ot")          && !emp.hasOT)                                                        return false;
       if (activeChips.includes("conflict")    && !emp.records.some((r) => r.type === "conflict"))                   return false;
@@ -950,13 +1100,27 @@ export default function CutoffReview({ cutoffId }) {
   // ─────────────────────────────────────────────────────────────────────
   // ACTIONS
   // ─────────────────────────────────────────────────────────────────────
+  const findRecord = useCallback((recId) => {
+    for (const emp of mergedEmployees) {
+      for (const r of emp.records) {
+        if (r.type === "driver_group") {
+          const seg = r.segments.find((s) => s.id === recId);
+          if (seg) return seg;
+        } else if (r.id === recId) {
+          return r;
+        }
+      }
+    }
+    return null;
+  }, [mergedEmployees]);
+
   const doApprove = useCallback(async (recId, withOT = false) => {
     setLocalStatus((s) => ({ ...s, [recId]: "approved" }));
     try {
-      const rec = mergedEmployees.flatMap((e) => e.records).find((r) => r.id === recId);
+      const rec = findRecord(recId);
       if (!rec) return;
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods/${cutoffId}/approvals/${rec.approvalId}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods/${cutoffId}/approvals/${rec.id}`,
         {
           method: "PATCH",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -969,15 +1133,15 @@ export default function CutoffReview({ cutoffId }) {
       setLocalStatus((s) => { const n = { ...s }; delete n[recId]; return n; });
       toast.error("Failed to approve");
     }
-  }, [token, cutoffId, mergedEmployees]);
+  }, [token, cutoffId, findRecord]);
 
   const doConflict = useCallback(async (recId, choice) => {
     setLocalStatus((s) => ({ ...s, [recId]: "resolved" }));
     try {
-      const rec = mergedEmployees.flatMap((e) => e.records).find((r) => r.id === recId);
+      const rec = findRecord(recId);
       if (!rec) return;
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods/${cutoffId}/approvals/${rec.approvalId}/conflict`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods/${cutoffId}/approvals/${rec.id}/conflict`,
         {
           method: "PATCH",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -990,7 +1154,7 @@ export default function CutoffReview({ cutoffId }) {
       setLocalStatus((s) => { const n = { ...s }; delete n[recId]; return n; });
       toast.error("Failed to resolve conflict");
     }
-  }, [token, cutoffId, mergedEmployees]);
+  }, [token, cutoffId, findRecord]);
 
   const confirmExclude = useCallback(async () => {
     if (!excludeReason) { toast.error("Please select a reason"); return; }
@@ -998,10 +1162,10 @@ export default function CutoffReview({ cutoffId }) {
     setIsSaving(true);
     setLocalStatus((s) => ({ ...s, [recId]: "excluded" }));
     try {
-      const rec = mergedEmployees.flatMap((e) => e.records).find((r) => r.id === recId);
+      const rec = findRecord(recId);
       if (!rec) return;
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods/${cutoffId}/approvals/${rec.approvalId}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods/${cutoffId}/approvals/${rec.id}`,
         {
           method: "PATCH",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -1019,13 +1183,17 @@ export default function CutoffReview({ cutoffId }) {
     } finally {
       setIsSaving(false);
     }
-  }, [token, cutoffId, excludeModal, excludeReason, excludeNote, mergedEmployees]);
+  }, [token, cutoffId, excludeModal, excludeReason, excludeNote, findRecord]);
 
   const doBulkApprove = useCallback((empId) => {
     const emp = mergedEmployees.find((e) => e.id === empId);
     if (!emp) return;
     emp.records.forEach((r) => {
-      if (!r.localStatus && r.actions?.includes("approve") && !["conflict","unscheduled"].includes(r.type)) {
+      if (r.type === "driver_group") {
+        r.segments.forEach((s) => {
+          if (!s.localStatus && s.actions?.includes("approve")) doApprove(s.id);
+        });
+      } else if (!r.localStatus && r.actions?.includes("approve") && !["conflict","unscheduled"].includes(r.type)) {
         doApprove(r.id);
       }
     });
