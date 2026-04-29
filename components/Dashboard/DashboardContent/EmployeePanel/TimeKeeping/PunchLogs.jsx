@@ -631,9 +631,7 @@ export default function PunchLogs() {
       const hasPendingOT    = overtimeArr.some((ot) => ot.status === "pending");
 
       // ── Period hours: net worked minus unapproved OT ───────────────────────
-      const approvedMins     = approvedOTHours * 60;
-      const unapprovedOtMins = Math.max(0, rawOtMins - approvedMins);
-      const periodHours      = toHour(Math.max(0, netWorkedHours * 60 - unapprovedOtMins));
+      const periodHours = log.scheduledHours != null ? parseFloat(log.scheduledHours).toFixed(2) : "0.00";
 
       // ── DA segment hours — server-computed ────────────────────────────────
       const driverAideAMHours  = isAnyDA ? (log.driverAmSegmentHours ?? null) : null;
@@ -676,7 +674,7 @@ export default function PunchLogs() {
         locList,
         scheduleList,
         lateHours:  log.lateHours != null ? parseFloat(log.lateHours).toFixed(2) : "0.00",
-        duration:   log.netWorkedHours != null ? parseFloat(log.netWorkedHours).toFixed(2) : rawDuration(log.timeIn, log.timeOut),
+        duration:   log.netWorkedHours != null ? parseFloat(log.netWorkedHours).toFixed(2) : log.grossHours != null ? parseFloat(log.grossHours).toFixed(2) : rawDuration(log.timeIn, log.timeOut),
         otHours,
         otStatus,
         periodHours,
@@ -858,9 +856,7 @@ export default function PunchLogs() {
       const approvedOTHours = overtimeArr.filter((ot) => ot.status === "approved").reduce((s, ot) => s + (parseFloat(ot.requestedHours) || 0), 0);
       const hasPendingOT    = overtimeArr.some((ot) => ot.status === "pending");
 
-      const approvedMins     = approvedOTHours * 60;
-      const unapprovedOtMins = Math.max(0, rawOtMins - approvedMins);
-      const periodHours      = toHour(Math.max(0, netWorkedHours * 60 - unapprovedOtMins));
+      const periodHours = log.scheduledHours != null ? parseFloat(log.scheduledHours).toFixed(2) : "0.00";
 
       const otHours = (rawOtMins / 60).toFixed(2);
       let otStatus;
@@ -876,7 +872,9 @@ export default function PunchLogs() {
 
       const duration = log.netWorkedHours != null
         ? parseFloat(log.netWorkedHours).toFixed(2)
-        : rawDuration(log.timeIn, log.timeOut);
+        : log.grossHours != null
+          ? parseFloat(log.grossHours).toFixed(2)
+          : rawDuration(log.timeIn, log.timeOut);
 
       return { ...log, duration, otHours, otStatus, periodHours, lateHours: log.lateHours != null ? parseFloat(log.lateHours).toFixed(2) : "0.00", driverAideAMHours, driverAidePMHours, regularHoursForLog, daRawOtHours };
     });
@@ -1973,7 +1971,7 @@ function TimelogRow({ log, columnVisibility, isDayCare, companyTimezone, userTim
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between py-1"><span className="text-muted-foreground">Coffee Break</span><span className="font-medium tabular-nums flex items-center gap-1">{log.coffeeMins}h{(log.autoCoffeeApplied || log.coffeeBreaks?.some(b => b.auto)) && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}</span></div>
                     <div className="flex justify-between py-1"><span className="text-muted-foreground">Lunch Break</span><span className="font-medium tabular-nums flex items-center gap-1">{log.lunchMins}h{(log.autoLunchApplied || log.lunchBreak?.auto) && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}</span></div>
-                    <div className="flex justify-between py-1"><span className="text-muted-foreground">Late Hours</span><span className="font-medium tabular-nums">{log.lateHours}h</span></div>
+                    <div className="flex justify-between py-1"><span className="text-muted-foreground">Late Hours</span><span className="font-medium tabular-nums">{parseFloat(log.lateHours) > 0 ? `${log.lateHours}h` : "—"}</span></div>
                     <div className="flex justify-between py-1"><span className="text-muted-foreground">Period Hours</span><span className="font-medium tabular-nums">{log.periodHours}h</span></div>
                   </div>
                 )}

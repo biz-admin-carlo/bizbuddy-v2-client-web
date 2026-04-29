@@ -993,13 +993,14 @@ export default function EmployeesPunchLogs() {
             .filter((ot) => ot.status === "approved")
             .reduce((sum, ot) => sum + (parseFloat(ot.requestedHours) || 0), 0);
           const hasPendingOT    = overtimeArr.some((ot) => ot.status === "pending");
-          const approvedMins    = approvedOTHours * 60;
           const daApprovedOT    = approvedOTHours;
 
           // ── Duration — server netWorkedHours, fallback to raw clock diff ───
           const duration = t.netWorkedHours != null
             ? (isAnyDA && daTotalHours != null ? String(daTotalHours) : netWorkedHours.toFixed(2))
-            : toHour(t.timeIn && t.timeOut ? diffMins(t.timeIn, t.timeOut) : 0);
+            : t.grossHours != null
+              ? parseFloat(t.grossHours).toFixed(2)
+              : toHour(t.timeIn && t.timeOut ? diffMins(t.timeIn, t.timeOut) : 0);
 
           // ── OT hours ──────────────────────────────────────────────────────
           const otHours = (rawOtMins / 60).toFixed(2);
@@ -1010,9 +1011,8 @@ export default function EmployeesPunchLogs() {
           else if (hasPendingOT)   otStatus = "pending";
           else if (rawOtMins > 0)  otStatus = "No Approval";
 
-          // ── Period hours — net worked minus unapproved OT ─────────────────
-          const unapprovedOtMins = Math.max(0, rawOtMins - approvedMins);
-          const periodHours      = toHour(Math.max(0, netWorkedHours * 60 - unapprovedOtMins));
+          // ── Period hours — scheduled shift duration for the day ──────────
+          const periodHours = t.scheduledHours != null ? parseFloat(t.scheduledHours).toFixed(2) : "0.00";
 
           // ── Late hours — server-computed ───────────────────────────────────
           const lateHours = t.lateHours != null ? parseFloat(t.lateHours).toFixed(2) : "0.00";
@@ -1031,12 +1031,12 @@ export default function EmployeesPunchLogs() {
             dateKey,
             punchType,
             isDA, isDA_AM, isDA_PM, isAnyDA,
-            isScheduled: !!(t.shiftToday),
             scheduleList: (() => {
               const raw = t.userShifts?.length ? t.userShifts : (t.userShift ? [t.userShift] : []);
               const seen = new Set();
               return raw.filter((s) => { const key = s.shift?.id || s.id; if (seen.has(key)) return false; seen.add(key); return true; });
             })(),
+            isScheduled: !!(t.userShifts?.length || t.userShift),
             duration,
             lateHours,
             otHours,
@@ -1835,7 +1835,7 @@ export default function EmployeesPunchLogs() {
                                           </div>
                                           <div className="flex justify-between">
                                             <span className="text-muted-foreground">Late Hours:</span>
-                                            <span className="font-medium">{t.lateHours}h</span>
+                                            <span className="font-medium">{parseFloat(t.lateHours) > 0 ? `${t.lateHours}h` : "—"}</span>
                                           </div>
                                           <div className="flex justify-between">
                                             <span className="text-muted-foreground">Period Hours:</span>
