@@ -211,3 +211,4 @@ When a `TimeLog` has a `remarks` array entry of type `"no_schedule"`, the employ
 | `components/Dashboard/DashboardContent/CompanyPanel/Punchlogs&Overtimes&Leaves/EmployeeCutoff.jsx` | `formatDate` → date-only parse (period boundary dates no longer shift by timezone offset) |
 | `components/Dashboard/DashboardContent/CompanyPanel/Punchlogs&Overtimes&Leaves/EmployeesPunchLogs.jsx` | `isScheduled` source changed to `userShifts`/`userShift`; `scheduleList` hoisted before `isScheduled`; `grossHours` fallback in `duration`; `periodHours` → `scheduledHours`; removed `approvedMins`, `unapprovedOtMins`; `lateHours` zero suppression in expanded row |
 | `components/Dashboard/DashboardContent/EmployeePanel/TimeKeeping/PunchLogs.jsx` | `grossHours` fallback in `duration` (logsWithSchedule + fetchExportData); `periodHours` → `scheduledHours` in both paths; removed `approvedMins`, `unapprovedOtMins` from both paths; `lateHours` zero suppression in expanded row |
+
