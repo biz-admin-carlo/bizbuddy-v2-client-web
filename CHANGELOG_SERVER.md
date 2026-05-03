@@ -6,40 +6,37 @@ Tracks required backend changes that must be coordinated with client releases.
 
 ## Change 13 — `DELETE /api/timelogs/:id`: Hard-delete a punch log
 
-**Ticket:** Company punch log admin view needs a Delete action. Admins, HR, and supervisors must be able to permanently remove a single timelog record from the company panel.
+**Ticket:** Company punch log admin view needs a Delete action.
 
-**Status:** Pending.
+**Status:** Shipped.
 
----
+**Endpoint spec (as implemented):**
 
-### What changes
+- **Auth:** `admin`, `superadmin`, `hr`, `supervisor` only; same-company scope enforced. Returns `403` otherwise.
+- **Cutoff guard:** Blocked via `getLockedCutoffForLog()` — if the log is tied to a locked or processed cutoff, returns `409` with a descriptive message. Client surfaces `j.message`.
+- **Delete:** Hard-delete; cascade handles any `CutoffApproval` records.
+- **Response:** `{ message: "Deleted successfully" }` on `200`. Client checks `res.ok`.
+- **Socket:** Emits `timeLogUpdated { type: "delete" }` to the log owner's socket room.
 
-- Add `DELETE /api/timelogs/:id` route.
-- Authorization: only `admin`, `superadmin`, `hr`, `supervisor` roles may call this. Return `403` for anyone else.
-- If the log is tied to a `CutoffApproval` record, either cascade-delete or return `409` with a descriptive message (e.g. *"Cannot delete a log that is part of a closed cutoff period"*) — your call on policy, client will surface the error message from `j.message`.
-- Return `{ message: "Deleted successfully" }` on success with `200` (or `204` with no body — client checks `res.ok`).
+**Client side:** `EmployeesPunchLogs.jsx` — Delete icon button in the actions column (shown only for completed logs where `canEdit`). Opens a confirmation dialog before calling the endpoint. Re-fetches logs on success.
 
 ---
 
 ## Change 12 — `PATCH /api/timelogs/:id/punch-type`: Update punch type on an existing log
 
-**Ticket:** DayCare company admins need to correct the punch type on a timelog (e.g. change `REGULAR` → `DRIVER_AIDE_AM` if an employee was mis-tagged). Only relevant for DayCare companies, but the endpoint itself has no company-type restriction — the client gate is sufficient.
+**Ticket:** DayCare company admins need to correct mis-tagged punch types (e.g. `REGULAR` → `DRIVER_AIDE_AM`). Endpoint has no company-type restriction — the client gates it to DayCare only.
 
-**Status:** Pending.
+**Status:** Shipped.
 
----
+**Endpoint spec (as implemented):**
 
-### What changes
+- **Auth:** `admin`, `superadmin`, `hr`, `supervisor` only; same-company scope enforced.
+- **Cutoff guard:** Blocked via `getLockedCutoffForLog()` — returns `409` if locked/processed.
+- **Body:** `{ "punchType": "REGULAR" | "DRIVER_AIDE" | "DRIVER_AIDE_AM" | "DRIVER_AIDE_PM" }`. Returns `400` for invalid values.
+- **Post-update:** Re-runs `computeTimeLogSummary` so `driverAmSegmentHours`, `regularSegmentHours`, `driverPmSegmentHours`, and `netWorkedHours` are immediately consistent.
+- **Socket:** Emits `timeLogUpdated` with the updated log.
 
-- Add `PATCH /api/timelogs/:id/punch-type` route.
-- Authorization: `admin`, `superadmin`, `hr`, `supervisor` only.
-- Request body:
-  ```json
-  { "punchType": "REGULAR" | "DRIVER_AIDE" | "DRIVER_AIDE_AM" | "DRIVER_AIDE_PM" }
-  ```
-- Validate that `punchType` is one of the four allowed values; return `400` otherwise.
-- After updating `TimeLog.punchType`, re-run the segment-hour calculation (same logic used on clock-out) so `driverAmSegmentHours`, `regularSegmentHours`, `driverPmSegmentHours`, and `netWorkedHours` are immediately consistent.
-- Return the updated timelog object (or at minimum `{ message: "Updated", punchType }`) so the client can confirm.
+**Client side:** `EmployeesPunchLogs.jsx` — Tag icon button in actions column, shown only for DayCare companies. Opens "Edit Punch Type" dialog with a dropdown of the four valid values. Re-fetches logs on success.
 
 ---
 
