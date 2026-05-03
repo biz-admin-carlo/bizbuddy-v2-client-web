@@ -62,13 +62,15 @@ const STATUS_CONFIG = {
 };
 
 const ROW_TYPE_CONFIG = {
-  punch:       { label: "Punch",    icon: Clock,         rowBg: "bg-white dark:bg-neutral-900",          typeColor: "text-blue-600",   typeBg: "bg-blue-50  dark:bg-blue-900/20"  },
-  leave:       { label: "Leave",    icon: CalendarCheck, rowBg: "bg-green-50 dark:bg-green-900/10",      typeColor: "text-green-600",  typeBg: "bg-green-50 dark:bg-green-900/30" },
-  rest:        { label: "Rest",     icon: X,             rowBg: "bg-neutral-50 dark:bg-neutral-800/40",  typeColor: "text-neutral-400",typeBg: "bg-neutral-100 dark:bg-neutral-800"},
-  unscheduled: { label: "Punch",    icon: AlertTriangle, rowBg: "bg-amber-50  dark:bg-amber-900/10",     typeColor: "text-amber-600",  typeBg: "bg-amber-50 dark:bg-amber-900/30" },
-  conflict:    { label: "Conflict", icon: GitMerge,      rowBg: "bg-red-50    dark:bg-red-900/10",       typeColor: "text-red-600",    typeBg: "bg-red-50   dark:bg-red-900/30"   },
-  approved:    { label: "Punch",    icon: CheckCircle2,  rowBg: "bg-green-50  dark:bg-green-900/10",     typeColor: "text-green-600",  typeBg: "bg-green-50 dark:bg-green-900/30" },
-  excluded:    { label: "Punch",    icon: XCircle,       rowBg: "bg-neutral-50 dark:bg-neutral-800/40 opacity-60", typeColor: "text-neutral-400", typeBg: "bg-neutral-100" },
+  punch:       { label: "Punch",    icon: Clock,         rowBg: "bg-white dark:bg-neutral-900",                     typeColor: "text-blue-600",    typeBg: "bg-blue-50  dark:bg-blue-900/20"   },
+  leave:       { label: "Leave",    icon: CalendarCheck, rowBg: "bg-green-50 dark:bg-green-900/10",                 typeColor: "text-green-600",   typeBg: "bg-green-50 dark:bg-green-900/30"  },
+  rest:        { label: "Rest",     icon: X,             rowBg: "bg-neutral-50 dark:bg-neutral-800/40",             typeColor: "text-neutral-400", typeBg: "bg-neutral-100 dark:bg-neutral-800" },
+  unscheduled: { label: "Punch",    icon: AlertTriangle, rowBg: "bg-amber-50  dark:bg-amber-900/10",                typeColor: "text-amber-600",   typeBg: "bg-amber-50 dark:bg-amber-900/30"  },
+  conflict:    { label: "Conflict", icon: GitMerge,      rowBg: "bg-red-50    dark:bg-red-900/10",                  typeColor: "text-red-600",     typeBg: "bg-red-50   dark:bg-red-900/30"    },
+  approved:    { label: "Punch",    icon: CheckCircle2,  rowBg: "bg-green-50  dark:bg-green-900/10",                typeColor: "text-green-600",   typeBg: "bg-green-50 dark:bg-green-900/30"  },
+  excluded:    { label: "Punch",    icon: XCircle,       rowBg: "bg-neutral-50 dark:bg-neutral-800/40 opacity-60", typeColor: "text-neutral-400", typeBg: "bg-neutral-100"                     },
+  absent:      { label: "Absent",   icon: CalendarX,     rowBg: "bg-neutral-50/60 dark:bg-neutral-900/20",          typeColor: "text-neutral-300", typeBg: "bg-neutral-100 dark:bg-neutral-800" },
+  unsynced:    { label: "Punch",    icon: Clock,         rowBg: "bg-amber-50/50 dark:bg-amber-900/5",               typeColor: "text-amber-500",   typeBg: "bg-amber-50 dark:bg-amber-900/20"  },
 };
 
 const EXCLUDE_REASONS = [
@@ -127,6 +129,26 @@ const InfoTooltip = ({ text, side = "bottom" }) => (
 
 const formatDateTime = (d, tz = "UTC") =>
   d ? new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZone: tz }) : "—";
+
+const fmtShiftTime = (d) =>
+  d ? new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "UTC" }) : null;
+
+/** Returns [{isoDate, label}] for every day from periodStart to periodEnd (inclusive), labels in company timezone. */
+const enumeratePeriodDays = (periodStart, periodEnd, tz = "UTC") => {
+  if (!periodStart || !periodEnd) return [];
+  const [sy, sm, sd] = periodStart.slice(0, 10).split("-").map(Number);
+  const [ey, em, ed] = periodEnd.slice(0, 10).split("-").map(Number);
+  const days = [];
+  let cur = new Date(Date.UTC(sy, sm - 1, sd, 12));
+  const endUtc = new Date(Date.UTC(ey, em - 1, ed, 12));
+  while (cur <= endUtc) {
+    const isoDate = cur.toISOString().slice(0, 10);
+    const label   = cur.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz });
+    days.push({ isoDate, label });
+    cur = new Date(cur.getTime() + 86400000);
+  }
+  return days;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SUB-COMPONENTS
@@ -321,6 +343,63 @@ const ActionBtn = ({ color, icon: Icon, label, onClick }) => {
 
 /** Single timeline row inside an employee card */
 const TimelineRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflict }) => {
+  if (rec.type === "absent") {
+    return (
+      <tr className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 bg-neutral-50/60 dark:bg-neutral-900/20">
+        <td className="px-4 py-2.5 w-20 align-middle">
+          <span className="font-mono text-[11px] font-medium text-neutral-300 dark:text-neutral-600">{rec.date}</span>
+        </td>
+        <td className="px-3 py-2.5 w-24 align-middle">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-neutral-100 dark:bg-neutral-800">
+            <CalendarX className="w-3 h-3 text-neutral-300 dark:text-neutral-600" />
+            <span className="text-neutral-300 dark:text-neutral-600">Absent</span>
+          </div>
+        </td>
+        <td className="px-3 py-2.5 align-middle">
+          <span className="text-[11px] text-neutral-300 dark:text-neutral-600 italic">No punch record</span>
+        </td>
+        <td className="px-3 py-2.5 w-24 text-right align-middle">
+          <span className="text-neutral-300 text-sm">—</span>
+        </td>
+        <td className="px-3 py-2.5 w-52" />
+      </tr>
+    );
+  }
+
+  if (rec.type === "unsynced") {
+    return (
+      <tr className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 bg-amber-50/50 dark:bg-amber-900/5">
+        <td className="px-4 py-3 w-20 align-top">
+          <span className="font-mono text-[11px] font-medium text-neutral-400">{rec.date}</span>
+        </td>
+        <td className="px-3 py-3 w-24 align-top">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 dark:bg-amber-900/20">
+            <Clock className="w-3 h-3 text-amber-500" />
+            <span className="text-amber-600">Punch</span>
+          </div>
+        </td>
+        <td className="px-3 py-3 align-top">
+          <div className="mb-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+              <AlertCircle className="w-2.5 h-2.5" />
+              Not in cutoff — run Sync to include
+            </span>
+          </div>
+          <div className="text-[12px] font-medium text-neutral-700 dark:text-neutral-300"
+            dangerouslySetInnerHTML={{ __html: rec.detail }} />
+        </td>
+        <td className="px-3 py-3 w-24 text-right align-top">
+          <span className="text-neutral-300 text-sm">—</span>
+        </td>
+        <td className="px-3 py-3 w-52 align-top">
+          <div className="flex justify-end">
+            <span className="text-[11px] text-amber-500 font-semibold">Sync needed</span>
+          </div>
+        </td>
+      </tr>
+    );
+  }
+
   const cfg = ROW_TYPE_CONFIG[rec.localStatus || rec.type] || ROW_TYPE_CONFIG.punch;
   const TypeIcon = cfg.icon;
   const isLocked         = ["approved", "excluded", "resolved"].includes(rec.localStatus);
@@ -352,6 +431,11 @@ const TimelineRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflic
               {rec.scheduleInfo.scheduledHours}h scheduled
               <InfoTooltip text="Total hours in this shift. Payable hours are calculated from this baseline after applying snap rules and break deductions." />
             </span>
+            {rec.scheduleInfo.shiftStart && rec.scheduleInfo.shiftEnd && (
+              <span className="font-mono text-[10px] text-neutral-400">
+                {fmtShiftTime(rec.scheduleInfo.shiftStart)} – {fmtShiftTime(rec.scheduleInfo.shiftEnd)}
+              </span>
+            )}
           </div>
         )}
 
@@ -400,7 +484,7 @@ const TimelineRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflic
         {rec.tags?.length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap">
             {rec.tags.map((t, i) => (
-              <TagPill key={i} cls={t.cls} label={t.label} tooltip={TAG_TOOLTIPS[t.cls]} />
+              <TagPill key={i} cls={t.cls} label={t.label} tooltip={t.tooltip ?? TAG_TOOLTIPS[t.cls]} />
             ))}
           </div>
         )}
@@ -449,17 +533,138 @@ const TimelineRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflic
           </div>
         )}
         {!isLocked && !isRestOrPreApproved && (
-          <div className="flex flex-col items-end gap-1.5">
-            <div className="flex items-center gap-1.5 flex-wrap justify-end">
-              {rec.actions?.includes("approve")      && <ActionBtn color="green"   icon={Check}        label="Approve"      onClick={() => onApprove(rec.id)} />}
-              {rec.actions?.includes("approve-ot")   && <ActionBtn color="purple"  icon={Zap}          label="+ OT"         onClick={() => onApproveOT(rec.id)} />}
-              {rec.actions?.includes("honor-punch")  && <ActionBtn color="blue"    icon={Clock}        label="Honor Punch"  onClick={() => onConflict(rec.id, "punch")} />}
-              {rec.actions?.includes("honor-leave")  && <ActionBtn color="green"   icon={CalendarCheck} label="Honor Leave" onClick={() => onConflict(rec.id, "leave")} />}
-              {rec.actions?.includes("edit")         && <ActionBtn color="neutral" icon={Pencil}       label="Edit"         onClick={(e) => { e.stopPropagation(); onEdit(rec); }} />}
-            </div>
-            {rec.actions?.includes("exclude") && (
-              <ActionBtn color="red" icon={X} label="Exclude" onClick={(e) => { e.stopPropagation(); onExclude(rec.id); }} />
+          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+            {rec.actions?.includes("approve")      && <ActionBtn color="green"   icon={Check}         label="Approve"      onClick={() => onApprove(rec.id)} />}
+            {rec.actions?.includes("approve-ot")   && <ActionBtn color="purple"  icon={Zap}           label="+ OT"         onClick={() => onApproveOT(rec.id)} />}
+            {rec.actions?.includes("honor-punch")  && <ActionBtn color="blue"    icon={Clock}         label="Honor Punch"  onClick={() => onConflict(rec.id, "punch")} />}
+            {rec.actions?.includes("honor-leave")  && <ActionBtn color="green"   icon={CalendarCheck} label="Honor Leave"  onClick={() => onConflict(rec.id, "leave")} />}
+            {rec.actions?.includes("edit")         && <ActionBtn color="neutral" icon={Pencil}        label="Edit"         onClick={(e) => { e.stopPropagation(); onEdit(rec); }} />}
+            {rec.actions?.includes("exclude")      && <ActionBtn color="red"     icon={X}             label="Exclude"      onClick={(e) => { e.stopPropagation(); onExclude(rec.id); }} />}
+          </div>
+        )}
+      </td>
+    </tr>
+  );
+};
+
+/** Sub-row for a regular punch inside a multi-shift day group */
+const PunchSubRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflict }) => {
+  const cfg = ROW_TYPE_CONFIG[rec.localStatus || rec.type] || ROW_TYPE_CONFIG.punch;
+  const TypeIcon = cfg.icon;
+  const isLocked         = ["approved", "excluded", "resolved"].includes(rec.localStatus);
+  const isRestOrPreApproved = rec.type === "rest" || rec.actions?.includes("pre-approved");
+
+  return (
+    <tr className={`border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 transition-colors ${cfg.rowBg}`}>
+      <td className="px-4 py-3 w-20 align-top">
+        <span className="font-mono text-[10px] text-neutral-300 pl-2">└</span>
+      </td>
+      <td className="px-3 py-3 w-24 align-top">
+        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${cfg.typeBg}`}>
+          <TypeIcon className={`w-3 h-3 ${cfg.typeColor}`} />
+          <span className={cfg.typeColor}>{cfg.label}</span>
+        </div>
+      </td>
+      <td className="px-3 py-3 align-top">
+        {rec.scheduleInfo && (
+          <div className="flex items-center gap-2 mb-2">
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-neutral-500">
+              {rec.scheduleInfo.scheduledHours}h scheduled
+              <InfoTooltip text="Total hours in this shift. Payable hours are calculated from this baseline after applying snap rules and break deductions." />
+            </span>
+            {rec.scheduleInfo.shiftStart && rec.scheduleInfo.shiftEnd && (
+              <span className="font-mono text-[10px] text-neutral-400">
+                {fmtShiftTime(rec.scheduleInfo.shiftStart)} – {fmtShiftTime(rec.scheduleInfo.shiftEnd)}
+              </span>
             )}
+          </div>
+        )}
+        {!rec.scheduleInfo && rec.type !== "leave" && rec.type !== "rest" && (
+          <div className="mb-2">
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+              <AlertTriangle className="w-2.5 h-2.5" />
+              No schedule for this day
+              <InfoTooltip text="No shift assigned. If approved, actual clocked hours will be used as payable hours." />
+            </span>
+          </div>
+        )}
+        {rec.noScheduleRemark && (
+          <div className="mb-2 flex items-start gap-2 px-2.5 py-2 rounded-xl bg-neutral-50 border border-neutral-200 dark:bg-neutral-800 dark:border-neutral-700 max-w-md">
+            <FileText className="w-3.5 h-3.5 text-neutral-400 mt-0.5 flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wide mb-0.5">Employee Reason</p>
+              <p className="text-[11px] text-neutral-700 dark:text-neutral-300 leading-relaxed break-words">
+                {rec.noScheduleRemark.message}
+              </p>
+            </div>
+          </div>
+        )}
+        {rec.pendingLeave && (
+          <div className="mb-2">
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700 border border-yellow-200">
+              <CalendarCheck className="w-2.5 h-2.5" />
+              Pending {rec.pendingLeave.leaveType} leave
+              <InfoTooltip text="A pending leave request exists for this day. Review and approve or reject the leave before finalizing this punch." />
+            </span>
+          </div>
+        )}
+        <div className="text-[12px] font-medium text-neutral-700 dark:text-neutral-300 mb-1.5"
+          dangerouslySetInnerHTML={{ __html: rec.detail }} />
+        {rec.tags?.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {rec.tags.map((t, i) => (
+              <TagPill key={i} cls={t.cls} label={t.label} tooltip={t.tooltip ?? TAG_TOOLTIPS[t.cls]} />
+            ))}
+          </div>
+        )}
+      </td>
+      <td className="px-3 py-3 w-24 text-right align-top">
+        {rec.hours > 0 ? (
+          <div>
+            <div className="inline-flex items-center gap-0.5 justify-end">
+              <span className={`font-mono text-sm font-extrabold
+                ${rec.type === "leave"    ? "text-emerald-600" :
+                  rec.type === "conflict" ? "text-red-500"     :
+                  rec.type === "rest"     ? "text-neutral-300" :
+                  "text-neutral-800 dark:text-neutral-100"}`}>
+                {parseFloat(rec.hours).toFixed(2).replace(/\.?0+$/, "")}h
+              </span>
+              <InfoTooltip text="Payable hours after snap rules and break deductions. This goes to payroll on approval." />
+            </div>
+            {rec.scheduledHours > 0 && (
+              <div className="text-[10px] text-neutral-400 mt-0.5 tabular-nums">
+                / {rec.scheduledHours}h sched.
+              </div>
+            )}
+          </div>
+        ) : (
+          <span className="text-neutral-300 text-sm">—</span>
+        )}
+      </td>
+      <td className="px-3 py-3 w-52 align-top">
+        {isLocked && (
+          <div className="flex justify-end">
+            {rec.localStatus === "excluded"
+              ? <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-neutral-100 text-neutral-400 border border-neutral-200"><XCircle className="w-3 h-3" /> Excluded</span>
+              : <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200"><Check className="w-3 h-3" /> Approved</span>
+            }
+          </div>
+        )}
+        {isRestOrPreApproved && !isLocked && (
+          <div className="flex justify-end">
+            <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+              <Lock className="w-3 h-3" /> Pre-approved
+            </span>
+          </div>
+        )}
+        {!isLocked && !isRestOrPreApproved && (
+          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+            {rec.actions?.includes("approve")      && <ActionBtn color="green"   icon={Check}         label="Approve"      onClick={() => onApprove(rec.id)} />}
+            {rec.actions?.includes("approve-ot")   && <ActionBtn color="purple"  icon={Zap}           label="+ OT"         onClick={() => onApproveOT(rec.id)} />}
+            {rec.actions?.includes("honor-punch")  && <ActionBtn color="blue"    icon={Clock}         label="Honor Punch"  onClick={() => onConflict(rec.id, "punch")} />}
+            {rec.actions?.includes("honor-leave")  && <ActionBtn color="green"   icon={CalendarCheck} label="Honor Leave"  onClick={() => onConflict(rec.id, "leave")} />}
+            {rec.actions?.includes("edit")         && <ActionBtn color="neutral" icon={Pencil}        label="Edit"         onClick={(e) => { e.stopPropagation(); onEdit(rec); }} />}
+            {rec.actions?.includes("exclude")      && <ActionBtn color="red"     icon={X}             label="Exclude"      onClick={(e) => { e.stopPropagation(); onExclude(rec.id); }} />}
           </div>
         )}
       </td>
@@ -487,7 +692,7 @@ const DriverSegmentRow = ({ seg, onApprove, onApproveOT, onExclude }) => {
         {seg.tags?.length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap">
             {seg.tags.map((t, i) => (
-              <TagPill key={i} cls={t.cls} label={t.label} tooltip={TAG_TOOLTIPS[t.cls]} />
+              <TagPill key={i} cls={t.cls} label={t.label} tooltip={t.tooltip ?? TAG_TOOLTIPS[t.cls]} />
             ))}
           </div>
         )}
@@ -549,18 +754,55 @@ const DriverGroupRow = ({ group, onApprove, onApproveOT, onExclude }) => (
   </>
 );
 
+/** Multi-shift day group for regular punches */
+const PunchGroupRow = ({ group, onApprove, onApproveOT, onEdit, onExclude, onConflict }) => (
+  <>
+    <tr className="bg-blue-50/40 dark:bg-blue-900/10 border-b border-blue-100 dark:border-blue-900/20">
+      <td className="px-4 py-2 w-20 align-middle">
+        <span className="font-mono text-[11px] font-medium text-neutral-400">{group.date}</span>
+      </td>
+      <td colSpan={3} className="px-3 py-2 align-middle">
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600">
+          <Clock className="w-3 h-3" /> {group.punches.length} shift{group.punches.length !== 1 ? "s" : ""}
+        </span>
+      </td>
+      <td className="px-3 py-2 text-right align-middle">
+        <span className="font-mono text-sm font-extrabold text-neutral-600 dark:text-neutral-300">
+          {parseFloat(group.hours).toFixed(2).replace(/\.?0+$/, "")}h total
+        </span>
+      </td>
+    </tr>
+    {group.punches.map((punch) => (
+      <PunchSubRow
+        key={punch.id}
+        rec={punch}
+        onApprove={onApprove}
+        onApproveOT={onApproveOT}
+        onEdit={onEdit}
+        onExclude={onExclude}
+        onConflict={onConflict}
+      />
+    ))}
+  </>
+);
+
 /** Employee card */
 const EmployeeCard = ({ emp, onApprove, onApproveOT, onEdit, onExclude, onConflict, onBulkApprove }) => {
   const [expanded, setExpanded] = useState(false);
-  const hasConflict  = emp.records.some((r) => r.type === "conflict" && !r.localStatus);
+  const hasConflict  = emp.records.some((r) => {
+    if (r.type === "punch_group") return r.punches.some((p) => p.type === "conflict" && !p.localStatus);
+    return r.type === "conflict" && !r.localStatus;
+  });
   const hasFlag      = emp.records.some((r) => {
     if (r.type === "driver_group") return r.segments.some((s) => s.tags?.length && !s.localStatus);
+    if (r.type === "punch_group")  return r.punches.some((p) => (p.type === "unscheduled" || p.tags?.length) && !p.localStatus);
     return (r.type === "unscheduled" || r.tags?.length) && !r.localStatus;
   });
   const allDone      = emp.pending === 0;
   const punchCount   = emp.records.reduce((n, r) => {
     if (r.type === "driver_group") return n + r.segments.length;
-    return ["rest", "leave"].includes(r.type) ? n : n + 1;
+    if (r.type === "punch_group")  return n + r.punches.length;
+    return ["rest", "leave", "absent"].includes(r.type) ? n : n + 1;
   }, 0);
   const leaveCount   = emp.records.filter((r) => r.type === "leave").length;
 
@@ -597,6 +839,7 @@ const EmployeeCard = ({ emp, onApprove, onApproveOT, onEdit, onExclude, onConfli
         <div className="flex items-center gap-1.5 flex-wrap">
           {hasConflict  && <Badge className="bg-red-100    text-red-600    border-red-200    text-[10px] gap-1"><GitMerge className="w-2.5 h-2.5" /> Conflict</Badge>}
           {hasFlag && !hasConflict && <Badge className="bg-amber-100  text-amber-600  border-amber-200  text-[10px] gap-1"><AlertTriangle className="w-2.5 h-2.5" /> Flagged</Badge>}
+          {emp.unsyncedCount > 0 && <Badge className="bg-amber-100 text-amber-600 border-amber-200 text-[10px] gap-1"><AlertCircle className="w-2.5 h-2.5" /> {emp.unsyncedCount} unsynced</Badge>}
           {emp.hasOT    && <Badge className="bg-purple-100 text-purple-600 border-purple-200 text-[10px] gap-1"><Zap className="w-2.5 h-2.5" /> OT</Badge>}
           {allDone      && <Badge className="bg-green-100  text-green-600  border-green-200  text-[10px] gap-1"><CheckCircle2 className="w-2.5 h-2.5" /> Done</Badge>}
         </div>
@@ -668,6 +911,16 @@ const EmployeeCard = ({ emp, onApprove, onApproveOT, onEdit, onExclude, onConfli
                         onApprove={onApprove}
                         onApproveOT={onApproveOT}
                         onExclude={onExclude}
+                      />
+                    ) : rec.type === "punch_group" ? (
+                      <PunchGroupRow
+                        key={rec.id}
+                        group={rec}
+                        onApprove={onApprove}
+                        onApproveOT={onApproveOT}
+                        onEdit={onEdit}
+                        onExclude={onExclude}
+                        onConflict={onConflict}
                       />
                     ) : (
                       <TimelineRow
@@ -770,13 +1023,30 @@ export default function CutoffReview({ cutoffId }) {
 
       setCutoff(cutoffData.data);
       setDepartments(deptData.data || []);
-      // prefer timezone embedded in approvals payload; fall back to company settings
-      setCompanyTimezone(
+      // Resolve timezone once as a local constant — used for all date/time formatting
+      // in this fetch. setCompanyTimezone schedules an async state update, so reading
+      // companyTimezone from state inside buildDetails would give the stale value.
+      const tz =
         approvalsData.companyTimezone ||
         settingsData.data?.timezone ||
         settingsData.data?.companyTimezone ||
-        "UTC"
-      );
+        "UTC";
+      setCompanyTimezone(tz);
+
+      // Fetch raw punch logs for the full period — surfaces records not yet synced into cutoff approvals
+      const ps     = cutoffData.data?.periodStart;
+      const pe     = cutoffData.data?.periodEnd;
+      const deptId = cutoffData.data?.departmentId;
+      let rawLogsData = { data: [] };
+      if (ps && pe) {
+        const rlParams = new URLSearchParams({ from: ps, to: pe, limit: "10000" });
+        if (deptId) rlParams.set("departmentId", deptId);
+        const rlRes = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/timelogs?${rlParams}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (rlRes.ok) rawLogsData = await rlRes.json();
+      }
 
       // Transform approvals into employee-grouped records
       const empMap = {};
@@ -804,7 +1074,7 @@ export default function CutoffReview({ cutoffId }) {
         }
 
         const emp     = empMap[userId];
-        const details = buildDetails(approval);
+        const details = buildDetails(approval, tz);
         emp.records.push(details);
         if (details.hasOT) emp.hasOT = true;
         if (details.actions?.includes("approve") && !["conflict","unscheduled"].includes(details.type)) {
@@ -836,7 +1106,7 @@ export default function CutoffReview({ cutoffId }) {
           id:           leaveRow.id,
           timeLogId:    null,
           segmentType:  null,
-          date:         new Date(leaveRow.leaveDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: companyTimezone }),
+          date:         new Date(leaveRow.leaveDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz }),
           type:         "leave",
           detail:       `${leaveRow.leave.leaveType} — <strong>Approved</strong>`,
           tags:         [],
@@ -852,9 +1122,39 @@ export default function CutoffReview({ cutoffId }) {
         });
       });
 
+      // Identify timelog IDs already represented by an approval record
+      const syncedTimeLogIds = new Set(
+        (approvalsData.data || []).map((a) => a.timeLog?.id).filter(Boolean)
+      );
+
+      // Add unsynced punch records — exist in raw punch logs but not yet in this cutoff
+      (rawLogsData.data || []).forEach((rawLog) => {
+        if (syncedTimeLogIds.has(rawLog.id)) return;
+        const userId = rawLog.userId;
+        if (!userId) return;
+
+        if (!empMap[userId]) {
+          const nameStr  = rawLog.employeeName || rawLog.email || "Unknown";
+          const parts    = nameStr.trim().split(/\s+/);
+          const initials = ((parts[0]?.[0] || "") + (parts[parts.length - 1]?.[0] || "")).toUpperCase() || "?";
+          empMap[userId] = {
+            id:       userId,
+            name:     nameStr,
+            email:    rawLog.email || "",
+            initials,
+            color:    COLORS[colorIdx++ % COLORS.length],
+            records:  [],
+            hasOT:    false,
+            hasBulk:  false,
+          };
+        }
+
+        empMap[userId].records.push(buildUnsyncedRecord(rawLog, tz));
+      });
+
       setEmployees(Object.values(empMap).map((emp) => ({
         ...emp,
-        records: groupDriverRecords(emp.records),
+        records: groupRecordsByDate(emp.records, ps, pe, tz),
       })));
     } catch (err) {
       console.error("CutoffReview fetchData:", err);
@@ -896,12 +1196,12 @@ export default function CutoffReview({ cutoffId }) {
   // ─────────────────────────────────────────────────────────────────────
   // BUILD RECORD DETAILS FROM API APPROVAL OBJECT
   // ─────────────────────────────────────────────────────────────────────
-  function buildDetails(approval) {
+  function buildDetails(approval, tz) {
     const tl       = approval.timeLog || {};
     const schedule = approval.schedule;
     const calc     = approval.calculatedData || {};
     const payroll  = approval.payrollSummary || {};
-    const date     = tl.timeIn ? new Date(tl.timeIn).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: companyTimezone }) : "—";
+    const date     = tl.timeIn ? new Date(tl.timeIn).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz }) : "—";
 
     const isLate        = calc.lateMinutes > 0 && calc.lateStatus === "beyond_grace";
     const withinGrace   = calc.lateMinutes > 0 && calc.lateStatus === "within_grace";
@@ -916,18 +1216,40 @@ export default function CutoffReview({ cutoffId }) {
     else if (isUnscheduled) type = "unscheduled";
 
     // Build detail HTML
-    const inTime  = tl.timeIn  ? formatDateTime(tl.timeIn,  companyTimezone) : "—";
-    const outTime = tl.timeOut ? formatDateTime(tl.timeOut, companyTimezone) : "Not clocked out";
+    const inTime  = approval.segmentType !== null
+      ? formatDateTime(approval.segmentStart, tz)
+      : (tl.timeIn  ? formatDateTime(tl.timeIn,  tz) : "—");
+    const outTime = approval.segmentType !== null
+      ? formatDateTime(approval.segmentEnd, tz)
+      : (tl.timeOut ? formatDateTime(tl.timeOut, tz) : "Not clocked out");
     let detail = `<strong>In: ${inTime}</strong> &rarr; <strong>Out: ${outTime}</strong>`;
     if (isConflict && approval.leaveRecord) {
       detail = `<strong>Punch:</strong> ${inTime} &rarr; ${outTime} &nbsp;|&nbsp; <strong>Leave:</strong> ${approval.leaveRecord.leaveType} (Approved)`;
     }
 
     // Tags
+    // Resolve shift window for tag tooltips — available here before scheduleInfo block below
+    const schedShiftStart = schedule?.shift?.startTime || schedule?.startTime || null;
+    const schedShiftEnd   = schedule?.shift?.endTime   || schedule?.endTime   || null;
+    const shiftStartStr   = schedShiftStart ? fmtShiftTime(schedShiftStart) : null;
+    const shiftEndStr     = schedShiftEnd   ? fmtShiftTime(schedShiftEnd)   : null;
+    const scheduledHrs    = schedule?.scheduledHours || null;
+
     const tags = [];
     if (isLate)      tags.push({ cls: "late", label: `${calc.lateMinutes}min late` });
     if (withinGrace) tags.push({ cls: "snap", label: "Within grace — snaps to schedule" });
-    if (leftEarly)   tags.push({ cls: "flag", label: `Left ${calc.earlyMinutes}min early` });
+    if (leftEarly) {
+      const earlyHours = (calc.earlyMinutes / 60).toFixed(1);
+      const lines = [`Left ${earlyHours}h (${calc.earlyMinutes} min) before the scheduled shift end.`];
+      if (shiftStartStr && shiftEndStr) {
+        lines.push(`Scheduled: ${shiftStartStr} – ${shiftEndStr}${scheduledHrs ? ` (${scheduledHrs}h)` : ""}.`);
+      } else if (shiftEndStr) {
+        lines.push(`Scheduled end: ${shiftEndStr}.`);
+      }
+      lines.push(`Actual clock-out: ${outTime}.`);
+      lines.push("Computed server-side from (scheduled end − actual clock-out).");
+      tags.push({ cls: "flag", label: `Left ${calc.earlyMinutes}min early`, tooltip: lines.join(" ") });
+    }
     if (hasOT)       tags.push({ cls: "ot",   label: `+${calc.overtimeHours}h OT` });
     if (calc.willSnapIn)  tags.push({ cls: "snap", label: "Clock-in will snap" });
     if (calc.willSnapOut) tags.push({ cls: "snap", label: "Clock-out will snap" });
@@ -949,7 +1271,11 @@ export default function CutoffReview({ cutoffId }) {
     const totalPayable  = payroll.totalPayableHours   || payableHours;
 
     const scheduleInfo = schedule
-      ? { scheduledHours: schedule.scheduledHours || 0 }
+      ? {
+          scheduledHours: schedule.scheduledHours || 0,
+          shiftStart: schedule.shift?.startTime || schedule.startTime || null,
+          shiftEnd:   schedule.shift?.endTime   || schedule.endTime   || null,
+        }
       : null;
 
     // Extract no_schedule remark from TimeLog.remarks JSON array
@@ -977,25 +1303,74 @@ export default function CutoffReview({ cutoffId }) {
     };
   }
 
+  function buildUnsyncedRecord(rawLog, tz) {
+    const date    = rawLog.timeIn ? new Date(rawLog.timeIn).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz }) : "—";
+    const inTime  = rawLog.timeIn  ? formatDateTime(rawLog.timeIn,  tz) : "—";
+    const outTime = rawLog.timeOut ? formatDateTime(rawLog.timeOut, tz) : "Not clocked out";
+    return {
+      id:               `unsynced-${rawLog.id}`,
+      rawTimeLogId:     rawLog.id,
+      segmentType:      null,
+      date,
+      type:             "unsynced",
+      detail:           `<strong>In: ${inTime}</strong> &rarr; <strong>Out: ${outTime}</strong>`,
+      tags:             [],
+      actions:          [],
+      hours:            0,
+      scheduledHours:   0,
+      scheduleInfo:     null,
+      hasOT:            false,
+      timeIn:           inTime,
+      timeOut:          outTime,
+      localStatus:      null,
+      pendingLeave:     null,
+      noScheduleRemark: null,
+    };
+  }
+
   // ─────────────────────────────────────────────────────────────────────
-  // DRIVER RECORD GROUPING
+  // RECORD GROUPING — driver segments by date + regular multi-shift by date
   // ─────────────────────────────────────────────────────────────────────
-  function groupDriverRecords(records) {
-    const result = [];
+  function groupRecordsByDate(records, periodStart, periodEnd, tz = "UTC") {
+    const PUNCHABLE = new Set(["punch", "unscheduled", "conflict", "approved", "excluded"]);
+
+    // Count punchable records per date to know which dates need multi-shift grouping
+    const punchCountPerDate = {};
+    for (const rec of records) {
+      if (rec.segmentType === null && PUNCHABLE.has(rec.type)) {
+        punchCountPerDate[rec.date] = (punchCountPerDate[rec.date] || 0) + 1;
+      }
+    }
+
+    // Build a date-label → [grouped items] map so we can enumerate days in order
+    const byDate        = {};
     const driverGroupMap = {};
+    const punchGroupMap  = {};
+
+    const addToDate = (label, item) => {
+      if (!byDate[label]) byDate[label] = [];
+      byDate[label].push(item);
+    };
 
     for (const rec of records) {
       if (rec.segmentType !== null) {
         if (!driverGroupMap[rec.date]) {
           const group = { id: `driver-group-${rec.date}`, type: "driver_group", date: rec.date, segments: [], hours: 0 };
           driverGroupMap[rec.date] = group;
-          result.push(group);
+          addToDate(rec.date, group);
         }
-        const group = driverGroupMap[rec.date];
-        group.segments.push(rec);
-        group.hours += rec.hours || 0;
+        driverGroupMap[rec.date].segments.push(rec);
+        driverGroupMap[rec.date].hours += rec.hours || 0;
+      } else if (PUNCHABLE.has(rec.type) && punchCountPerDate[rec.date] > 1) {
+        if (!punchGroupMap[rec.date]) {
+          const group = { id: `punch-group-${rec.date}`, type: "punch_group", date: rec.date, punches: [], hours: 0 };
+          punchGroupMap[rec.date] = group;
+          addToDate(rec.date, group);
+        }
+        punchGroupMap[rec.date].punches.push(rec);
+        punchGroupMap[rec.date].hours += rec.hours || 0;
       } else {
-        result.push(rec);
+        addToDate(rec.date, rec);
       }
     }
 
@@ -1003,6 +1378,22 @@ export default function CutoffReview({ cutoffId }) {
       group.segments.sort((a, b) => (SEGMENT_ORDER[a.segmentType] ?? 99) - (SEGMENT_ORDER[b.segmentType] ?? 99));
     }
 
+    // Enumerate every day in the period in chronological order.
+    // Days with data → emit those records; days without → emit an absent placeholder.
+    const allDays = enumeratePeriodDays(periodStart, periodEnd, tz);
+    if (allDays.length === 0) {
+      // No period bounds available — fall back to whatever order we built above
+      return Object.values(byDate).flat();
+    }
+
+    const result = [];
+    for (const { isoDate, label } of allDays) {
+      if (byDate[label]) {
+        result.push(...byDate[label]);
+      } else {
+        result.push({ id: `absent-${isoDate}`, type: "absent", date: label, hours: 0, actions: [], localStatus: null, tags: [] });
+      }
+    }
     return result;
   }
 
@@ -1016,15 +1407,25 @@ export default function CutoffReview({ cutoffId }) {
           const segments = r.segments.map((s) => ({ ...s, localStatus: localStatus[s.id] ?? s.localStatus }));
           return { ...r, segments, hours: segments.reduce((sum, s) => sum + (s.hours || 0), 0) };
         }
+        if (r.type === "punch_group") {
+          const punches = r.punches.map((p) => ({ ...p, localStatus: localStatus[p.id] ?? p.localStatus }));
+          return { ...r, punches, hours: punches.reduce((sum, p) => sum + (p.hours || 0), 0) };
+        }
         return { ...r, localStatus: localStatus[r.id] ?? r.localStatus };
       });
 
-      // Flatten actionable records — driver segments counted individually
+      // Flatten actionable records — driver segments and punch sub-rows counted individually
+      // Absent and unsynced rows are display-only and not counted as actionable.
       const actionableFlat = [];
+      let unsyncedCount = 0;
       records.forEach((r) => {
         if (r.type === "driver_group") {
           r.segments.forEach((s) => actionableFlat.push(s));
-        } else if (!["rest", "leave"].includes(r.type) && !r.actions?.includes("pre-approved")) {
+        } else if (r.type === "punch_group") {
+          r.punches.forEach((p) => actionableFlat.push(p));
+        } else if (r.type === "unsynced") {
+          unsyncedCount++;
+        } else if (!["rest", "leave", "absent"].includes(r.type) && !r.actions?.includes("pre-approved")) {
           actionableFlat.push(r);
         }
       });
@@ -1033,7 +1434,7 @@ export default function CutoffReview({ cutoffId }) {
       const pending    = actionableFlat.filter((r) => !r.localStatus).length;
       const punchHours = records.reduce((s, r) => r.type === "leave" ? s : s + (r.hours || 0), 0);
       const leaveHours = records.filter((r) => r.type === "leave").reduce((s, r) => s + (r.hours || 0), 0);
-      return { ...emp, records, approved, pending, totalHours: punchHours + leaveHours, punchHours, leaveHours };
+      return { ...emp, records, approved, pending, unsyncedCount, totalHours: punchHours + leaveHours, punchHours, leaveHours };
     }),
   [employees, localStatus]);
 
@@ -1046,6 +1447,7 @@ export default function CutoffReview({ cutoffId }) {
     const totalFlagged    = mergedEmployees.filter((e) =>
       e.records.some((r) => {
         if (r.type === "driver_group") return r.segments.some((s) => s.tags?.length && !s.localStatus);
+        if (r.type === "punch_group")  return r.punches.some((p) => (p.type === "conflict" || p.type === "unscheduled" || p.tags?.length) && !p.localStatus);
         return (r.type === "conflict" || r.type === "unscheduled" || r.tags?.length) && !r.localStatus;
       })
     ).length;
@@ -1070,26 +1472,48 @@ export default function CutoffReview({ cutoffId }) {
     const activeChips = chips.filter((c) => c.active).map((c) => c.id);
     return mergedEmployees.filter((emp) => {
       // Tab filter
-      if (activeTab === "flagged"  && !emp.records.some((r) => (r.type === "conflict" || r.type === "unscheduled") && !r.localStatus)) return false;
+      if (activeTab === "flagged"  && !emp.records.some((r) => {
+        if (r.type === "punch_group") return r.punches.some((p) => ["conflict","unscheduled"].includes(p.type) && !p.localStatus);
+        return ["conflict","unscheduled"].includes(r.type) && !r.localStatus;
+      })) return false;
       if (activeTab === "approved" && emp.pending > 0) return false;
-      if (activeTab === "excluded" && !emp.records.some((r) => r.localStatus === "excluded")) return false;
+      if (activeTab === "excluded" && !emp.records.some((r) => {
+        if (r.type === "punch_group") return r.punches.some((p) => p.localStatus === "excluded");
+        return r.localStatus === "excluded";
+      })) return false;
       // Search
       if (search && !emp.name.toLowerCase().includes(search.toLowerCase()) && !emp.email.toLowerCase().includes(search.toLowerCase())) return false;
       // Chips
-      if (activeChips.includes("late")        && !emp.records.some((r) => r.type === "driver_group" ? r.segments.some((s) => s.tags?.some((t) => t.cls === "late")) : r.tags?.some((t) => t.cls === "late")))   return false;
-      if (activeChips.includes("unscheduled") && !emp.records.some((r) => r.type === "unscheduled"))                return false;
+      if (activeChips.includes("late")        && !emp.records.some((r) => {
+        if (r.type === "driver_group") return r.segments.some((s) => s.tags?.some((t) => t.cls === "late"));
+        if (r.type === "punch_group")  return r.punches.some((p) => p.tags?.some((t) => t.cls === "late"));
+        return r.tags?.some((t) => t.cls === "late");
+      })) return false;
+      if (activeChips.includes("unscheduled") && !emp.records.some((r) => {
+        if (r.type === "punch_group") return r.punches.some((p) => p.type === "unscheduled");
+        return r.type === "unscheduled";
+      })) return false;
       if (activeChips.includes("ot")          && !emp.hasOT)                                                        return false;
-      if (activeChips.includes("conflict")    && !emp.records.some((r) => r.type === "conflict"))                   return false;
+      if (activeChips.includes("conflict")    && !emp.records.some((r) => {
+        if (r.type === "punch_group") return r.punches.some((p) => p.type === "conflict");
+        return r.type === "conflict";
+      })) return false;
       if (activeChips.includes("leave")       && !emp.records.some((r) => r.type === "leave"))                      return false;
       return true;
-    });
+    }).sort((a, b) => b.totalHours - a.totalHours);
   }, [mergedEmployees, activeTab, search, chips]);
 
   const tabs = useMemo(() => [
     { id: "all",      label: "All",      count: mergedEmployees.length },
-    { id: "flagged",  label: "Flagged",  count: mergedEmployees.filter((e) => e.records.some((r) => ["conflict","unscheduled"].includes(r.type) && !r.localStatus)).length },
+    { id: "flagged",  label: "Flagged",  count: mergedEmployees.filter((e) => e.records.some((r) => {
+      if (r.type === "punch_group") return r.punches.some((p) => ["conflict","unscheduled"].includes(p.type) && !p.localStatus);
+      return ["conflict","unscheduled"].includes(r.type) && !r.localStatus;
+    })).length },
     { id: "approved", label: "Approved", count: mergedEmployees.filter((e) => e.pending === 0 && e.approved > 0).length },
-    { id: "excluded", label: "Excluded", count: mergedEmployees.filter((e) => e.records.some((r) => r.localStatus === "excluded")).length },
+    { id: "excluded", label: "Excluded", count: mergedEmployees.filter((e) => e.records.some((r) => {
+      if (r.type === "punch_group") return r.punches.some((p) => p.localStatus === "excluded");
+      return r.localStatus === "excluded";
+    })).length },
   ], [mergedEmployees]);
 
   const getDepartmentName = useCallback(
@@ -1106,6 +1530,9 @@ export default function CutoffReview({ cutoffId }) {
         if (r.type === "driver_group") {
           const seg = r.segments.find((s) => s.id === recId);
           if (seg) return seg;
+        } else if (r.type === "punch_group") {
+          const punch = r.punches.find((p) => p.id === recId);
+          if (punch) return punch;
         } else if (r.id === recId) {
           return r;
         }
@@ -1192,6 +1619,10 @@ export default function CutoffReview({ cutoffId }) {
       if (r.type === "driver_group") {
         r.segments.forEach((s) => {
           if (!s.localStatus && s.actions?.includes("approve")) doApprove(s.id);
+        });
+      } else if (r.type === "punch_group") {
+        r.punches.forEach((p) => {
+          if (!p.localStatus && p.actions?.includes("approve") && !["conflict","unscheduled"].includes(p.type)) doApprove(p.id);
         });
       } else if (!r.localStatus && r.actions?.includes("approve") && !["conflict","unscheduled"].includes(r.type)) {
         doApprove(r.id);

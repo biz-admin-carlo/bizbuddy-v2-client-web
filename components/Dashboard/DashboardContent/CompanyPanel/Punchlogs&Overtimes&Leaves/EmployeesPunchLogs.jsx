@@ -1764,12 +1764,44 @@ export default function EmployeesPunchLogs() {
                           case "coffee": {
                             const coffeeAuto = t.autoCoffeeApplied || t.coffeeBreaks?.some(b => b.auto);
                             const coffeeDeductible = t.coffeeBreaks?.find(b => b.auto)?.deductible ?? true;
-                            return <TableCell key="coffee" className="text-center text-sm"><div className="flex items-center justify-center gap-1"><Coffee className="w-3 h-3 text-amber-600" /><TimeDisplayWithTooltip time={t.coffeeMins} type="coffee" />{coffeeAuto && <AutoBreakBadge deductible={coffeeDeductible} />}</div></TableCell>;
+                            const autoBreak = t.coffeeBreaks?.find(b => b.auto && b.start && b.end);
+                            const coffeeWindow = autoBreak
+                              ? `${safeTime(autoBreak.start, companyTimezone)} – ${safeTime(autoBreak.end, companyTimezone)}`
+                              : null;
+                            return (
+                              <TableCell key="coffee" className="text-center text-sm">
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <Coffee className="w-3 h-3 text-amber-600" />
+                                    <TimeDisplayWithTooltip time={t.coffeeMins} type="coffee" />
+                                    {coffeeAuto && <AutoBreakBadge deductible={coffeeDeductible} />}
+                                  </div>
+                                  {coffeeWindow && (
+                                    <span className="text-[10px] font-mono text-muted-foreground">{coffeeWindow}</span>
+                                  )}
+                                </div>
+                              </TableCell>
+                            );
                           }
                           case "lunch": {
                             const lunchAuto = t.autoLunchApplied || t.lunchBreak?.auto;
                             const lunchDeductible = t.lunchBreak?.deductible ?? true;
-                            return <TableCell key="lunch" className="text-center text-sm"><div className="flex items-center justify-center gap-1"><TimeDisplayWithTooltip time={t.lunchMins} type="lunch" />{lunchAuto && <AutoBreakBadge deductible={lunchDeductible} />}</div></TableCell>;
+                            const lunchWindow = (lunchAuto && t.lunchBreak?.start && t.lunchBreak?.end)
+                              ? `${safeTime(t.lunchBreak.start, companyTimezone)} – ${safeTime(t.lunchBreak.end, companyTimezone)}`
+                              : null;
+                            return (
+                              <TableCell key="lunch" className="text-center text-sm">
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <TimeDisplayWithTooltip time={t.lunchMins} type="lunch" />
+                                    {lunchAuto && <AutoBreakBadge deductible={lunchDeductible} />}
+                                  </div>
+                                  {lunchWindow && (
+                                    <span className="text-[10px] font-mono text-muted-foreground">{lunchWindow}</span>
+                                  )}
+                                </div>
+                              </TableCell>
+                            );
                           }
                           case "ot":
                             return <TableCell key="ot" className="text-center text-sm font-medium"><TimeDisplayWithTooltip time={parseFloat(t.otHours) > 0 ? t.otHours : null} type="overtime" /></TableCell>;
@@ -1977,18 +2009,32 @@ export default function EmployeesPunchLogs() {
                                         <DriverAideBreakdown log={t} companyTimezone={companyTimezone} />
                                       ) : (
                                         <div className="space-y-2 text-sm">
-                                          <div className="flex justify-between">
+                                          <div className="flex justify-between items-start">
                                             <span className="text-muted-foreground">Coffee Break:</span>
-                                            <span className="font-medium flex items-center gap-1">
-                                              {t.coffeeMins}h
-                                              {(t.autoCoffeeApplied || t.coffeeBreaks?.some(b => b.auto)) && <AutoBreakBadge deductible={t.coffeeBreaks?.find(b => b.auto)?.deductible ?? true} />}
+                                            <span className="font-medium flex flex-col items-end gap-0.5">
+                                              <span className="flex items-center gap-1">
+                                                {t.coffeeMins}h
+                                                {(t.autoCoffeeApplied || t.coffeeBreaks?.some(b => b.auto)) && <AutoBreakBadge deductible={t.coffeeBreaks?.find(b => b.auto)?.deductible ?? true} />}
+                                              </span>
+                                              {t.coffeeBreaks?.filter(b => b.auto && b.start && b.end).map((b, i) => (
+                                                <span key={i} className="text-[10px] font-mono text-muted-foreground">
+                                                  {safeTime(b.start, companyTimezone)} – {safeTime(b.end, companyTimezone)}
+                                                </span>
+                                              ))}
                                             </span>
                                           </div>
-                                          <div className="flex justify-between">
+                                          <div className="flex justify-between items-start">
                                             <span className="text-muted-foreground">Lunch Break:</span>
-                                            <span className="font-medium flex items-center gap-1">
-                                              {t.lunchMins}h
-                                              {(t.autoLunchApplied || t.lunchBreak?.auto) && <AutoBreakBadge deductible={t.lunchBreak?.deductible ?? true} />}
+                                            <span className="font-medium flex flex-col items-end gap-0.5">
+                                              <span className="flex items-center gap-1">
+                                                {t.lunchMins}h
+                                                {(t.autoLunchApplied || t.lunchBreak?.auto) && <AutoBreakBadge deductible={t.lunchBreak?.deductible ?? true} />}
+                                              </span>
+                                              {(t.autoLunchApplied || t.lunchBreak?.auto) && t.lunchBreak?.start && t.lunchBreak?.end && (
+                                                <span className="text-[10px] font-mono text-muted-foreground">
+                                                  {safeTime(t.lunchBreak.start, companyTimezone)} – {safeTime(t.lunchBreak.end, companyTimezone)}
+                                                </span>
+                                              )}
                                             </span>
                                           </div>
                                           <div className="flex justify-between">
