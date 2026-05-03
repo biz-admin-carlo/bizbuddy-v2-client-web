@@ -37,6 +37,8 @@ import {
   Car,
   UserCheck,
   LayoutTemplate,
+  Trash2,
+  Tag,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
@@ -71,6 +73,12 @@ const DRIVER_AIDE_PM_HOURS      = 1.25;   // base for complete punch
 // ── Utility helpers ────────────────────────────────────────────────────────────
 const MAX_DEV_CHARS = 12;
 const truncate = (s = "", L = MAX_DEV_CHARS) => (s.length > L ? s.slice(0, L) + "…" : s);
+const fmtLastFirst = (firstName = "", lastName = "") => {
+  if (!firstName && !lastName) return "—";
+  if (!lastName) return firstName;
+  if (!firstName) return lastName;
+  return `${lastName}, ${firstName}`;
+};
 
 const safeDate = (d, timezone = "UTC") =>
   d ? new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: timezone }) : "—";
@@ -420,6 +428,17 @@ const DeviceDisplay = ({ device }) => {
   );
 };
 
+// ── AutoBreakBadge ─────────────────────────────────────────────────────────────
+const AutoBreakBadge = ({ deductible }) => (
+  <span className={`text-[9px] font-semibold px-1 py-0.5 rounded border leading-none ${
+    deductible
+      ? "bg-amber-100 text-amber-700 border-amber-200"
+      : "bg-green-100 text-green-700 border-green-200"
+  }`}>
+    {deductible ? "Auto · Deducted" : "Auto · Paid"}
+  </span>
+);
+
 // ── Summary Stats ──────────────────────────────────────────────────────────────
 const SummaryStats = ({ data }) => {
   const stats = useMemo(() => ({
@@ -742,10 +761,22 @@ export default function EmployeesPunchLogs() {
   const [rejectionReason,     setRejectionReason]     = useState("");
 
   // Edit dialog
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editLog,        setEditLog]        = useState(null);
-  const [editTimeIn,     setEditTimeIn]     = useState("");
-  const [editTimeOut,    setEditTimeOut]    = useState("");
+  const [editDialogOpen,     setEditDialogOpen]     = useState(false);
+  const [editLog,            setEditLog]            = useState(null);
+  const [editTimeIn,         setEditTimeIn]         = useState("");
+  const [editTimeOut,        setEditTimeOut]        = useState("");
+  const [clearingAutoBreaks, setClearingAutoBreaks] = useState(false);
+
+  // Edit punch type dialog (DayCare only)
+  const [editPunchTypeOpen, setEditPunchTypeOpen] = useState(false);
+  const [editPunchTypeLog,  setEditPunchTypeLog]  = useState(null);
+  const [editPunchTypeVal,  setEditPunchTypeVal]  = useState("REGULAR");
+  const [savingPunchType,   setSavingPunchType]   = useState(false);
+
+  // Delete confirmation dialog
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteLog,         setDeleteLog]         = useState(null);
+  const [deletingLog,       setDeletingLog]       = useState(false);
 
   // View dialogs
   const [schedDialogOpen,    setSchedDialogOpen]    = useState(false);
@@ -759,7 +790,14 @@ export default function EmployeesPunchLogs() {
   const resetFilters = { search: "", employeeIds: ["all"], departmentId: "all", from: getDefaultFrom(), to: getDefaultTo(), status: "all", punchType: "all" };
   const [filters,      setFilters]      = useState(resetFilters);
   const [pendingDates, setPendingDates] = useState({ from: getDefaultFrom(), to: getDefaultTo() });
-  const [sortConfig] = useState({ key: "dateTimeIn", direction: "descending" });
+  const [sortConfig, setSortConfig] = useState({ key: "dateTimeIn", direction: "descending" });
+
+  const toggleNameSort = () =>
+    setSortConfig((prev) => {
+      if (prev.key !== "employee") return { key: "employee", direction: "ascending" };
+      if (prev.direction === "ascending") return { key: "employee", direction: "descending" };
+      return { key: "dateTimeIn", direction: "descending" };
+    });
 
   const toggleListFilter = (key, val) =>
     setFilters((prev) => {
@@ -783,6 +821,14 @@ export default function EmployeesPunchLogs() {
 
   const canEdit = ["superadmin", "admin", "supervisor"].includes((currentUserRole || "").toLowerCase());
 
+  const employeeNameMap = useMemo(() => {
+    const map = {};
+    employees.forEach((e) => {
+      if (e.id) map[e.id] = { firstName: e.profile?.firstName || "", lastName: e.profile?.lastName || "" };
+    });
+    return map;
+  }, [employees]);
+
   // ── Column config ─────────────────────────────────────────────────────────────
   const columnOptions = useMemo(() => [
     { value: "employee",           label: "Employee",           essential: true,  group: "basic"    },
@@ -790,7 +836,7 @@ export default function EmployeesPunchLogs() {
     { value: "dateTimeOut",        label: "Time Out",           essential: true,  group: "basic"    },
     { value: "duration",           label: "Duration",           essential: false, group: "basic"    },
     { value: "status",             label: "Status",             essential: true,  group: "basic"    },
-    { value: "punchType",          label: "Punch Type",         essential: false, group: "basic"    },
+    ...(isDayCare ? [{ value: "punchType", label: "Punch Type", essential: false, group: "basic" }] : []),
     { value: "cutoffApproval",     label: "Cutoff Status",      essential: false, group: "basic"    },
     { value: "schedule",           label: "Scheduled",          essential: false, group: "schedule" },
     { value: "period",             label: "Period Hours",       essential: false, group: "schedule" },
@@ -806,7 +852,7 @@ export default function EmployeesPunchLogs() {
     { value: "deviceOut",          label: "Device Out",         essential: false, group: "device"   },
     { value: "id",                 label: "ID",                 essential: false, group: "meta"     },
     { value: "actions",            label: "Actions",            essential: true,  group: "basic"    },
-  ], []);
+  ], [isDayCare]);
 
   const columnMapForExport = {
     id: "Log ID", schedule: "Scheduled", locationRestricted: "Location Required",
@@ -1034,9 +1080,9 @@ export default function EmployeesPunchLogs() {
             scheduleList: (() => {
               const raw = t.userShifts?.length ? t.userShifts : (t.userShift ? [t.userShift] : []);
               const seen = new Set();
-              return raw.filter((s) => { const key = s.shift?.id || s.id; if (seen.has(key)) return false; seen.add(key); return true; });
+              return raw.filter((s) => { const key = s.shift?.id ?? s.id; if (seen.has(key)) return false; seen.add(key); return true; });
             })(),
-            isScheduled: !!(t.userShifts?.length || t.userShift),
+            isScheduled: !!(t.shiftToday),
             duration,
             lateHours,
             otHours,
@@ -1102,9 +1148,17 @@ export default function EmployeesPunchLogs() {
       data = data.filter((t) => t.punchType === filters.punchType);
 
     data.sort((a, b) => {
+      if (sortConfig.key === "employee") {
+        const dir = sortConfig.direction === "ascending" ? 1 : -1;
+        const aN = employeeNameMap[a.userId] ?? {};
+        const bN = employeeNameMap[b.userId] ?? {};
+        const aLast = (aN.lastName  || "").toLowerCase(), bLast = (bN.lastName  || "").toLowerCase();
+        const aFirst = (aN.firstName || "").toLowerCase(), bFirst = (bN.firstName || "").toLowerCase();
+        if (aLast !== bLast) return aLast.localeCompare(bLast) * dir;
+        return aFirst.localeCompare(bFirst) * dir;
+      }
       const getVal = (item, key) => {
         if (key === "dateTimeIn") return item.timeIn ? new Date(item.timeIn).getTime() : 0;
-        if (key === "employee")   return item.employeeName?.toLowerCase() || "";
         return 0;
       };
       const aVal = getVal(a, sortConfig.key);
@@ -1114,7 +1168,7 @@ export default function EmployeesPunchLogs() {
       return 0;
     });
     return data;
-  }, [timelogs, filters, sortConfig, isDayCare]);
+  }, [timelogs, filters, sortConfig, isDayCare, employeeNameMap]);
 
   const totalPeriodHours = useMemo(
     () => displayed.reduce((s, r) => s + (parseFloat(r.periodHours || "0") || 0), 0).toFixed(2),
@@ -1195,6 +1249,62 @@ export default function EmployeesPunchLogs() {
       setEditDialogOpen(false); setEditLog(null);
       await fetchTimelogs();
     } catch (e) { toast.error(e.message); }
+  };
+
+  const clearAutoBreaks = async () => {
+    try {
+      if (!editLog) return;
+      setClearingAutoBreaks(true);
+      const res = await fetch(`${API_URL}/api/time-logs/${editLog.id}/auto-breaks`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          lunch:  editLog.autoLunchApplied  || false,
+          coffee: editLog.autoCoffeeApplied || false,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message || "Failed to clear auto-breaks");
+      toast.success("Auto-breaks cleared and flags reset");
+      setEditDialogOpen(false); setEditLog(null);
+      await fetchTimelogs();
+    } catch (e) { toast.error(e.message); }
+    finally { setClearingAutoBreaks(false); }
+  };
+
+  const submitEditPunchType = async () => {
+    if (!editPunchTypeLog) return;
+    setSavingPunchType(true);
+    try {
+      const res = await fetch(`${API_URL}/api/timelogs/${editPunchTypeLog.id}/punch-type`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ punchType: editPunchTypeVal }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message || "Update failed");
+      toast.success("Punch type updated");
+      setEditPunchTypeOpen(false); setEditPunchTypeLog(null);
+      await fetchTimelogs();
+    } catch (e) { toast.error(e.message); }
+    finally { setSavingPunchType(false); }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteLog) return;
+    setDeletingLog(true);
+    try {
+      const res = await fetch(`${API_URL}/api/timelogs/${deleteLog.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message || "Delete failed");
+      toast.success("Punch log deleted");
+      setDeleteConfirmOpen(false); setDeleteLog(null);
+      await fetchTimelogs();
+    } catch (e) { toast.error(e.message); }
+    finally { setDeletingLog(false); }
   };
 
   const labelClass = "my-auto shrink-0 text-sm font-medium text-muted-foreground";
@@ -1543,9 +1653,28 @@ export default function EmployeesPunchLogs() {
                   <TableHead className="w-10"></TableHead>
                   {columnOptions
                     .filter((c) => columnVisibility.includes(c.value))
-                    .map(({ value, label }) => (
-                      <TableHead key={value} className="text-center text-nowrap font-semibold">{label}</TableHead>
-                    ))}
+                    .map(({ value, label }) => {
+                      if (value === "employee") {
+                        const isActive = sortConfig.key === "employee";
+                        return (
+                          <TableHead
+                            key={value}
+                            className="text-center text-nowrap font-semibold cursor-pointer select-none hover:bg-muted/80 transition-colors"
+                            onClick={toggleNameSort}
+                          >
+                            <span className="inline-flex items-center justify-center gap-1">
+                              {label}
+                              {isActive
+                                ? (sortConfig.direction === "ascending"
+                                    ? <ChevronUp className="h-3.5 w-3.5" />
+                                    : <ChevronDown className="h-3.5 w-3.5" />)
+                                : <ChevronUp className="h-3.5 w-3.5 opacity-25" />}
+                            </span>
+                          </TableHead>
+                        );
+                      }
+                      return <TableHead key={value} className="text-center text-nowrap font-semibold">{label}</TableHead>;
+                    })}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1619,7 +1748,9 @@ export default function EmployeesPunchLogs() {
                                       </Tooltip>
                                     </TooltipProvider>
                                   )}
-                                  <span className="max-w-[180px] truncate" title={t.employeeName}>{t.employeeName}</span>
+                                  <span className="max-w-[180px] truncate" title={t.employeeName}>
+                                    {fmtLastFirst(employeeNameMap[t.userId]?.firstName, employeeNameMap[t.userId]?.lastName) || t.employeeName}
+                                  </span>
                                 </div>
                               </TableCell>
                             );
@@ -1632,11 +1763,45 @@ export default function EmployeesPunchLogs() {
                             return <TableCell key="duration" className="text-center text-sm font-medium"><TimeDisplayWithTooltip time={t.duration} type="duration" /></TableCell>;
                           case "coffee": {
                             const coffeeAuto = t.autoCoffeeApplied || t.coffeeBreaks?.some(b => b.auto);
-                            return <TableCell key="coffee" className="text-center text-sm"><div className="flex items-center justify-center gap-1"><Coffee className="w-3 h-3 text-amber-600" /><TimeDisplayWithTooltip time={t.coffeeMins} type="coffee" />{coffeeAuto && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}</div></TableCell>;
+                            const coffeeDeductible = t.coffeeBreaks?.find(b => b.auto)?.deductible ?? true;
+                            const autoBreak = t.coffeeBreaks?.find(b => b.auto && b.start && b.end);
+                            const coffeeWindow = autoBreak
+                              ? `${safeTime(autoBreak.start, companyTimezone)} – ${safeTime(autoBreak.end, companyTimezone)}`
+                              : null;
+                            return (
+                              <TableCell key="coffee" className="text-center text-sm">
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <Coffee className="w-3 h-3 text-amber-600" />
+                                    <TimeDisplayWithTooltip time={t.coffeeMins} type="coffee" />
+                                    {coffeeAuto && <AutoBreakBadge deductible={coffeeDeductible} />}
+                                  </div>
+                                  {coffeeWindow && (
+                                    <span className="text-[10px] font-mono text-muted-foreground">{coffeeWindow}</span>
+                                  )}
+                                </div>
+                              </TableCell>
+                            );
                           }
                           case "lunch": {
                             const lunchAuto = t.autoLunchApplied || t.lunchBreak?.auto;
-                            return <TableCell key="lunch" className="text-center text-sm"><div className="flex items-center justify-center gap-1"><TimeDisplayWithTooltip time={t.lunchMins} type="lunch" />{lunchAuto && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}</div></TableCell>;
+                            const lunchDeductible = t.lunchBreak?.deductible ?? true;
+                            const lunchWindow = (lunchAuto && t.lunchBreak?.start && t.lunchBreak?.end)
+                              ? `${safeTime(t.lunchBreak.start, companyTimezone)} – ${safeTime(t.lunchBreak.end, companyTimezone)}`
+                              : null;
+                            return (
+                              <TableCell key="lunch" className="text-center text-sm">
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <TimeDisplayWithTooltip time={t.lunchMins} type="lunch" />
+                                    {lunchAuto && <AutoBreakBadge deductible={lunchDeductible} />}
+                                  </div>
+                                  {lunchWindow && (
+                                    <span className="text-[10px] font-mono text-muted-foreground">{lunchWindow}</span>
+                                  )}
+                                </div>
+                              </TableCell>
+                            );
                           }
                           case "ot":
                             return <TableCell key="ot" className="text-center text-sm font-medium"><TimeDisplayWithTooltip time={parseFloat(t.otHours) > 0 ? t.otHours : null} type="overtime" /></TableCell>;
@@ -1737,15 +1902,40 @@ export default function EmployeesPunchLogs() {
                             return (
                               <TableCell key="actions" className="text-center">
                                 <div className="flex items-center justify-center gap-1">
-                                  {canEdit ? (
-                                    <TooltipProvider delayDuration={200}><Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="sm" onClick={() => openEditDialog(t)} className="h-8 w-8 p-0 hover:bg-orange-50 hover:text-orange-600">
-                                          <Edit3 className="h-4 w-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Edit Time In/Out</TooltipContent>
-                                    </Tooltip></TooltipProvider>
+                                  {canEdit && t.status !== "active" ? (
+                                    <>
+                                      {/* Edit Time In/Out */}
+                                      <TooltipProvider delayDuration={200}><Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button variant="ghost" size="sm" onClick={() => openEditDialog(t)} className="h-8 w-8 p-0 hover:bg-orange-50 hover:text-orange-600">
+                                            <Edit3 className="h-4 w-4" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Edit Time In/Out</TooltipContent>
+                                      </Tooltip></TooltipProvider>
+
+                                      {/* Edit Punch Type — DayCare only */}
+                                      {isDayCare && (
+                                        <TooltipProvider delayDuration={200}><Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button variant="ghost" size="sm" onClick={() => { setEditPunchTypeLog(t); setEditPunchTypeVal(t.punchType || "REGULAR"); setEditPunchTypeOpen(true); }} className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600">
+                                              <Tag className="h-4 w-4" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>Edit Punch Type</TooltipContent>
+                                        </Tooltip></TooltipProvider>
+                                      )}
+
+                                      {/* Delete */}
+                                      <TooltipProvider delayDuration={200}><Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button variant="ghost" size="sm" onClick={() => { setDeleteLog(t); setDeleteConfirmOpen(true); }} className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600">
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Delete Punch Log</TooltipContent>
+                                      </Tooltip></TooltipProvider>
+                                    </>
                                   ) : <span className="text-muted-foreground text-xs">—</span>}
                                 </div>
                               </TableCell>
@@ -1819,18 +2009,32 @@ export default function EmployeesPunchLogs() {
                                         <DriverAideBreakdown log={t} companyTimezone={companyTimezone} />
                                       ) : (
                                         <div className="space-y-2 text-sm">
-                                          <div className="flex justify-between">
+                                          <div className="flex justify-between items-start">
                                             <span className="text-muted-foreground">Coffee Break:</span>
-                                            <span className="font-medium flex items-center gap-1">
-                                              {t.coffeeMins}h
-                                              {(t.autoCoffeeApplied || t.coffeeBreaks?.some(b => b.auto)) && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}
+                                            <span className="font-medium flex flex-col items-end gap-0.5">
+                                              <span className="flex items-center gap-1">
+                                                {t.coffeeMins}h
+                                                {(t.autoCoffeeApplied || t.coffeeBreaks?.some(b => b.auto)) && <AutoBreakBadge deductible={t.coffeeBreaks?.find(b => b.auto)?.deductible ?? true} />}
+                                              </span>
+                                              {t.coffeeBreaks?.filter(b => b.auto && b.start && b.end).map((b, i) => (
+                                                <span key={i} className="text-[10px] font-mono text-muted-foreground">
+                                                  {safeTime(b.start, companyTimezone)} – {safeTime(b.end, companyTimezone)}
+                                                </span>
+                                              ))}
                                             </span>
                                           </div>
-                                          <div className="flex justify-between">
+                                          <div className="flex justify-between items-start">
                                             <span className="text-muted-foreground">Lunch Break:</span>
-                                            <span className="font-medium flex items-center gap-1">
-                                              {t.lunchMins}h
-                                              {(t.autoLunchApplied || t.lunchBreak?.auto) && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}
+                                            <span className="font-medium flex flex-col items-end gap-0.5">
+                                              <span className="flex items-center gap-1">
+                                                {t.lunchMins}h
+                                                {(t.autoLunchApplied || t.lunchBreak?.auto) && <AutoBreakBadge deductible={t.lunchBreak?.deductible ?? true} />}
+                                              </span>
+                                              {(t.autoLunchApplied || t.lunchBreak?.auto) && t.lunchBreak?.start && t.lunchBreak?.end && (
+                                                <span className="text-[10px] font-mono text-muted-foreground">
+                                                  {safeTime(t.lunchBreak.start, companyTimezone)} – {safeTime(t.lunchBreak.end, companyTimezone)}
+                                                </span>
+                                              )}
                                             </span>
                                           </div>
                                           <div className="flex justify-between">
@@ -1894,7 +2098,9 @@ export default function EmployeesPunchLogs() {
                                       <div className="space-y-1.5 text-sm">
                                         <div className="flex justify-between">
                                           <span className="text-muted-foreground">Employee:</span>
-                                          <span className="font-medium">{t.employeeName}</span>
+                                          <span className="font-medium">
+                                            {fmtLastFirst(employeeNameMap[t.userId]?.firstName, employeeNameMap[t.userId]?.lastName) || t.employeeName}
+                                          </span>
                                         </div>
                                         <div className="flex justify-between">
                                           <span className="text-muted-foreground">Department:</span>
@@ -2102,6 +2308,70 @@ export default function EmployeesPunchLogs() {
       </Dialog>
 
       {/* Edit Dialog */}
+      {/* ── Edit Punch Type Dialog (DayCare only) ───────────────────────────── */}
+      <Dialog open={editPunchTypeOpen} onOpenChange={setEditPunchTypeOpen}>
+        <DialogContent className="sm:max-w-sm border-2 dark:border-white/10">
+          <div className="h-1 w-full bg-blue-500 -mt-6 mb-4" />
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Tag className="h-5 w-5 text-blue-500" />Edit Punch Type</DialogTitle>
+          </DialogHeader>
+          {editPunchTypeLog && (
+            <div className="space-y-4 py-4">
+              <div className="bg-muted/50 p-3 rounded-lg text-sm space-y-1">
+                <div className="font-medium">{editPunchTypeLog.employeeName}</div>
+                <div className="text-muted-foreground">Log ID: {editPunchTypeLog.id}</div>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Punch Type</label>
+                <Select value={editPunchTypeVal} onValueChange={setEditPunchTypeVal}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="REGULAR"><span className="flex items-center gap-2"><UserCheck className="h-3.5 w-3.5 text-purple-500" />Regular</span></SelectItem>
+                    <SelectItem value="DRIVER_AIDE"><span className="flex items-center gap-2"><Car className="h-3.5 w-3.5 text-blue-500" />Driver/Aide (Full)</span></SelectItem>
+                    <SelectItem value="DRIVER_AIDE_AM"><span className="flex items-center gap-2"><Car className="h-3.5 w-3.5 text-blue-500" />Driver AM only</span></SelectItem>
+                    <SelectItem value="DRIVER_AIDE_PM"><span className="flex items-center gap-2"><Car className="h-3.5 w-3.5 text-blue-500" />Driver PM only</span></SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditPunchTypeOpen(false)}>Cancel</Button>
+            <Button onClick={submitEditPunchType} disabled={savingPunchType} className="bg-blue-500 hover:bg-blue-600">
+              {savingPunchType ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete Confirmation Dialog ───────────────────────────────────────── */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="sm:max-w-sm border-2 dark:border-white/10">
+          <div className="h-1 w-full bg-red-500 -mt-6 mb-4" />
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Trash2 className="h-5 w-5 text-red-500" />Delete Punch Log</DialogTitle>
+          </DialogHeader>
+          {deleteLog && (
+            <div className="py-4 space-y-3">
+              <p className="text-sm text-muted-foreground">This action cannot be undone. The following record will be permanently deleted.</p>
+              <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm space-y-1">
+                <div className="font-medium text-red-800 dark:text-red-300">{deleteLog.employeeName}</div>
+                <div className="text-red-600 dark:text-red-400">
+                  In: {safeDateTime(deleteLog.timeIn, companyTimezone)} — Out: {safeDateTime(deleteLog.timeOut, companyTimezone)}
+                </div>
+                <div className="text-xs text-muted-foreground">Log ID: {deleteLog.id}</div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+            <Button onClick={confirmDelete} disabled={deletingLog} variant="destructive">
+              {deletingLog ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="sm:max-w-md border-2 dark:border-white/10">
           <div className="h-1 w-full bg-orange-500 -mt-6 mb-4" />
@@ -2138,6 +2408,28 @@ export default function EmployeesPunchLogs() {
                   </div>
                 )}
               </div>
+              {(editLog.autoLunchApplied || editLog.autoCoffeeApplied) && (
+                <div className="border border-red-200 rounded-lg p-3 bg-red-50 dark:bg-red-950/20 dark:border-red-800 space-y-2">
+                  <div className="text-sm font-medium text-red-700 dark:text-red-400">Auto-Injected Breaks</div>
+                  <div className="text-xs text-red-600 dark:text-red-500 space-y-1">
+                    {editLog.autoLunchApplied && (
+                      <div>• Lunch: {editLog.lunchMins}h — {editLog.lunchBreak?.deductible === false ? "paid (paper-trail only)" : "deducted from pay"}</div>
+                    )}
+                    {editLog.autoCoffeeApplied && (
+                      <div>• Coffee: {editLog.coffeeMins}h — {editLog.coffeeBreaks?.find(b => b.auto)?.deductible === false ? "paid (paper-trail only)" : "deducted from pay"}</div>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-red-300 text-red-700 hover:bg-red-100 hover:text-red-800 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/30"
+                    onClick={clearAutoBreaks}
+                    disabled={clearingAutoBreaks}
+                  >
+                    {clearingAutoBreaks ? "Clearing…" : "Clear Auto-Breaks & Reset Flags"}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>

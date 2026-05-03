@@ -197,6 +197,17 @@ function PunchTypeBadge({ punchType, size = "sm" }) {
   );
 }
 
+// ── AutoBreakBadge ─────────────────────────────────────────────────────────────
+const AutoBreakBadge = ({ deductible }) => (
+  <span className={`text-[9px] font-semibold px-1 py-0.5 rounded border leading-none ${
+    deductible
+      ? "bg-amber-100 text-amber-700 border-amber-200"
+      : "bg-green-100 text-green-700 border-green-200"
+  }`}>
+    {deductible ? "Auto · Deducted" : "Auto · Paid"}
+  </span>
+);
+
 // ── CutoffApprovalBadge ────────────────────────────────────────────────────────
 const CutoffApprovalBadge = ({ cutoffApproval }) => {
   if (!cutoffApproval) {
@@ -1954,14 +1965,14 @@ function TimelogRow({ log, columnVisibility, isDayCare, companyTimezone, userTim
                         <span>Coffee Break</span>
                         <span className="flex items-center gap-1">
                           {log.coffeeMins}h
-                          {(log.autoCoffeeApplied || log.coffeeBreaks?.some(b => b.auto)) && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}
+                          {(log.autoCoffeeApplied || log.coffeeBreaks?.some(b => b.auto)) && <AutoBreakBadge deductible={log.coffeeBreaks?.find(b => b.auto)?.deductible ?? true} />}
                         </span>
                       </div>
                       <div className="flex justify-between text-xs text-muted-foreground">
                         <span>Lunch Break</span>
                         <span className="flex items-center gap-1">
                           {log.lunchMins}h
-                          {(log.autoLunchApplied || log.lunchBreak?.auto) && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}
+                          {(log.autoLunchApplied || log.lunchBreak?.auto) && <AutoBreakBadge deductible={log.lunchBreak?.deductible ?? true} />}
                         </span>
                       </div>
                     </div>
@@ -1969,8 +1980,8 @@ function TimelogRow({ log, columnVisibility, isDayCare, companyTimezone, userTim
                 ) : (
                   /* ── Regular breakdown ── */
                   <div className="space-y-1 text-sm">
-                    <div className="flex justify-between py-1"><span className="text-muted-foreground">Coffee Break</span><span className="font-medium tabular-nums flex items-center gap-1">{log.coffeeMins}h{(log.autoCoffeeApplied || log.coffeeBreaks?.some(b => b.auto)) && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}</span></div>
-                    <div className="flex justify-between py-1"><span className="text-muted-foreground">Lunch Break</span><span className="font-medium tabular-nums flex items-center gap-1">{log.lunchMins}h{(log.autoLunchApplied || log.lunchBreak?.auto) && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 leading-none">Auto</span>}</span></div>
+                    <div className="flex justify-between py-1"><span className="text-muted-foreground">Coffee Break</span><span className="font-medium tabular-nums flex items-center gap-1">{log.coffeeMins}h{(log.autoCoffeeApplied || log.coffeeBreaks?.some(b => b.auto)) && <AutoBreakBadge deductible={log.coffeeBreaks?.find(b => b.auto)?.deductible ?? true} />}</span></div>
+                    <div className="flex justify-between py-1"><span className="text-muted-foreground">Lunch Break</span><span className="font-medium tabular-nums flex items-center gap-1">{log.lunchMins}h{(log.autoLunchApplied || log.lunchBreak?.auto) && <AutoBreakBadge deductible={log.lunchBreak?.deductible ?? true} />}</span></div>
                     <div className="flex justify-between py-1"><span className="text-muted-foreground">Late Hours</span><span className="font-medium tabular-nums">{parseFloat(log.lateHours) > 0 ? `${log.lateHours}h` : "—"}</span></div>
                     <div className="flex justify-between py-1"><span className="text-muted-foreground">Period Hours</span><span className="font-medium tabular-nums">{log.periodHours}h</span></div>
                   </div>
