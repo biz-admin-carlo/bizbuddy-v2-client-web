@@ -63,6 +63,7 @@ export default function ModernCompanySchedules() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterUser, setFilterUser] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
   
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -70,6 +71,7 @@ export default function ModernCompanySchedules() {
   const [showConflictWarning, setShowConflictWarning] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [conflictData, setConflictData] = useState(null);
+  const [employeeSearch, setEmployeeSearch] = useState("");
   
   // BUG 3 FIX: Use the exact field names the backend returns
   const [stats, setStats] = useState({ 
@@ -85,7 +87,8 @@ export default function ModernCompanySchedules() {
     startDate: "",
     endDate: "",
     assignmentType: "individual",
-    targetId: ""
+    targetIds: [],  // multi-select employee IDs for individual type (create)
+    targetId: "",   // single ID for department type
   });
 
   const dayOptions = [
@@ -150,9 +153,26 @@ export default function ModernCompanySchedules() {
   const resetForm = () => {
     setScheduleForm({
       shiftId: "", daysOfWeek: [], startDate: "", endDate: "",
-      assignmentType: "individual", targetId: ""
+      assignmentType: "individual", targetIds: [], targetId: "",
     });
     setConflictData(null);
+    setEmployeeSearch("");
+  };
+
+  const fmtShiftTime = (t) => {
+    if (!t) return "—";
+    try {
+      return new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+    } catch {
+      return "";
+    }
+  };
+
+  const shiftDuration = (start, end) => {
+    if (!start || !end) return null;
+    const h = (new Date(end) - new Date(start)) / 3_600_000;
+    if (h <= 0) return null;
+    return Number.isInteger(h) ? `${h}h` : `${h.toFixed(1)}h`;
   };
 
   const handleDayToggle = (day) => {
@@ -176,8 +196,8 @@ export default function ModernCompanySchedules() {
       return;
     }
 
-    if (scheduleForm.assignmentType === "individual" && !scheduleForm.targetId) {
-      toast.error("Please select an employee");
+    if (scheduleForm.assignmentType === "individual" && scheduleForm.targetIds.length === 0) {
+      toast.error("Please select at least one employee");
       return;
     }
 
@@ -187,7 +207,7 @@ export default function ModernCompanySchedules() {
     }
 
     setSaving(true);
-    
+
     try {
       const payload = {
         shiftId: scheduleForm.shiftId,
@@ -195,7 +215,11 @@ export default function ModernCompanySchedules() {
         startDate: scheduleForm.startDate,
         endDate: scheduleForm.endDate,
         assignmentType: scheduleForm.assignmentType,
-        targetId: scheduleForm.assignmentType === "all" ? null : scheduleForm.targetId,
+        ...(scheduleForm.assignmentType === "individual"
+          ? { targetIds: scheduleForm.targetIds }
+          : scheduleForm.assignmentType === "department"
+          ? { targetId: scheduleForm.targetId }
+          : { targetId: null }),
         replaceConflicts: action === "replace",
         skipConflicts:    action === "skip",
       };
@@ -237,16 +261,17 @@ export default function ModernCompanySchedules() {
 
     setSaving(true);
     try {
-      // BUG 1 FIX (frontend side): send shiftId and all editable fields.
-      // The backend updateShiftSchedule now accepts the full payload and
-      // regenerates UserShift records when schedule-defining fields change.
       const payload = {
         shiftId:        scheduleForm.shiftId,
         daysOfWeek:     scheduleForm.daysOfWeek,
         startDate:      scheduleForm.startDate,
         endDate:        scheduleForm.endDate,
         assignmentType: scheduleForm.assignmentType,
-        targetId:       scheduleForm.assignmentType === "all" ? null : scheduleForm.targetId,
+        targetId: scheduleForm.assignmentType === "all"
+          ? null
+          : scheduleForm.assignmentType === "individual"
+          ? (scheduleForm.targetIds[0] ?? null)
+          : scheduleForm.targetId,
       };
 
       const response = await fetch(`${API_URL}/api/shiftschedules/${selectedSchedule.id}`, {
@@ -307,13 +332,15 @@ export default function ModernCompanySchedules() {
 
   const handleEditClick = (schedule) => {
     setSelectedSchedule(schedule);
+    const type = schedule.assignmentType || "individual";
     setScheduleForm({
       shiftId: schedule.shiftId.toString(),
       daysOfWeek: Array.isArray(schedule.daysOfWeek) ? schedule.daysOfWeek : [],
       startDate: new Date(schedule.startDate).toISOString().split('T')[0],
       endDate: schedule.endDate ? new Date(schedule.endDate).toISOString().split('T')[0] : "",
-      assignmentType: schedule.assignmentType || "individual",
-      targetId: schedule.targetId || ""
+      assignmentType: type,
+      targetIds: type === "individual" && schedule.targetId ? [schedule.targetId] : [],
+      targetId: type === "department" ? (schedule.targetId || "") : "",
     });
     setShowEditModal(true);
   };
@@ -332,12 +359,14 @@ export default function ModernCompanySchedules() {
 
   const filteredSchedules = useMemo(() => {
     return schedules.filter(schedule => {
-      const matchesSearch = searchQuery === "" || 
+      const matchesSearch = searchQuery === "" ||
         schedule.shift?.shiftName.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesUser = filterUser === "all" || schedule.targetId === filterUser;
-      return matchesSearch && matchesUser;
+      const isActive = schedule.isActive && (!schedule.endDate || new Date(schedule.endDate) >= new Date());
+      const matchesStatus = filterStatus === "all" || (filterStatus === "active" ? isActive : !isActive);
+      return matchesSearch && matchesUser && matchesStatus;
     });
-  }, [schedules, searchQuery, filterUser]);
+  }, [schedules, searchQuery, filterUser, filterStatus]);
 
   useEffect(() => {
     fetchAll();
@@ -474,7 +503,7 @@ export default function ModernCompanySchedules() {
               Table Controls
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1">
                 <div className="relative">
@@ -500,6 +529,32 @@ export default function ModernCompanySchedules() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Status:</span>
+              {[
+                { value: "all",      label: "All" },
+                { value: "active",   label: "Active" },
+                { value: "inactive", label: "Inactive" },
+              ].map(opt => (
+                <Button
+                  key={opt.value}
+                  size="sm"
+                  variant={filterStatus === opt.value ? "default" : "outline"}
+                  className={
+                    filterStatus === opt.value
+                      ? opt.value === "active"
+                        ? "bg-green-600 hover:bg-green-700 text-white border-green-600"
+                        : opt.value === "inactive"
+                        ? "bg-gray-500 hover:bg-gray-600 text-white border-gray-500"
+                        : "bg-orange-500 hover:bg-orange-600 text-white border-orange-500"
+                      : ""
+                  }
+                  onClick={() => setFilterStatus(opt.value)}
+                >
+                  {opt.label}
+                </Button>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -655,6 +710,7 @@ export default function ModernCompanySchedules() {
             setShowCreateModal(false);
             setShowEditModal(false);
             setSelectedSchedule(null);
+            setEmployeeSearch("");
             resetForm();
           }
         }}>
@@ -686,7 +742,13 @@ export default function ModernCompanySchedules() {
                   <SelectContent>
                     {shifts.map(shift => (
                       <SelectItem key={shift.id} value={shift.id.toString()}>
-                        {shift.shiftName}
+                        <span className="font-medium">{shift.shiftName}</span>
+                        {shift.startTime && shift.endTime && (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {fmtShiftTime(shift.startTime)} – {fmtShiftTime(shift.endTime)}
+                            {shiftDuration(shift.startTime, shift.endTime) && ` · ${shiftDuration(shift.startTime, shift.endTime)}`}
+                          </span>
+                        )}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -743,17 +805,17 @@ export default function ModernCompanySchedules() {
                     <input
                       type="radio" name="assignmentType"
                       checked={scheduleForm.assignmentType === "individual"}
-                      onChange={() => setScheduleForm(prev => ({ ...prev, assignmentType: "individual", targetId: "" }))}
+                      onChange={() => setScheduleForm(prev => ({ ...prev, assignmentType: "individual", targetIds: [], targetId: "" }))}
                       className="text-orange-500 focus:ring-orange-500"
                     />
                     <User className="h-4 w-4" />
-                    <span className="text-sm">Assign to specific employee</span>
+                    <span className="text-sm">Assign to specific employee(s)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-muted">
                     <input
                       type="radio" name="assignmentType"
                       checked={scheduleForm.assignmentType === "department"}
-                      onChange={() => setScheduleForm(prev => ({ ...prev, assignmentType: "department", targetId: "" }))}
+                      onChange={() => setScheduleForm(prev => ({ ...prev, assignmentType: "department", targetIds: [], targetId: "" }))}
                       className="text-orange-500 focus:ring-orange-500"
                     />
                     <Building className="h-4 w-4" />
@@ -763,7 +825,7 @@ export default function ModernCompanySchedules() {
                     <input
                       type="radio" name="assignmentType"
                       checked={scheduleForm.assignmentType === "all"}
-                      onChange={() => setScheduleForm(prev => ({ ...prev, assignmentType: "all", targetId: "" }))}
+                      onChange={() => setScheduleForm(prev => ({ ...prev, assignmentType: "all", targetIds: [], targetId: "" }))}
                       className="text-orange-500 focus:ring-orange-500"
                     />
                     <Users className="h-4 w-4" />
@@ -775,22 +837,112 @@ export default function ModernCompanySchedules() {
               {/* Conditional Target Selection */}
               {scheduleForm.assignmentType === "individual" && (
                 <div className="space-y-2">
-                  <Label>Select Employee <span className="text-orange-500">*</span></Label>
-                  <Select
-                    value={scheduleForm.targetId}
-                    onValueChange={(value) => setScheduleForm(prev => ({ ...prev, targetId: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select an employee" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {employees.map(emp => (
-                        <SelectItem key={emp.id} value={emp.id}>
-                          {emp.profile?.firstName} {emp.profile?.lastName} ({emp.email})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center justify-between">
+                    <Label>
+                      {showEditModal ? "Assigned Employee" : "Select Employees"}{" "}
+                      <span className="text-orange-500">*</span>
+                    </Label>
+                    {!showEditModal && (
+                      <div className="flex items-center gap-2">
+                        {scheduleForm.targetIds.length > 0 && (
+                          <Badge className="bg-orange-500 text-white text-xs">
+                            {scheduleForm.targetIds.length} selected
+                          </Badge>
+                        )}
+                        <Button
+                          type="button" variant="ghost" size="sm"
+                          className="h-7 text-xs px-2"
+                          onClick={() => setScheduleForm(prev => ({ ...prev, targetIds: employees.map(e => e.id) }))}
+                        >
+                          Select All
+                        </Button>
+                        <Button
+                          type="button" variant="ghost" size="sm"
+                          className="h-7 text-xs px-2"
+                          onClick={() => setScheduleForm(prev => ({ ...prev, targetIds: [] }))}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {showEditModal ? (
+                    /* Edit mode: single employee select */
+                    <Select
+                      value={scheduleForm.targetIds[0] ?? ""}
+                      onValueChange={(value) => setScheduleForm(prev => ({ ...prev, targetIds: [value] }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select an employee" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {employees.map(emp => (
+                          <SelectItem key={emp.id} value={emp.id}>
+                            {emp.profile?.firstName} {emp.profile?.lastName}
+                            <span className="ml-1 text-xs text-muted-foreground">({emp.email})</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    /* Create mode: searchable multi-checkbox list */
+                    <>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search employees..."
+                          value={employeeSearch}
+                          onChange={(e) => setEmployeeSearch(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+                      <div className="border rounded-md max-h-52 overflow-y-auto divide-y">
+                        {employees
+                          .filter(emp => {
+                            const name = `${emp.profile?.firstName ?? ""} ${emp.profile?.lastName ?? ""} ${emp.email}`.toLowerCase();
+                            return name.includes(employeeSearch.toLowerCase());
+                          })
+                          .map(emp => {
+                            const checked = scheduleForm.targetIds.includes(emp.id);
+                            return (
+                              <label
+                                key={emp.id}
+                                className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() =>
+                                    setScheduleForm(prev => ({
+                                      ...prev,
+                                      targetIds: checked
+                                        ? prev.targetIds.filter(id => id !== emp.id)
+                                        : [...prev.targetIds, emp.id],
+                                    }))
+                                  }
+                                  className="accent-orange-500 h-4 w-4 shrink-0"
+                                />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">
+                                    {emp.profile?.firstName} {emp.profile?.lastName}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground truncate">{emp.email}</p>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        {employees.filter(emp => {
+                          const name = `${emp.profile?.firstName ?? ""} ${emp.profile?.lastName ?? ""} ${emp.email}`.toLowerCase();
+                          return name.includes(employeeSearch.toLowerCase());
+                        }).length === 0 && (
+                          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                            No employees found
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -831,6 +983,7 @@ export default function ModernCompanySchedules() {
                   setShowCreateModal(false);
                   setShowEditModal(false);
                   setSelectedSchedule(null);
+                  setEmployeeSearch("");
                   resetForm();
                 }}
               >
