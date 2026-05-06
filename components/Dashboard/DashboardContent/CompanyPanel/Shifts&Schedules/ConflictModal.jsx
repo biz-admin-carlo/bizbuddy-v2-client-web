@@ -297,10 +297,11 @@ export default function SimplifiedConflictModal({
     if (!timeString) return 'N/A';
     try {
       const date = new Date(timeString);
-      return date.toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
+      return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
         minute: '2-digit',
-        hour12: true 
+        hour12: true,
+        timeZone: 'UTC',
       });
     } catch {
       return timeString;

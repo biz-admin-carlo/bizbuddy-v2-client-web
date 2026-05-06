@@ -162,7 +162,7 @@ export default function ModernCompanySchedules() {
   const fmtShiftTime = (t) => {
     if (!t) return "—";
     try {
-      return new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+      return new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "UTC" });
     } catch {
       return "";
     }
