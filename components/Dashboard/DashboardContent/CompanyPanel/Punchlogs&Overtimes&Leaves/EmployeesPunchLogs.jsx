@@ -59,12 +59,6 @@ import ColumnSelector from "@/components/common/ColumnSelector";
 import TableSkeleton from "@/components/common/TableSkeleton";
 import { Textarea } from "@/components/ui/textarea";
 
-// ── FIX 1: Replace hardcoded DAYCARE_BUSINESS_ID with env array ────────────────
-const DAYCARE_COMPANY_IDS = (process.env.NEXT_PUBLIC_DAYCARE_COMPANY_IDS || "")
-  .split(",")
-  .map((id) => id.trim())
-  .filter(Boolean);
-
 // ── D-2: DA hour constants ─────────────────────────────────────────────────────
 const DRIVER_AIDE_AM_HOURS      = 1.25;   // fixed always
 const DRIVER_AIDE_REGULAR_HOURS = 5.5;    // fixed always
@@ -99,7 +93,7 @@ const toLocalMinutes = (isoStr, tz) => {
   const [h, m] = str.split(":").map(Number);
   return h * 60 + (m || 0);
 };
-const getDefaultFrom = (tz = "UTC") => new Date().toLocaleDateString("en-CA", { timeZone: tz }).slice(0, 7) + "-01";
+const getDefaultFrom = (tz = "UTC") => new Date().toLocaleDateString("en-CA", { timeZone: tz });
 const getDefaultTo   = (tz = "UTC") => new Date().toLocaleDateString("en-CA", { timeZone: tz });
 
 // ── NULL-SAFE break helpers ────────────────────────────────────────────────────
@@ -723,7 +717,8 @@ export default function EmployeesPunchLogs() {
   const [companyTimezone, setCompanyTimezone] = useState("UTC");
 
   const [companyId, setCompanyId] = useState(null);
-  const isDayCare = DAYCARE_COMPANY_IDS.includes(companyId);
+  const [companyType, setCompanyType] = useState(null);
+  const isDayCare = companyType === "DAYCARE";
 
   const [timelogs,       setTimelogs]       = useState([]);
   const [departments,    setDepartments]    = useState([]);
@@ -835,14 +830,18 @@ export default function EmployeesPunchLogs() {
     { value: "dateTimeIn",         label: "Time In",            essential: true,  group: "basic"    },
     { value: "dateTimeOut",        label: "Time Out",           essential: true,  group: "basic"    },
     { value: "duration",           label: "Duration",           essential: false, group: "basic"    },
+    { value: "gross",              label: "Gross Hours",        essential: false, group: "basic"    },
     { value: "status",             label: "Status",             essential: true,  group: "basic"    },
-    ...(isDayCare ? [{ value: "punchType", label: "Punch Type", essential: false, group: "basic" }] : []),
+    { value: "punchType",          label: "Punch Type",         essential: false, group: "basic"    },
     { value: "cutoffApproval",     label: "Cutoff Status",      essential: false, group: "basic"    },
     { value: "schedule",           label: "Scheduled",          essential: false, group: "schedule" },
     { value: "period",             label: "Period Hours",       essential: false, group: "schedule" },
-    { value: "ot",                 label: "Overtime",           essential: false, group: "time"     },
-    { value: "otStatus",           label: "OT Status",          essential: false, group: "time"     },
+    ...(isDayCare ? [
+      { value: "ot",       label: "Overtime", essential: false, group: "time" },
+      { value: "otStatus", label: "OT Status", essential: false, group: "time" },
+    ] : []),
     { value: "late",               label: "Late",               essential: false, group: "time"     },
+    { value: "undertime",          label: "Undertime",          essential: false, group: "time"     },
     { value: "coffee",             label: "Coffee",             essential: false, group: "breaks"   },
     { value: "lunch",              label: "Lunch",              essential: false, group: "breaks"   },
     { value: "locationRestricted", label: "Location Required",  essential: false, group: "location" },
@@ -857,8 +856,8 @@ export default function EmployeesPunchLogs() {
   const columnMapForExport = {
     id: "Log ID", schedule: "Scheduled", locationRestricted: "Location Required",
     employee: "Employee", dateTimeIn: "Time In", dateTimeOut: "Time Out",
-    duration: "Duration", coffee: "Coffee Break", lunch: "Lunch Break",
-    ot: "Overtime", otStatus: "OT Status", late: "Late Hours",
+    duration: "Duration", gross: "Gross Hours", coffee: "Coffee Break", lunch: "Lunch Break",
+    ot: "Overtime", otStatus: "OT Status", late: "Late Hours", undertime: "Undertime Hours",
     deviceIn: "Device In", deviceOut: "Device Out",
     locationIn: "Location In", locationOut: "Location Out",
     period: "Period Hours", status: "Status", punchType: "Punch Type",
@@ -870,12 +869,13 @@ export default function EmployeesPunchLogs() {
   );
 
   useEffect(() => {
-    if (isDayCare) {
+    if (companyType === null) return;
+    if (!isDayCare) {
       setColumnVisibility((prev) =>
-        prev.includes("punchType") ? prev : [...prev, "punchType"]
+        prev.filter((v) => v !== "ot" && v !== "otStatus")
       );
     }
-  }, [isDayCare]);
+  }, [isDayCare, companyType]);
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────────
   const bootstrap = useCallback(async () => {
@@ -1005,6 +1005,7 @@ export default function EmployeesPunchLogs() {
         const tlRes = await fetch(`${API_URL}/api/timelogs?${qs.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
         const tlJ = await tlRes.json();
         if (!tlRes.ok) throw new Error(tlJ.error || "Punch Logs fetch failed");
+        if (tlJ.companyType) setCompanyType(tlJ.companyType);
 
         const enriched = (tlJ.data || []).map((t) => {
           // ── Break display strings (UI only) ───────────────────────────────
@@ -1060,8 +1061,10 @@ export default function EmployeesPunchLogs() {
           // ── Period hours — scheduled shift duration for the day ──────────
           const periodHours = t.scheduledHours != null ? parseFloat(t.scheduledHours).toFixed(2) : "0.00";
 
-          // ── Late hours — server-computed ───────────────────────────────────
-          const lateHours = t.lateHours != null ? parseFloat(t.lateHours).toFixed(2) : "0.00";
+          // ── Late / undertime / gross — server-computed ────────────────────
+          const lateHours      = t.lateHours      != null ? parseFloat(t.lateHours).toFixed(2)      : "0.00";
+          const undertimeHours = t.undertimeHours != null ? parseFloat(t.undertimeHours).toFixed(2) : "0.00";
+          const grossHours     = t.grossHours     != null ? parseFloat(t.grossHours).toFixed(2)     : null;
 
           // ── DayCare: missing clock-out (active session past expected end) ──
           const isMissingClockOut = (() => {
@@ -1082,9 +1085,11 @@ export default function EmployeesPunchLogs() {
               const seen = new Set();
               return raw.filter((s) => { const key = s.shift?.id ?? s.id; if (seen.has(key)) return false; seen.add(key); return true; });
             })(),
-            isScheduled: !!(t.shiftToday),
+            isScheduled: !!(t.userShifts?.length || t.userShift),
             duration,
             lateHours,
+            undertimeHours,
+            grossHours,
             otHours,
             otStatus,
             periodHours,
@@ -1095,7 +1100,7 @@ export default function EmployeesPunchLogs() {
             overtimeRec: overtimeArr[0] ?? null,
             fullDevIn:  fmtDevice(t.deviceIn)  || "—",
             fullDevOut: fmtDevice(t.deviceOut) || "—",
-            shiftName:  t.shiftToday || "—",
+            shiftName:  t.userShift?.shift?.shiftName ?? "—",
             schedOut:   "—",
             isLocRestricted: locList.length > 0,
             locList,
@@ -1172,6 +1177,11 @@ export default function EmployeesPunchLogs() {
 
   const totalPeriodHours = useMemo(
     () => displayed.reduce((s, r) => s + (parseFloat(r.periodHours || "0") || 0), 0).toFixed(2),
+    [displayed]
+  );
+
+  const totalDurationHours = useMemo(
+    () => displayed.reduce((s, r) => s + (parseFloat(r.duration || "0") || 0), 0).toFixed(2),
     [displayed]
   );
 
@@ -1626,6 +1636,7 @@ export default function EmployeesPunchLogs() {
               )}
             </CardTitle>
             <div className="flex flex-col md:flex-row items-end md:items-center gap-2 md:gap-4 text-sm text-gray-500 dark:text-gray-400">
+              <span>Total Duration: <span className="font-semibold text-gray-900 dark:text-gray-100">{totalDurationHours}</span></span>
               <span>Total Period Hours: <span className="font-semibold text-gray-900 dark:text-gray-100">{totalPeriodHours}</span></span>
               <TooltipProvider delayDuration={200}><Tooltip>
                 <TooltipTrigger asChild>
@@ -1761,6 +1772,8 @@ export default function EmployeesPunchLogs() {
                             return <TableCell key="dateTimeOut" className="text-center"><DualTimeDisplay datetime={t.timeOut} userTz={userTimezone} companyTz={companyTimezone} /></TableCell>;
                           case "duration":
                             return <TableCell key="duration" className="text-center text-sm font-medium"><TimeDisplayWithTooltip time={t.duration} type="duration" /></TableCell>;
+                          case "gross":
+                            return <TableCell key="gross" className="text-center text-sm">{t.grossHours != null ? <TimeDisplayWithTooltip time={t.grossHours} type="duration" /> : <span className="text-muted-foreground">—</span>}</TableCell>;
                           case "coffee": {
                             const coffeeAuto = t.autoCoffeeApplied || t.coffeeBreaks?.some(b => b.auto);
                             const coffeeDeductible = t.coffeeBreaks?.find(b => b.auto)?.deductible ?? true;
@@ -1848,6 +1861,8 @@ export default function EmployeesPunchLogs() {
                             );
                           case "late":
                             return <TableCell key="late" className="text-center text-sm">{parseFloat(t.lateHours) > 0 ? <TimeDisplayWithTooltip time={t.lateHours} type="late" className="text-red-600 font-medium" /> : <span className="text-muted-foreground">—</span>}</TableCell>;
+                          case "undertime":
+                            return <TableCell key="undertime" className="text-center text-sm">{parseFloat(t.undertimeHours) > 0 ? <TimeDisplayWithTooltip time={t.undertimeHours} type="late" className="text-amber-600 font-medium" /> : <span className="text-muted-foreground">—</span>}</TableCell>;
                           case "deviceIn":
                             return <TableCell key="deviceIn" className="text-center"><DeviceDisplay device={t.fullDevIn} /></TableCell>;
                           case "deviceOut":
@@ -1891,7 +1906,7 @@ export default function EmployeesPunchLogs() {
                             );
 
                           case "punchType":
-                            return <TableCell key="punchType" className="text-center">{isDayCare ? <PunchTypeBadge punchType={t.punchType} /> : null}</TableCell>;
+                            return <TableCell key="punchType" className="text-center"><PunchTypeBadge punchType={t.punchType} /></TableCell>;
                           case "cutoffApproval":
                             return (
                               <TableCell key="cutoffApproval" className="text-center">
