@@ -159,6 +159,12 @@ export default function ModernCompanySchedules() {
     setEmployeeSearch("");
   };
 
+  const fmtScheduleDate = (str) => {
+    if (!str) return "—";
+    const [y, m, d] = str.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  };
+
   const fmtShiftTime = (t) => {
     if (!t) return "—";
     try {
@@ -336,8 +342,8 @@ export default function ModernCompanySchedules() {
     setScheduleForm({
       shiftId: schedule.shiftId.toString(),
       daysOfWeek: Array.isArray(schedule.daysOfWeek) ? schedule.daysOfWeek : [],
-      startDate: new Date(schedule.startDate).toISOString().split('T')[0],
-      endDate: schedule.endDate ? new Date(schedule.endDate).toISOString().split('T')[0] : "",
+      startDate: schedule.startDate,
+      endDate: schedule.endDate || "",
       assignmentType: type,
       targetIds: type === "individual" && schedule.targetId ? [schedule.targetId] : [],
       targetId: type === "department" ? (schedule.targetId || "") : "",
@@ -362,7 +368,7 @@ export default function ModernCompanySchedules() {
       const matchesSearch = searchQuery === "" ||
         schedule.shift?.shiftName.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesUser = filterUser === "all" || schedule.targetId === filterUser;
-      const isActive = schedule.isActive && (!schedule.endDate || new Date(schedule.endDate) >= new Date());
+      const isActive = schedule.isActive && (!schedule.endDate || schedule.endDate >= new Date().toLocaleDateString("en-CA"));
       const matchesStatus = filterStatus === "all" || (filterStatus === "active" ? isActive : !isActive);
       return matchesSearch && matchesUser && matchesStatus;
     });
@@ -593,7 +599,7 @@ export default function ModernCompanySchedules() {
                       const days = Array.isArray(schedule.daysOfWeek) ? schedule.daysOfWeek : [];
                       const user = employees.find(emp => emp.id === schedule.targetId);
                       const department = departments.find(dept => dept.id === schedule.targetId);
-                      const isActive = schedule.isActive && (!schedule.endDate || new Date(schedule.endDate) >= new Date());
+                      const isActive = schedule.isActive && (!schedule.endDate || schedule.endDate >= new Date().toLocaleDateString("en-CA"));
                       
                       return (
                         <TableRow key={schedule.id}>
@@ -614,9 +620,9 @@ export default function ModernCompanySchedules() {
                               ))}
                             </div>
                           </TableCell>
-                          <TableCell>{new Date(schedule.startDate).toLocaleDateString()}</TableCell>
+                          <TableCell>{fmtScheduleDate(schedule.startDate)}</TableCell>
                           <TableCell>
-                            {schedule.endDate ? new Date(schedule.endDate).toLocaleDateString() : "Ongoing"}
+                            {schedule.endDate ? fmtScheduleDate(schedule.endDate) : "Ongoing"}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">

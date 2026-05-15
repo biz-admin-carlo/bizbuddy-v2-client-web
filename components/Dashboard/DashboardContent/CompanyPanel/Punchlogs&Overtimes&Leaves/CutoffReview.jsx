@@ -1,7 +1,7 @@
 // components/Dashboard/DashboardContent/CompanyPanel/PunchlogsB&OvertimesB&Leaves/CutoffReview.jsx
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -29,6 +29,7 @@ import {
   Info,
   FileText,
   RefreshCw,
+  RotateCcw,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -130,8 +131,15 @@ const InfoTooltip = ({ text, side = "bottom" }) => (
 const formatDateTime = (d, tz = "UTC") =>
   d ? new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZone: tz }) : "—";
 
-const fmtShiftTime = (d) =>
-  d ? new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "UTC" }) : null;
+const fmtShiftTime = (d) => {
+  if (!d) return null;
+  // "HH:mm" time-only strings (from availableShifts) — parse locally, no timezone conversion needed
+  if (/^\d{1,2}:\d{2}$/.test(d)) {
+    const [h, m] = d.split(":").map(Number);
+    return new Date(1970, 0, 1, h, m).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  }
+  return new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "UTC" });
+};
 
 /** Returns [{isoDate, label}] for every day from periodStart to periodEnd (inclusive), labels in company timezone. */
 const enumeratePeriodDays = (periodStart, periodEnd, tz = "UTC") => {
@@ -342,7 +350,7 @@ const ActionBtn = ({ color, icon: Icon, label, onClick }) => {
 };
 
 /** Single timeline row inside an employee card */
-const TimelineRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflict }) => {
+const TimelineRow = ({ rec, onApprove, onApproveOT, onApproveSchedule, onApproveRaw, onEdit, onExclude, onConflict, onReset }) => {
   if (rec.type === "absent") {
     return (
       <tr className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 bg-neutral-50/60 dark:bg-neutral-900/20">
@@ -361,7 +369,7 @@ const TimelineRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflic
         <td className="px-3 py-2.5 w-24 text-right align-middle">
           <span className="text-neutral-300 text-sm">—</span>
         </td>
-        <td className="px-3 py-2.5 w-52" />
+        <td className="px-3 py-2.5 w-72" />
       </tr>
     );
   }
@@ -391,7 +399,7 @@ const TimelineRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflic
         <td className="px-3 py-3 w-24 text-right align-top">
           <span className="text-neutral-300 text-sm">—</span>
         </td>
-        <td className="px-3 py-3 w-52 align-top">
+        <td className="px-3 py-3 w-72 align-top">
           <div className="flex justify-end">
             <span className="text-[11px] text-amber-500 font-semibold">Sync needed</span>
           </div>
@@ -516,12 +524,15 @@ const TimelineRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflic
       </td>
 
       {/* Actions */}
-      <td className="px-3 py-3 w-52 align-top">
+      <td className="px-3 py-3 w-72 align-top">
         {isLocked && (
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-2">
             {rec.localStatus === "excluded"
               ? <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-neutral-100 text-neutral-400 border border-neutral-200"><XCircle className="w-3 h-3" /> Excluded</span>
-              : <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200"><Check className="w-3 h-3" /> Approved</span>
+              : <>
+                  <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200"><Check className="w-3 h-3" /> Approved</span>
+                  <ActionBtn color="neutral" icon={RotateCcw} label="Reset" onClick={(e) => { e.stopPropagation(); onReset(rec.id); }} />
+                </>
             }
           </div>
         )}
@@ -533,13 +544,15 @@ const TimelineRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflic
           </div>
         )}
         {!isLocked && !isRestOrPreApproved && (
-          <div className="flex items-center gap-1.5 flex-wrap justify-end">
-            {rec.actions?.includes("approve")      && <ActionBtn color="green"   icon={Check}         label="Approve"      onClick={() => onApprove(rec.id)} />}
-            {rec.actions?.includes("approve-ot")   && <ActionBtn color="purple"  icon={Zap}           label="+ OT"         onClick={() => onApproveOT(rec.id)} />}
-            {rec.actions?.includes("honor-punch")  && <ActionBtn color="blue"    icon={Clock}         label="Honor Punch"  onClick={() => onConflict(rec.id, "punch")} />}
-            {rec.actions?.includes("honor-leave")  && <ActionBtn color="green"   icon={CalendarCheck} label="Honor Leave"  onClick={() => onConflict(rec.id, "leave")} />}
-            {rec.actions?.includes("edit")         && <ActionBtn color="neutral" icon={Pencil}        label="Edit"         onClick={(e) => { e.stopPropagation(); onEdit(rec); }} />}
-            {rec.actions?.includes("exclude")      && <ActionBtn color="red"     icon={X}             label="Exclude"      onClick={(e) => { e.stopPropagation(); onExclude(rec.id); }} />}
+          <div className="flex items-center justify-end gap-1.5">
+            {rec.actions?.includes("approve")          && <ActionBtn color="green"   icon={Check}         label="Approve"      onClick={() => onApprove(rec.id)} />}
+            {rec.actions?.includes("approve-ot")       && <ActionBtn color="purple"  icon={Zap}           label="+ OT"         onClick={() => onApproveOT(rec.id)} />}
+            {rec.actions?.includes("approve-schedule") && <ActionBtn color="green"   icon={Check}         label="Schedule"     onClick={() => onApproveSchedule(rec)} />}
+            {rec.actions?.includes("approve-raw")      && <ActionBtn color="blue"    icon={Clock}         label="Raw"          onClick={() => onApproveRaw(rec.id)} />}
+            {rec.actions?.includes("honor-punch")      && <ActionBtn color="blue"    icon={Clock}         label="Honor Punch"  onClick={() => onConflict(rec.id, "punch")} />}
+            {rec.actions?.includes("honor-leave")      && <ActionBtn color="green"   icon={CalendarCheck} label="Honor Leave"  onClick={() => onConflict(rec.id, "leave")} />}
+            {rec.actions?.includes("edit")             && <ActionBtn color="neutral" icon={Pencil}        label="Edit"         onClick={(e) => { e.stopPropagation(); onEdit(rec); }} />}
+            {rec.actions?.includes("exclude")          && <ActionBtn color="red"     icon={X}             label="Exclude"      onClick={(e) => { e.stopPropagation(); onExclude(rec.id); }} />}
           </div>
         )}
       </td>
@@ -548,7 +561,7 @@ const TimelineRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflic
 };
 
 /** Sub-row for a regular punch inside a multi-shift day group */
-const PunchSubRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflict }) => {
+const PunchSubRow = ({ rec, onApprove, onApproveOT, onApproveSchedule, onApproveRaw, onEdit, onExclude, onConflict, onReset }) => {
   const cfg = ROW_TYPE_CONFIG[rec.localStatus || rec.type] || ROW_TYPE_CONFIG.punch;
   const TypeIcon = cfg.icon;
   const isLocked         = ["approved", "excluded", "resolved"].includes(rec.localStatus);
@@ -641,12 +654,15 @@ const PunchSubRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflic
           <span className="text-neutral-300 text-sm">—</span>
         )}
       </td>
-      <td className="px-3 py-3 w-52 align-top">
+      <td className="px-3 py-3 w-72 align-top">
         {isLocked && (
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-2">
             {rec.localStatus === "excluded"
               ? <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-neutral-100 text-neutral-400 border border-neutral-200"><XCircle className="w-3 h-3" /> Excluded</span>
-              : <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200"><Check className="w-3 h-3" /> Approved</span>
+              : <>
+                  <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200"><Check className="w-3 h-3" /> Approved</span>
+                  <ActionBtn color="neutral" icon={RotateCcw} label="Reset" onClick={(e) => { e.stopPropagation(); onReset(rec.id); }} />
+                </>
             }
           </div>
         )}
@@ -658,13 +674,15 @@ const PunchSubRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflic
           </div>
         )}
         {!isLocked && !isRestOrPreApproved && (
-          <div className="flex items-center gap-1.5 flex-wrap justify-end">
-            {rec.actions?.includes("approve")      && <ActionBtn color="green"   icon={Check}         label="Approve"      onClick={() => onApprove(rec.id)} />}
-            {rec.actions?.includes("approve-ot")   && <ActionBtn color="purple"  icon={Zap}           label="+ OT"         onClick={() => onApproveOT(rec.id)} />}
-            {rec.actions?.includes("honor-punch")  && <ActionBtn color="blue"    icon={Clock}         label="Honor Punch"  onClick={() => onConflict(rec.id, "punch")} />}
-            {rec.actions?.includes("honor-leave")  && <ActionBtn color="green"   icon={CalendarCheck} label="Honor Leave"  onClick={() => onConflict(rec.id, "leave")} />}
-            {rec.actions?.includes("edit")         && <ActionBtn color="neutral" icon={Pencil}        label="Edit"         onClick={(e) => { e.stopPropagation(); onEdit(rec); }} />}
-            {rec.actions?.includes("exclude")      && <ActionBtn color="red"     icon={X}             label="Exclude"      onClick={(e) => { e.stopPropagation(); onExclude(rec.id); }} />}
+          <div className="flex items-center justify-end gap-1.5">
+            {rec.actions?.includes("approve")          && <ActionBtn color="green"   icon={Check}         label="Approve"      onClick={() => onApprove(rec.id)} />}
+            {rec.actions?.includes("approve-ot")       && <ActionBtn color="purple"  icon={Zap}           label="+ OT"         onClick={() => onApproveOT(rec.id)} />}
+            {rec.actions?.includes("approve-schedule") && <ActionBtn color="green"   icon={Check}         label="Schedule"     onClick={() => onApproveSchedule(rec)} />}
+            {rec.actions?.includes("approve-raw")      && <ActionBtn color="blue"    icon={Clock}         label="Raw"          onClick={() => onApproveRaw(rec.id)} />}
+            {rec.actions?.includes("honor-punch")      && <ActionBtn color="blue"    icon={Clock}         label="Honor Punch"  onClick={() => onConflict(rec.id, "punch")} />}
+            {rec.actions?.includes("honor-leave")      && <ActionBtn color="green"   icon={CalendarCheck} label="Honor Leave"  onClick={() => onConflict(rec.id, "leave")} />}
+            {rec.actions?.includes("edit")             && <ActionBtn color="neutral" icon={Pencil}        label="Edit"         onClick={(e) => { e.stopPropagation(); onEdit(rec); }} />}
+            {rec.actions?.includes("exclude")          && <ActionBtn color="red"     icon={X}             label="Exclude"      onClick={(e) => { e.stopPropagation(); onExclude(rec.id); }} />}
           </div>
         )}
       </td>
@@ -673,7 +691,7 @@ const PunchSubRow = ({ rec, onApprove, onApproveOT, onEdit, onExclude, onConflic
 };
 
 /** Single segment row inside a driver day group */
-const DriverSegmentRow = ({ seg, onApprove, onApproveOT, onExclude }) => {
+const DriverSegmentRow = ({ seg, onApprove, onApproveOT, onApproveSchedule, onApproveRaw, onExclude, onReset }) => {
   const isLocked = ["approved", "excluded", "resolved"].includes(seg.localStatus);
   return (
     <tr className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 bg-white dark:bg-neutral-900">
@@ -706,23 +724,24 @@ const DriverSegmentRow = ({ seg, onApprove, onApproveOT, onExclude }) => {
           <span className="text-neutral-300 text-sm">—</span>
         )}
       </td>
-      <td className="px-3 py-2.5 w-52 align-top">
+      <td className="px-3 py-2.5 w-72 align-top">
         {isLocked ? (
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-2">
             {seg.localStatus === "excluded"
               ? <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-neutral-100 text-neutral-400 border border-neutral-200"><XCircle className="w-3 h-3" /> Excluded</span>
-              : <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200"><Check className="w-3 h-3" /> Approved</span>
+              : <>
+                  <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200"><Check className="w-3 h-3" /> Approved</span>
+                  <ActionBtn color="neutral" icon={RotateCcw} label="Reset" onClick={() => onReset(seg.id)} />
+                </>
             }
           </div>
         ) : (
-          <div className="flex flex-col items-end gap-1.5">
-            <div className="flex items-center gap-1.5">
-              {seg.actions?.includes("approve")    && <ActionBtn color="green"  icon={Check} label="Approve" onClick={() => onApprove(seg.id)} />}
-              {seg.actions?.includes("approve-ot") && <ActionBtn color="purple" icon={Zap}   label="+ OT"    onClick={() => onApproveOT(seg.id)} />}
-            </div>
-            {seg.actions?.includes("exclude") && (
-              <ActionBtn color="red" icon={X} label="Exclude" onClick={() => onExclude(seg.id)} />
-            )}
+          <div className="flex items-center justify-end gap-1.5">
+            {seg.actions?.includes("approve")          && <ActionBtn color="green"  icon={Check} label="Approve"  onClick={() => onApprove(seg.id)} />}
+            {seg.actions?.includes("approve-ot")       && <ActionBtn color="purple" icon={Zap}   label="+ OT"    onClick={() => onApproveOT(seg.id)} />}
+            {seg.actions?.includes("approve-schedule") && <ActionBtn color="green"  icon={Check} label="Schedule" onClick={() => onApproveSchedule(seg)} />}
+            {seg.actions?.includes("approve-raw")      && <ActionBtn color="blue"   icon={Clock} label="Raw"      onClick={() => onApproveRaw(seg.id)} />}
+            {seg.actions?.includes("exclude")          && <ActionBtn color="red"    icon={X}     label="Exclude"  onClick={() => onExclude(seg.id)} />}
           </div>
         )}
       </td>
@@ -731,7 +750,7 @@ const DriverSegmentRow = ({ seg, onApprove, onApproveOT, onExclude }) => {
 };
 
 /** Driver day group — header row + one DriverSegmentRow per segment */
-const DriverGroupRow = ({ group, onApprove, onApproveOT, onExclude }) => (
+const DriverGroupRow = ({ group, onApprove, onApproveOT, onApproveSchedule, onApproveRaw, onExclude, onReset }) => (
   <>
     <tr className="bg-violet-50/40 dark:bg-violet-900/10 border-b border-violet-100 dark:border-violet-900/20">
       <td className="px-4 py-2 w-20 align-middle">
@@ -749,13 +768,13 @@ const DriverGroupRow = ({ group, onApprove, onApproveOT, onExclude }) => (
       </td>
     </tr>
     {group.segments.map((seg) => (
-      <DriverSegmentRow key={seg.id} seg={seg} onApprove={onApprove} onApproveOT={onApproveOT} onExclude={onExclude} />
+      <DriverSegmentRow key={seg.id} seg={seg} onApprove={onApprove} onApproveOT={onApproveOT} onApproveSchedule={onApproveSchedule} onApproveRaw={onApproveRaw} onExclude={onExclude} onReset={onReset} />
     ))}
   </>
 );
 
 /** Multi-shift day group for regular punches */
-const PunchGroupRow = ({ group, onApprove, onApproveOT, onEdit, onExclude, onConflict }) => (
+const PunchGroupRow = ({ group, onApprove, onApproveOT, onApproveSchedule, onApproveRaw, onEdit, onExclude, onConflict, onReset }) => (
   <>
     <tr className="bg-blue-50/40 dark:bg-blue-900/10 border-b border-blue-100 dark:border-blue-900/20">
       <td className="px-4 py-2 w-20 align-middle">
@@ -778,17 +797,76 @@ const PunchGroupRow = ({ group, onApprove, onApproveOT, onEdit, onExclude, onCon
         rec={punch}
         onApprove={onApprove}
         onApproveOT={onApproveOT}
+        onApproveSchedule={onApproveSchedule}
+        onApproveRaw={onApproveRaw}
         onEdit={onEdit}
         onExclude={onExclude}
         onConflict={onConflict}
+        onReset={onReset}
       />
     ))}
   </>
 );
 
+/** OT block row — rendered after the last punch row for a given date (B&C only) */
+const OTBlockRow = ({ block, onOTBlock, localOTBlockStatus, threshold }) => {
+  const status = localOTBlockStatus[block.id] || block.status;
+  const isPending = status === "pending";
+  return (
+    <tr className="bg-purple-50/40 dark:bg-purple-900/5 border-t border-purple-100 dark:border-purple-800/30">
+      <td className="px-3 py-2.5 w-24" />
+      <td className="px-3 py-2.5">
+        <span className="inline-flex items-center gap-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
+          <Zap className="w-2.5 h-2.5" /> OT
+        </span>
+      </td>
+      <td className="px-3 py-2.5">
+        <span className="text-xs text-neutral-500 dark:text-neutral-400">
+          Overtime · {block.otHours}h over {threshold}h daily threshold
+        </span>
+        {status === "approved" && (
+          <span className="ml-2 inline-flex items-center gap-0.5 text-[10px] font-semibold text-green-600 bg-green-100 dark:bg-green-900/20 dark:text-green-400 px-1.5 py-0.5 rounded">
+            <Check className="w-2.5 h-2.5" /> Approved
+          </span>
+        )}
+        {status === "excluded" && (
+          <span className="ml-2 inline-flex items-center gap-0.5 text-[10px] font-semibold text-neutral-500 bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded">
+            <X className="w-2.5 h-2.5" /> Excluded
+          </span>
+        )}
+      </td>
+      <td className="px-3 py-2.5">
+        <span className={`font-mono text-sm font-bold ${isPending ? "text-purple-600 dark:text-purple-400" : "text-neutral-400"}`}>
+          {block.otHours}h
+        </span>
+      </td>
+      <td className="px-3 py-2.5 w-72 text-right">
+        {isPending && (
+          <div className="flex items-center justify-end gap-1.5">
+            <ActionBtn color="purple" icon={Zap}  label="Approve OT" onClick={() => onOTBlock(block.id, "approve")} />
+            <ActionBtn color="red"    icon={X}    label="Exclude"    onClick={() => onOTBlock(block.id, "exclude")} />
+          </div>
+        )}
+      </td>
+    </tr>
+  );
+};
+
 /** Employee card */
-const EmployeeCard = ({ emp, onApprove, onApproveOT, onEdit, onExclude, onConflict, onBulkApprove }) => {
+const EmployeeCard = ({ emp, onApprove, onApproveOT, onApproveSchedule, onApproveRaw, onEdit, onExclude, onConflict, onBulkApprove, onOTBlock, localOTBlockStatus, companyTimezone, dailyOtThresholdHours, onReset }) => {
   const [expanded, setExpanded] = useState(false);
+
+  // Build a map of formatted-date → OT block for this employee so we can inject OT rows
+  // after the last punch row for each date without a second pass.
+  const otBlockByDate = useMemo(() => {
+    const map = {};
+    (emp.otBlocks || []).forEach((block) => {
+      const formatted = new Date(block.date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: companyTimezone || "UTC" });
+      map[formatted] = block;
+    });
+    return map;
+  }, [emp.otBlocks, companyTimezone]);
+
   const hasConflict  = emp.records.some((r) => {
     if (r.type === "punch_group") return r.punches.some((p) => p.type === "conflict" && !p.localStatus);
     return r.type === "conflict" && !r.localStatus;
@@ -903,37 +981,61 @@ const EmployeeCard = ({ emp, onApprove, onApproveOT, onEdit, onExclude, onConfli
                   </tr>
                 </thead>
                 <tbody>
-                  {emp.records.map((rec) =>
-                    rec.type === "driver_group" ? (
-                      <DriverGroupRow
-                        key={rec.id}
-                        group={rec}
-                        onApprove={onApprove}
-                        onApproveOT={onApproveOT}
-                        onExclude={onExclude}
-                      />
-                    ) : rec.type === "punch_group" ? (
-                      <PunchGroupRow
-                        key={rec.id}
-                        group={rec}
-                        onApprove={onApprove}
-                        onApproveOT={onApproveOT}
-                        onEdit={onEdit}
-                        onExclude={onExclude}
-                        onConflict={onConflict}
-                      />
-                    ) : (
-                      <TimelineRow
-                        key={rec.id}
-                        rec={rec}
-                        onApprove={onApprove}
-                        onApproveOT={onApproveOT}
-                        onEdit={onEdit}
-                        onExclude={onExclude}
-                        onConflict={onConflict}
-                      />
-                    )
-                  )}
+                  {emp.records.map((rec, idx) => {
+                    const recDate  = rec.date || rec.punches?.[0]?.date || rec.segments?.[0]?.date;
+                    const nextDate = idx < emp.records.length - 1
+                      ? (emp.records[idx + 1].date || emp.records[idx + 1].punches?.[0]?.date || emp.records[idx + 1].segments?.[0]?.date)
+                      : null;
+                    const isLastForDate = recDate && recDate !== nextDate;
+                    const otBlock = isLastForDate ? otBlockByDate[recDate] : null;
+                    return (
+                      <React.Fragment key={rec.id}>
+                        {rec.type === "driver_group" ? (
+                          <DriverGroupRow
+                            group={rec}
+                            onApprove={onApprove}
+                            onApproveOT={onApproveOT}
+                            onApproveSchedule={onApproveSchedule}
+                            onApproveRaw={onApproveRaw}
+                            onExclude={onExclude}
+                            onReset={onReset}
+                          />
+                        ) : rec.type === "punch_group" ? (
+                          <PunchGroupRow
+                            group={rec}
+                            onApprove={onApprove}
+                            onApproveOT={onApproveOT}
+                            onApproveSchedule={onApproveSchedule}
+                            onApproveRaw={onApproveRaw}
+                            onEdit={onEdit}
+                            onExclude={onExclude}
+                            onConflict={onConflict}
+                            onReset={onReset}
+                          />
+                        ) : (
+                          <TimelineRow
+                            rec={rec}
+                            onApprove={onApprove}
+                            onApproveOT={onApproveOT}
+                            onApproveSchedule={onApproveSchedule}
+                            onApproveRaw={onApproveRaw}
+                            onEdit={onEdit}
+                            onExclude={onExclude}
+                            onConflict={onConflict}
+                            onReset={onReset}
+                          />
+                        )}
+                        {otBlock && (
+                          <OTBlockRow
+                            block={otBlock}
+                            onOTBlock={onOTBlock}
+                            localOTBlockStatus={localOTBlockStatus}
+                            threshold={dailyOtThresholdHours}
+                          />
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -976,18 +1078,28 @@ export default function CutoffReview({ cutoffId }) {
   const [employees,        setEmployees]        = useState([]); // processed employee objects
   const [isLoading,        setIsLoading]        = useState(true);
   const [syncing,          setSyncing]          = useState(false);
-  const [companyTimezone,  setCompanyTimezone]  = useState("UTC");
+  const [companyTimezone,       setCompanyTimezone]       = useState("UTC");
+  const [isBNC,                 setIsBNC]                 = useState(false);
+  const [otBlocks,              setOTBlocks]              = useState([]);
+  const [dailyOtThresholdHours, setDailyOtThresholdHours] = useState(8);
 
   // ── Local action state (optimistic UI) ──
-  const [localStatus,  setLocalStatus]  = useState({}); // { [recId]: 'approved'|'excluded'|'resolved' }
+  const [localStatus,         setLocalStatus]         = useState({}); // { [recId]: 'approved'|'excluded'|'resolved' }
+  const [localOTBlockStatus,  setLocalOTBlockStatus]  = useState({}); // { [blockId]: 'approved'|'excluded' }
+  const [resetIds,            setResetIds]            = useState(new Set()); // recIds reset this session — overrides buildDetails "approved"
 
   // ── Modals ──
-  const [editModal,     setEditModal]     = useState(null); // { rec }
-  const [excludeModal,  setExcludeModal]  = useState(null); // { recId }
-  const [finalizeModal, setFinalizeModal] = useState(false);
-  const [isSaving,      setIsSaving]      = useState(false);
-  const [excludeReason, setExcludeReason] = useState("");
-  const [excludeNote,   setExcludeNote]   = useState("");
+  const [editModal,       setEditModal]       = useState(null); // { rec }
+  const [editedClockIn,   setEditedClockIn]   = useState("");
+  const [editedClockOut,  setEditedClockOut]  = useState("");
+  const [editNotes,       setEditNotes]       = useState("");
+  const [excludeModal,    setExcludeModal]    = useState(null); // { recId }
+  const [finalizeModal,   setFinalizeModal]   = useState(false);
+  const [shiftPickerModal,setShiftPickerModal]= useState(null); // { recId, shifts, usedShiftIds }
+  const [usedShifts,      setUsedShifts]      = useState({});   // { [recId]: shiftId } — tracks which shift was used per approval
+  const [isSaving,        setIsSaving]        = useState(false);
+  const [excludeReason,   setExcludeReason]   = useState("");
+  const [excludeNote,     setExcludeNote]     = useState("");
 
   // ── Filters ──
   const [activeTab,    setActiveTab]    = useState("all");
@@ -1023,15 +1135,20 @@ export default function CutoffReview({ cutoffId }) {
 
       setCutoff(cutoffData.data);
       setDepartments(deptData.data || []);
-      // Resolve timezone once as a local constant — used for all date/time formatting
-      // in this fetch. setCompanyTimezone schedules an async state update, so reading
-      // companyTimezone from state inside buildDetails would give the stale value.
+      // Resolve timezone and isBNC as local constants — both are used synchronously
+      // inside buildDetails during this same fetch cycle. Reading state here would give
+      // stale values since setCompanyTimezone / setIsBNC are async.
       const tz =
         approvalsData.companyTimezone ||
         settingsData.data?.timezone ||
         settingsData.data?.companyTimezone ||
         "UTC";
+      // isBNC comes exclusively from the approvals envelope — it is not in company-settings
+      const isBNCLocal = approvalsData.isBNC === true;
       setCompanyTimezone(tz);
+      setIsBNC(isBNCLocal);
+      setOTBlocks(approvalsData.otBlocks || []);
+      setDailyOtThresholdHours(approvalsData.dailyOtThresholdHours ?? 8);
 
       // Fetch raw punch logs for the full period — surfaces records not yet synced into cutoff approvals
       const ps     = cutoffData.data?.periodStart;
@@ -1074,10 +1191,13 @@ export default function CutoffReview({ cutoffId }) {
         }
 
         const emp     = empMap[userId];
-        const details = buildDetails(approval, tz);
+        const details = buildDetails(approval, tz, isBNCLocal);
         emp.records.push(details);
         if (details.hasOT) emp.hasOT = true;
-        if (details.actions?.includes("approve") && !["conflict","unscheduled"].includes(details.type)) {
+        if (
+          details.actions?.some((a) => ["approve", "approve-schedule", "approve-raw"].includes(a)) &&
+          !["conflict", "unscheduled"].includes(details.type)
+        ) {
           emp.hasBulk = true;
         }
       });
@@ -1166,6 +1286,24 @@ export default function CutoffReview({ cutoffId }) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Re-fetch only the approvals envelope to get updated otBlocks after a punch approval.
+  // Does not trigger the full loading skeleton — OT block rows update silently.
+  const refreshOTBlocks = useCallback(async () => {
+    if (!token || !cutoffId) return;
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods/${cutoffId}/approvals`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      setOTBlocks(data.otBlocks || []);
+      setDailyOtThresholdHours(data.dailyOtThresholdHours ?? 8);
+    } catch {
+      // silent — blocks will refresh on next full reload
+    }
+  }, [token, cutoffId]);
+
   // ─────────────────────────────────────────────────────────────────────
   // SYNC — picks up new employees / punch records added after cutoff creation
   // ─────────────────────────────────────────────────────────────────────
@@ -1196,13 +1334,14 @@ export default function CutoffReview({ cutoffId }) {
   // ─────────────────────────────────────────────────────────────────────
   // BUILD RECORD DETAILS FROM API APPROVAL OBJECT
   // ─────────────────────────────────────────────────────────────────────
-  function buildDetails(approval, tz) {
+  function buildDetails(approval, tz, isBNC) {
     const tl       = approval.timeLog || {};
     const schedule = approval.schedule;
     const calc     = approval.calculatedData || {};
     const payroll  = approval.payrollSummary || {};
     const date     = tl.timeIn ? new Date(tl.timeIn).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz }) : "—";
 
+    const isSegment     = approval.segmentType !== null;
     const isLate        = calc.lateMinutes > 0 && calc.lateStatus === "beyond_grace";
     const withinGrace   = calc.lateMinutes > 0 && calc.lateStatus === "within_grace";
     const leftEarly     = calc.earlyMinutes > 0;
@@ -1212,7 +1351,7 @@ export default function CutoffReview({ cutoffId }) {
 
     // Determine type
     let type = "punch";
-    if (isConflict)    type = "conflict";
+    if (isConflict)      type = "conflict";
     else if (isUnscheduled) type = "unscheduled";
 
     // Build detail HTML
@@ -1250,25 +1389,31 @@ export default function CutoffReview({ cutoffId }) {
       lines.push("Computed server-side from (scheduled end − actual clock-out).");
       tags.push({ cls: "flag", label: `Left ${calc.earlyMinutes}min early`, tooltip: lines.join(" ") });
     }
-    if (hasOT)       tags.push({ cls: "ot",   label: `+${calc.overtimeHours}h OT` });
+    // OT tag — DayCare only (BNC rawOtMinutes is always null by server design)
+    if (!isBNC && hasOT) tags.push({ cls: "ot", label: `+${calc.overtimeHours}h OT` });
     if (calc.willSnapIn)  tags.push({ cls: "snap", label: "Clock-in will snap" });
     if (calc.willSnapOut) tags.push({ cls: "snap", label: "Clock-out will snap" });
     if (tl.autoClockOut)  tags.push({ cls: "auto", label: "Auto clock-out triggered" });
     if (approval.isDuplicate) tags.push({ cls: "flag", label: "Possible duplicate" });
 
-    // Actions
+    // Actions — B&C uses four-button model; DayCare keeps legacy single-approve.
+    // Driver/Aide segments (segmentType !== null) skip the shift picker — their
+    // segment times are already authoritative; use raw or edit only.
     const actions = [];
     if (isConflict) {
       actions.push("honor-punch", "honor-leave");
+    } else if (isBNC && isSegment) {
+      actions.push("approve-raw", "edit", "exclude");
+    } else if (isBNC) {
+      actions.push("approve-schedule", "approve-raw", "edit", "exclude");
     } else {
       actions.push("approve");
       if (hasOT || calc.potentialOT) actions.push("approve-ot");
       actions.push("edit", "exclude");
     }
 
-    const actualHours   = calc.actualHours   || 0;
-    const payableHours  = payroll.payableRegularHours || calc.payableHours || 0;
-    const totalPayable  = payroll.totalPayableHours   || payableHours;
+    const payableHours = payroll.payableRegularHours || calc.payableHours || 0;
+    const totalPayable = payroll.totalPayableHours   || payableHours;
 
     const scheduleInfo = schedule
       ? {
@@ -1283,23 +1428,26 @@ export default function CutoffReview({ cutoffId }) {
     const noScheduleRemark = remarks.find((r) => r.type === "no_schedule") || null;
 
     return {
-      id:           approval.id,
-      timeLogId:    tl.id,
-      segmentType:  approval.segmentType ?? null,
+      id:              approval.id,
+      timeLogId:       tl.id,
+      segmentType:     approval.segmentType ?? null,
+      availableShifts: approval.availableShifts || [],
+      rawTimeIn:       tl.timeIn  || null,
+      rawTimeOut:      tl.timeOut || null,
       date,
       type,
       detail,
       tags,
       actions,
-      hours:        parseFloat(totalPayable) || 0,
+      hours:          parseFloat(totalPayable) || 0,
       scheduledHours: schedule?.scheduledHours || 0,
       scheduleInfo,
       hasOT,
-      timeIn:       inTime,
-      timeOut:      outTime,
-      pendingLeave:       approval.pendingLeave || null,
-      noScheduleRemark,   // ✅ reason employee clocked in with no schedule
-      localStatus:  approval.status === "approved" ? "approved" : approval.status === "excluded" ? "excluded" : null,
+      timeIn:         inTime,
+      timeOut:        outTime,
+      pendingLeave:      approval.pendingLeave || null,
+      noScheduleRemark,
+      localStatus: approval.status === "approved" ? "approved" : approval.status === "excluded" ? "excluded" : null,
     };
   }
 
@@ -1400,18 +1548,22 @@ export default function CutoffReview({ cutoffId }) {
   // ─────────────────────────────────────────────────────────────────────
   // DERIVED — MERGE LOCAL STATUS INTO EMPLOYEE RECORDS
   // ─────────────────────────────────────────────────────────────────────
-  const mergedEmployees = useMemo(() =>
-    employees.map((emp) => {
+  const mergedEmployees = useMemo(() => {
+    // resetIds forces localStatus → null regardless of what buildDetails baked in,
+    // allowing a just-reset record to show its action buttons again.
+    const effectiveStatus = (id, baked) => resetIds.has(id) ? null : (localStatus[id] ?? baked);
+
+    return employees.map((emp) => {
       const records = emp.records.map((r) => {
         if (r.type === "driver_group") {
-          const segments = r.segments.map((s) => ({ ...s, localStatus: localStatus[s.id] ?? s.localStatus }));
+          const segments = r.segments.map((s) => ({ ...s, localStatus: effectiveStatus(s.id, s.localStatus) }));
           return { ...r, segments, hours: segments.reduce((sum, s) => sum + (s.hours || 0), 0) };
         }
         if (r.type === "punch_group") {
-          const punches = r.punches.map((p) => ({ ...p, localStatus: localStatus[p.id] ?? p.localStatus }));
+          const punches = r.punches.map((p) => ({ ...p, localStatus: effectiveStatus(p.id, p.localStatus) }));
           return { ...r, punches, hours: punches.reduce((sum, p) => sum + (p.hours || 0), 0) };
         }
-        return { ...r, localStatus: localStatus[r.id] ?? r.localStatus };
+        return { ...r, localStatus: effectiveStatus(r.id, r.localStatus) };
       });
 
       // Flatten actionable records — driver segments and punch sub-rows counted individually
@@ -1431,12 +1583,14 @@ export default function CutoffReview({ cutoffId }) {
       });
 
       const approved   = actionableFlat.filter((r) => r.localStatus === "approved" || r.localStatus === "resolved").length;
-      const pending    = actionableFlat.filter((r) => !r.localStatus).length;
+      const empOTBlocks     = otBlocks.filter((b) => b.userId === emp.id);
+      const pendingOTBlocks = empOTBlocks.filter((b) => (localOTBlockStatus[b.id] || b.status) === "pending").length;
+      const pending    = actionableFlat.filter((r) => !r.localStatus).length + pendingOTBlocks;
       const punchHours = records.reduce((s, r) => r.type === "leave" ? s : s + (r.hours || 0), 0);
       const leaveHours = records.filter((r) => r.type === "leave").reduce((s, r) => s + (r.hours || 0), 0);
-      return { ...emp, records, approved, pending, unsyncedCount, totalHours: punchHours + leaveHours, punchHours, leaveHours };
-    }),
-  [employees, localStatus]);
+      return { ...emp, records, approved, pending, unsyncedCount, totalHours: punchHours + leaveHours, punchHours, leaveHours, otBlocks: empOTBlocks };
+    });
+  }, [employees, localStatus, resetIds, otBlocks, localOTBlockStatus]);
 
   // Global stats
   const globalStats = useMemo(() => {
@@ -1541,26 +1695,84 @@ export default function CutoffReview({ cutoffId }) {
     return null;
   }, [mergedEmployees]);
 
-  const doApprove = useCallback(async (recId, withOT = false) => {
+  const doApprove = useCallback(async (recId, options = {}) => {
+    const { withOT = false, approvalMode, shiftId, editedClockIn, editedClockOut, notes } = options;
     setLocalStatus((s) => ({ ...s, [recId]: "approved" }));
+    if (approvalMode === "schedule" && shiftId) {
+      setUsedShifts((s) => ({ ...s, [recId]: shiftId }));
+    }
     try {
       const rec = findRecord(recId);
       if (!rec) return;
+
+      const payload = { action: "approve" };
+      if (approvalMode) {
+        payload.approvalMode = approvalMode;
+        if (approvalMode === "schedule" && shiftId) payload.shiftId = shiftId;
+        if (approvalMode === "edit") {
+          if (editedClockIn)  payload.editedClockIn  = editedClockIn;
+          if (editedClockOut) payload.editedClockOut = editedClockOut;
+        }
+      }
+      // withOT is DayCare-only; harmlessly ignored by server for BNC
+      if (withOT) payload.withOT = true;
+      if (notes)  payload.notes  = notes;
+
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods/${cutoffId}/approvals/${rec.id}`,
         {
           method: "PATCH",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "approve", withOT }),
+          body: JSON.stringify(payload),
         }
       );
       if (!res.ok) throw new Error();
       toast.success("Approved");
+      if (isBNC) refreshOTBlocks();
     } catch {
       setLocalStatus((s) => { const n = { ...s }; delete n[recId]; return n; });
+      if (approvalMode === "schedule" && shiftId) {
+        setUsedShifts((s) => { const n = { ...s }; delete n[recId]; return n; });
+      }
       toast.error("Failed to approve");
     }
-  }, [token, cutoffId, findRecord]);
+  }, [token, cutoffId, findRecord, isBNC, refreshOTBlocks]);
+
+  const handleApproveSchedule = useCallback((rec) => {
+    const shifts = rec.availableShifts || [];
+    if (shifts.length === 0) {
+      toast.warning("No shift assigned for this date — use Approve Raw Time instead.");
+      return;
+    }
+    if (shifts.length === 1) {
+      doApprove(rec.id, { approvalMode: "schedule", shiftId: shifts[0].id });
+      return;
+    }
+
+    // Collect shiftIds already used by sibling records on the same date so the
+    // picker can gray them out and prevent double-booking the same shift.
+    const usedShiftIds = new Set();
+    for (const emp of mergedEmployees) {
+      for (const r of emp.records) {
+        const candidates =
+          r.type === "punch_group"  ? r.punches  :
+          r.type === "driver_group" ? r.segments :
+          [r];
+        for (const candidate of candidates) {
+          if (
+            candidate.id !== rec.id &&
+            candidate.date === rec.date &&
+            (localStatus[candidate.id] === "approved" || candidate.localStatus === "approved") &&
+            usedShifts[candidate.id]
+          ) {
+            usedShiftIds.add(usedShifts[candidate.id]);
+          }
+        }
+      }
+    }
+
+    setShiftPickerModal({ recId: rec.id, shifts, usedShiftIds, timeIn: rec.timeIn, timeOut: rec.timeOut });
+  }, [doApprove, mergedEmployees, localStatus, usedShifts]);
 
   const doConflict = useCallback(async (recId, choice) => {
     setLocalStatus((s) => ({ ...s, [recId]: "resolved" }));
@@ -1604,31 +1816,113 @@ export default function CutoffReview({ cutoffId }) {
       setExcludeModal(null);
       setExcludeReason("");
       setExcludeNote("");
+      if (isBNC) refreshOTBlocks();
     } catch {
       setLocalStatus((s) => { const n = { ...s }; delete n[recId]; return n; });
       toast.error("Failed to exclude record");
     } finally {
       setIsSaving(false);
     }
-  }, [token, cutoffId, excludeModal, excludeReason, excludeNote, findRecord]);
+  }, [token, cutoffId, excludeModal, excludeReason, excludeNote, findRecord, isBNC, refreshOTBlocks]);
 
-  const doBulkApprove = useCallback((empId) => {
+  const doBulkApprove = useCallback(async (empId) => {
     const emp = mergedEmployees.find((e) => e.id === empId);
     if (!emp) return;
+
+    const APPROVABLE_ACTIONS = ["approve", "approve-schedule", "approve-raw"];
+    const isApprovable = (r) =>
+      !r.localStatus &&
+      r.actions?.some((a) => APPROVABLE_ACTIONS.includes(a)) &&
+      !["conflict", "unscheduled"].includes(r.type);
+
+    const toApprove = []; // [{ recId, timeLogId }]
     emp.records.forEach((r) => {
       if (r.type === "driver_group") {
-        r.segments.forEach((s) => {
-          if (!s.localStatus && s.actions?.includes("approve")) doApprove(s.id);
-        });
+        r.segments.forEach((s) => { if (isApprovable(s)) toApprove.push({ recId: s.id, timeLogId: s.timeLogId }); });
       } else if (r.type === "punch_group") {
-        r.punches.forEach((p) => {
-          if (!p.localStatus && p.actions?.includes("approve") && !["conflict","unscheduled"].includes(p.type)) doApprove(p.id);
-        });
-      } else if (!r.localStatus && r.actions?.includes("approve") && !["conflict","unscheduled"].includes(r.type)) {
-        doApprove(r.id);
+        r.punches.forEach((p) => { if (isApprovable(p)) toApprove.push({ recId: p.id, timeLogId: p.timeLogId }); });
+      } else if (isApprovable(r)) {
+        toApprove.push({ recId: r.id, timeLogId: r.timeLogId });
       }
     });
-  }, [mergedEmployees, doApprove]);
+
+    if (toApprove.length === 0) return;
+
+    const recIds     = toApprove.map((x) => x.recId);
+    const timeLogIds = toApprove.map((x) => x.timeLogId).filter(Boolean);
+
+    // Optimistic update
+    setLocalStatus((s) => {
+      const n = { ...s };
+      recIds.forEach((id) => { n[id] = "approved"; });
+      return n;
+    });
+
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods/${cutoffId}/approvals/bulk`,
+        {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "approve", approvalMode: "raw", timeLogIds }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Bulk approve failed");
+      toast.success(`${data.data?.approved ?? toApprove.length} record(s) approved`);
+      if (isBNC) refreshOTBlocks();
+    } catch (err) {
+      setLocalStatus((s) => {
+        const n = { ...s };
+        recIds.forEach((id) => { delete n[id]; });
+        return n;
+      });
+      toast.error(err.message || "Bulk approve failed");
+    }
+  }, [token, cutoffId, mergedEmployees, isBNC, refreshOTBlocks]);
+
+  const doOTBlock = useCallback(async (blockId, action) => {
+    setLocalOTBlockStatus((s) => ({ ...s, [blockId]: action === "approve" ? "approved" : "excluded" }));
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods/${cutoffId}/ot-blocks/${blockId}`,
+        {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        }
+      );
+      if (!res.ok) throw new Error();
+      toast.success(action === "approve" ? "OT block approved" : "OT block excluded");
+    } catch {
+      setLocalOTBlockStatus((s) => { const n = { ...s }; delete n[blockId]; return n; });
+      toast.error(`Failed to ${action} OT block`);
+    }
+  }, [token, cutoffId]);
+
+  const doReset = useCallback(async (recId) => {
+    setResetIds((s) => new Set([...s, recId]));
+    // Also clear any optimistic approved/excluded status so the row re-enables cleanly
+    setLocalStatus((s) => { const n = { ...s }; delete n[recId]; return n; });
+    try {
+      const rec = findRecord(recId);
+      if (!rec) return;
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/cutoff-periods/${cutoffId}/approvals/${rec.id}/reset`,
+        {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        }
+      );
+      if (!res.ok) throw new Error();
+      toast.success("Approval reset — record returned to pending");
+      if (isBNC) refreshOTBlocks();
+    } catch {
+      // Roll back optimistic reset — restore to approved
+      setResetIds((s) => { const n = new Set(s); n.delete(recId); return n; });
+      toast.error("Failed to reset approval");
+    }
+  }, [token, cutoffId, findRecord, isBNC, refreshOTBlocks]);
 
   const confirmFinalize = useCallback(async () => {
     setIsSaving(true);
@@ -1712,12 +2006,24 @@ export default function CutoffReview({ cutoffId }) {
             >
               <EmployeeCard
                 emp={emp}
-                onApprove={(id) => doApprove(id, false)}
-                onApproveOT={(id) => doApprove(id, true)}
-                onEdit={(rec) => setEditModal({ rec })}
+                onApprove={(id) => doApprove(id)}
+                onApproveOT={(id) => doApprove(id, { withOT: true })}
+                onApproveSchedule={handleApproveSchedule}
+                onApproveRaw={(id) => doApprove(id, { approvalMode: "raw" })}
+                onEdit={(rec) => {
+                  setEditModal({ rec });
+                  setEditedClockIn(rec.rawTimeIn?.slice(0, 16) ?? "");
+                  setEditedClockOut(rec.rawTimeOut?.slice(0, 16) ?? "");
+                  setEditNotes("");
+                }}
                 onExclude={(id) => setExcludeModal({ recId: id })}
                 onConflict={doConflict}
                 onBulkApprove={doBulkApprove}
+                onOTBlock={doOTBlock}
+                localOTBlockStatus={localOTBlockStatus}
+                companyTimezone={companyTimezone}
+                dailyOtThresholdHours={dailyOtThresholdHours}
+                onReset={doReset}
               />
             </motion.div>
           ))
@@ -1743,20 +2049,43 @@ export default function CutoffReview({ cutoffId }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wide text-neutral-500">Corrected Clock-In</Label>
-                <Input type="text" defaultValue={editModal?.rec?.timeIn} />
+                <Input
+                  type="datetime-local"
+                  value={editedClockIn}
+                  onChange={(e) => setEditedClockIn(e.target.value)}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wide text-neutral-500">Corrected Clock-Out</Label>
-                <Input type="text" defaultValue={editModal?.rec?.timeOut} />
+                <Input
+                  type="datetime-local"
+                  value={editedClockOut}
+                  onChange={(e) => setEditedClockOut(e.target.value)}
+                />
               </div>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase tracking-wide text-neutral-500">Reason for Edit</Label>
-              <Input placeholder="Brief reason for this correction..." />
+              <Input
+                placeholder="Brief reason for this correction (audit trail)..."
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+              />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setEditModal(null)}>Cancel</Button>
-              <Button className="bg-green-500 hover:bg-green-600 gap-2" onClick={() => { doApprove(editModal.rec.id); setEditModal(null); }}>
+              <Button
+                className="bg-green-500 hover:bg-green-600 gap-2"
+                onClick={() => {
+                  doApprove(editModal.rec.id, {
+                    approvalMode:   "edit",
+                    editedClockIn:  editedClockIn  ? new Date(editedClockIn).toISOString()  : undefined,
+                    editedClockOut: editedClockOut ? new Date(editedClockOut).toISOString() : undefined,
+                    notes:          editNotes || undefined,
+                  });
+                  setEditModal(null);
+                }}
+              >
                 <Check className="w-4 h-4" /> Save & Approve
               </Button>
             </div>
@@ -1805,6 +2134,66 @@ export default function CutoffReview({ cutoffId }) {
                 Confirm Exclusion
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Shift Picker Modal (B&C — Approve Schedule) ── */}
+      <Dialog open={!!shiftPickerModal} onOpenChange={() => setShiftPickerModal(null)}>
+        <DialogContent className="w-[90vw] sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-orange-500" /> Select Shift
+            </DialogTitle>
+            <DialogDescription>
+              Choose the shift to approve this punch against. The server will snap clock-in to shift start and cap clock-out at shift end.
+            </DialogDescription>
+          </DialogHeader>
+          {(shiftPickerModal?.timeIn || shiftPickerModal?.timeOut) && (
+            <div className="rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-neutral-400 mb-1.5">Punch Time</p>
+              <p className="font-mono text-sm font-semibold text-neutral-800 dark:text-neutral-200">
+                {shiftPickerModal.timeIn} → {shiftPickerModal.timeOut}
+              </p>
+            </div>
+          )}
+          <div className="space-y-2 pt-2">
+            {shiftPickerModal?.shifts.map((shift) => {
+              const isUsed = shiftPickerModal.usedShiftIds?.has(shift.id);
+              return (
+                <button
+                  key={shift.id}
+                  disabled={isUsed}
+                  className={`w-full text-left px-4 py-3 rounded-xl border transition-all
+                    ${isUsed
+                      ? "border-neutral-100 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/50 cursor-not-allowed"
+                      : "border-neutral-200 dark:border-neutral-700 hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/10"
+                    }`}
+                  onClick={() => {
+                    if (isUsed) return;
+                    doApprove(shiftPickerModal.recId, { approvalMode: "schedule", shiftId: shift.id });
+                    setShiftPickerModal(null);
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className={`font-semibold text-sm ${isUsed ? "text-neutral-400 dark:text-neutral-600" : "text-neutral-800 dark:text-neutral-200"}`}>
+                      {shift.shiftName}
+                    </p>
+                    {isUsed && (
+                      <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-700 text-neutral-400 dark:text-neutral-500">
+                        Already used
+                      </span>
+                    )}
+                  </div>
+                  <p className={`font-mono text-xs mt-0.5 ${isUsed ? "text-neutral-300 dark:text-neutral-600" : "text-neutral-400"}`}>
+                    {fmtShiftTime(shift.startTime)} – {fmtShiftTime(shift.endTime)}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex justify-end pt-2">
+            <Button variant="outline" onClick={() => setShiftPickerModal(null)}>Cancel</Button>
           </div>
         </DialogContent>
       </Dialog>
