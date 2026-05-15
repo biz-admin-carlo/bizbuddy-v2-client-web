@@ -134,20 +134,20 @@ const PunchTypeBadge = ({ punchType, size = "sm" }) => {
     DRIVER_AIDE_AM: { label: "Driver AM",   icon: Car,       color: "blue"   },
     DRIVER_AIDE_PM: { label: "Driver PM",   icon: Car,       color: "blue"   },
     REGULAR:        { label: "Regular",     icon: UserCheck, color: "purple" },
+    TRAINING:       { label: "Training",    icon: BookOpen,  color: "green"  },
   };
 
   const meta = config[punchType] ?? config.REGULAR;
   const Icon = meta.icon;
-  const isBlue = meta.color === "blue";
+  const colorClass =
+    meta.color === "blue"   ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" :
+    meta.color === "green"  ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" :
+                              "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300";
 
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${
       size === "sm" ? "text-xs" : "text-sm"
-    } ${
-      isBlue
-        ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
-        : "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300"
-    }`}>
+    } ${colorClass}`}>
       <Icon className="h-3 w-3" />
       {meta.label}
     </span>
@@ -830,7 +830,7 @@ export default function EmployeesPunchLogs() {
     { value: "dateTimeIn",         label: "Time In",            essential: true,  group: "basic"    },
     { value: "dateTimeOut",        label: "Time Out",           essential: true,  group: "basic"    },
     { value: "duration",           label: "Duration",           essential: false, group: "basic"    },
-    { value: "gross",              label: "Gross Hours",        essential: false, group: "basic"    },
+    ...(!isDayCare ? [{ value: "gross", label: "Gross Hours", essential: false, group: "basic" }] : []),
     { value: "status",             label: "Status",             essential: true,  group: "basic"    },
     { value: "punchType",          label: "Punch Type",         essential: false, group: "basic"    },
     { value: "cutoffApproval",     label: "Cutoff Status",      essential: false, group: "basic"    },
@@ -873,6 +873,11 @@ export default function EmployeesPunchLogs() {
     if (!isDayCare) {
       setColumnVisibility((prev) =>
         prev.filter((v) => v !== "ot" && v !== "otStatus")
+      );
+    }
+    if (isDayCare) {
+      setColumnVisibility((prev) =>
+        prev.filter((v) => v !== "gross")
       );
     }
   }, [isDayCare, companyType]);
@@ -1193,7 +1198,7 @@ export default function EmployeesPunchLogs() {
       const { exportEmployeePunchLogsCSV } = await import("@/lib/exports/employeePunchLogs");
       const result = await exportEmployeePunchLogsCSV({
         data: displayed, visibleColumns: columnVisibility,
-        columnMap: columnMapForExport, filters, userTimezone, companyTimezone,
+        columnMap: columnMapForExport, filters, userTimezone, companyTimezone, isDayCare,
       });
       if (result.success) toast.success(result.filename);
     } catch (e) { toast.error(`Export failed: ${e.message}`); }
@@ -1207,7 +1212,7 @@ export default function EmployeesPunchLogs() {
       const { exportEmployeePunchLogsPDF } = await import("@/lib/exports/employeePunchLogs");
       const result = await exportEmployeePunchLogsPDF({
         data: displayed, visibleColumns: columnVisibility,
-        columnMap: columnMapForExport, filters, userTimezone, companyTimezone,
+        columnMap: columnMapForExport, filters, userTimezone, companyTimezone, isDayCare,
       });
       if (result.success) toast.success(result.filename);
     } catch (e) { toast.error(`Export failed: ${e.message}`); }
@@ -1434,6 +1439,7 @@ export default function EmployeesPunchLogs() {
                     <SelectItem value="DRIVER_AIDE">Driver / Aide</SelectItem>
                     <SelectItem value="DRIVER_AIDE_AM">Driver AM</SelectItem>
                     <SelectItem value="DRIVER_AIDE_PM">Driver PM</SelectItem>
+                    <SelectItem value="TRAINING">Training</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1917,7 +1923,7 @@ export default function EmployeesPunchLogs() {
                             return (
                               <TableCell key="actions" className="text-center">
                                 <div className="flex items-center justify-center gap-1">
-                                  {canEdit && t.status !== "active" ? (
+                                  {canEdit && t.status !== "active" && t.cutoffApproval?.status !== "approved" ? (
                                     <>
                                       {/* Edit Time In/Out */}
                                       <TooltipProvider delayDuration={200}><Tooltip>
@@ -2345,6 +2351,7 @@ export default function EmployeesPunchLogs() {
                     <SelectItem value="DRIVER_AIDE"><span className="flex items-center gap-2"><Car className="h-3.5 w-3.5 text-blue-500" />Driver/Aide (Full)</span></SelectItem>
                     <SelectItem value="DRIVER_AIDE_AM"><span className="flex items-center gap-2"><Car className="h-3.5 w-3.5 text-blue-500" />Driver AM only</span></SelectItem>
                     <SelectItem value="DRIVER_AIDE_PM"><span className="flex items-center gap-2"><Car className="h-3.5 w-3.5 text-blue-500" />Driver PM only</span></SelectItem>
+                    <SelectItem value="TRAINING"><span className="flex items-center gap-2"><BookOpen className="h-3.5 w-3.5 text-green-500" />Training</span></SelectItem>
                   </SelectContent>
                 </Select>
               </div>
