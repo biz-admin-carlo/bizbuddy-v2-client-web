@@ -485,8 +485,14 @@ const TimelineRow = ({ rec, onApprove, onApproveOT, onApproveSchedule, onApprove
         )}
 
         {/* Punch times */}
-        <div className="text-[12px] font-medium text-neutral-700 dark:text-neutral-300 mb-1.5"
-          dangerouslySetInnerHTML={{ __html: rec.detail }} />
+        {rec.isApproving ? (
+          <div className="flex items-center gap-1.5 text-neutral-400 text-[12px] mb-1.5">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Confirming…
+          </div>
+        ) : (
+          <div className="text-[12px] font-medium text-neutral-700 dark:text-neutral-300 mb-1.5"
+            dangerouslySetInnerHTML={{ __html: rec.detail }} />
+        )}
 
         {/* Tag pills */}
         {rec.tags?.length > 0 && (
@@ -621,8 +627,14 @@ const PunchSubRow = ({ rec, onApprove, onApproveOT, onApproveSchedule, onApprove
             </span>
           </div>
         )}
-        <div className="text-[12px] font-medium text-neutral-700 dark:text-neutral-300 mb-1.5"
-          dangerouslySetInnerHTML={{ __html: rec.detail }} />
+        {rec.isApproving ? (
+          <div className="flex items-center gap-1.5 text-neutral-400 text-[12px] mb-1.5">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Confirming…
+          </div>
+        ) : (
+          <div className="text-[12px] font-medium text-neutral-700 dark:text-neutral-300 mb-1.5"
+            dangerouslySetInnerHTML={{ __html: rec.detail }} />
+        )}
         {rec.tags?.length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap">
             {rec.tags.map((t, i) => (
@@ -705,8 +717,14 @@ const DriverSegmentRow = ({ seg, onApprove, onApproveOT, onApproveSchedule, onAp
         </div>
       </td>
       <td className="px-3 py-2.5 align-top">
-        <div className="text-[12px] font-medium text-neutral-700 dark:text-neutral-300 mb-1.5"
-          dangerouslySetInnerHTML={{ __html: seg.detail }} />
+        {seg.isApproving ? (
+          <div className="flex items-center gap-1.5 text-neutral-400 text-[12px] mb-1.5">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Confirming…
+          </div>
+        ) : (
+          <div className="text-[12px] font-medium text-neutral-700 dark:text-neutral-300 mb-1.5"
+            dangerouslySetInnerHTML={{ __html: seg.detail }} />
+        )}
         {seg.tags?.length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap">
             {seg.tags.map((t, i) => (
@@ -861,7 +879,9 @@ const EmployeeCard = ({ emp, onApprove, onApproveOT, onApproveSchedule, onApprov
   const otBlockByDate = useMemo(() => {
     const map = {};
     (emp.otBlocks || []).forEach((block) => {
-      const formatted = new Date(block.date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: companyTimezone || "UTC" });
+      const [y, m, d] = block.date.slice(0, 10).split("-").map(Number);
+      const safeDate  = new Date(Date.UTC(y, m - 1, d, 12));
+      const formatted = safeDate.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: companyTimezone || "UTC" });
       map[formatted] = block;
     });
     return map;
@@ -1085,6 +1105,8 @@ export default function CutoffReview({ cutoffId }) {
 
   // ── Local action state (optimistic UI) ──
   const [localStatus,         setLocalStatus]         = useState({}); // { [recId]: 'approved'|'excluded'|'resolved' }
+  const [localApprovedTimes,  setLocalApprovedTimes]  = useState({}); // { [recId]: { timeIn, timeOut } } — snapped/edited times from PATCH response
+  const [approvingIds,        setApprovingIds]        = useState(new Set()); // recIds with PATCH in flight — shows spinner in detail cell only
   const [localOTBlockStatus,  setLocalOTBlockStatus]  = useState({}); // { [blockId]: 'approved'|'excluded' }
   const [resetIds,            setResetIds]            = useState(new Set()); // recIds reset this session — overrides buildDetails "approved"
 
@@ -1554,16 +1576,26 @@ export default function CutoffReview({ cutoffId }) {
     const effectiveStatus = (id, baked) => resetIds.has(id) ? null : (localStatus[id] ?? baked);
 
     return employees.map((emp) => {
+      const patchTimes = (rec) => {
+        const t           = localApprovedTimes[rec.id];
+        const isApproving = approvingIds.has(rec.id);
+        if (!t && !isApproving) return rec;
+        const newTimeIn  = t?.timeIn  ?? rec.timeIn;
+        const newTimeOut = t?.timeOut ?? rec.timeOut;
+        const newDetail  = t ? `<strong>In: ${newTimeIn}</strong> &rarr; <strong>Out: ${newTimeOut}</strong>` : rec.detail;
+        return { ...rec, timeIn: newTimeIn, timeOut: newTimeOut, detail: newDetail, isApproving };
+      };
+
       const records = emp.records.map((r) => {
         if (r.type === "driver_group") {
-          const segments = r.segments.map((s) => ({ ...s, localStatus: effectiveStatus(s.id, s.localStatus) }));
+          const segments = r.segments.map((s) => patchTimes({ ...s, localStatus: effectiveStatus(s.id, s.localStatus) }));
           return { ...r, segments, hours: segments.reduce((sum, s) => sum + (s.hours || 0), 0) };
         }
         if (r.type === "punch_group") {
-          const punches = r.punches.map((p) => ({ ...p, localStatus: effectiveStatus(p.id, p.localStatus) }));
+          const punches = r.punches.map((p) => patchTimes({ ...p, localStatus: effectiveStatus(p.id, p.localStatus) }));
           return { ...r, punches, hours: punches.reduce((sum, p) => sum + (p.hours || 0), 0) };
         }
-        return { ...r, localStatus: effectiveStatus(r.id, r.localStatus) };
+        return patchTimes({ ...r, localStatus: effectiveStatus(r.id, r.localStatus) });
       });
 
       // Flatten actionable records — driver segments and punch sub-rows counted individually
@@ -1590,7 +1622,7 @@ export default function CutoffReview({ cutoffId }) {
       const leaveHours = records.filter((r) => r.type === "leave").reduce((s, r) => s + (r.hours || 0), 0);
       return { ...emp, records, approved, pending, unsyncedCount, totalHours: punchHours + leaveHours, punchHours, leaveHours, otBlocks: empOTBlocks };
     });
-  }, [employees, localStatus, resetIds, otBlocks, localOTBlockStatus]);
+  }, [employees, localStatus, localApprovedTimes, approvingIds, resetIds, otBlocks, localOTBlockStatus]);
 
   // Global stats
   const globalStats = useMemo(() => {
@@ -1698,6 +1730,7 @@ export default function CutoffReview({ cutoffId }) {
   const doApprove = useCallback(async (recId, options = {}) => {
     const { withOT = false, approvalMode, shiftId, editedClockIn, editedClockOut, notes } = options;
     setLocalStatus((s) => ({ ...s, [recId]: "approved" }));
+    setApprovingIds((s) => { const n = new Set(s); n.add(recId); return n; });
     if (approvalMode === "schedule" && shiftId) {
       setUsedShifts((s) => ({ ...s, [recId]: shiftId }));
     }
@@ -1727,16 +1760,30 @@ export default function CutoffReview({ cutoffId }) {
         }
       );
       if (!res.ok) throw new Error();
+      const data = await res.json();
+      const approved = data.data;
+      if (approved?.approvedClockIn || approved?.approvedClockOut) {
+        setLocalApprovedTimes((s) => ({
+          ...s,
+          [recId]: {
+            timeIn:  approved.approvedClockIn  ? formatDateTime(approved.approvedClockIn,  companyTimezone) : null,
+            timeOut: approved.approvedClockOut ? formatDateTime(approved.approvedClockOut, companyTimezone) : null,
+          },
+        }));
+      }
+      setApprovingIds((s) => { const n = new Set(s); n.delete(recId); return n; });
       toast.success("Approved");
       if (isBNC) refreshOTBlocks();
     } catch {
       setLocalStatus((s) => { const n = { ...s }; delete n[recId]; return n; });
+      setLocalApprovedTimes((s) => { const n = { ...s }; delete n[recId]; return n; });
+      setApprovingIds((s) => { const n = new Set(s); n.delete(recId); return n; });
       if (approvalMode === "schedule" && shiftId) {
         setUsedShifts((s) => { const n = { ...s }; delete n[recId]; return n; });
       }
       toast.error("Failed to approve");
     }
-  }, [token, cutoffId, findRecord, isBNC, refreshOTBlocks]);
+  }, [token, cutoffId, findRecord, isBNC, refreshOTBlocks, companyTimezone]);
 
   const handleApproveSchedule = useCallback((rec) => {
     const shifts = rec.availableShifts || [];
@@ -1744,11 +1791,6 @@ export default function CutoffReview({ cutoffId }) {
       toast.warning("No shift assigned for this date — use Approve Raw Time instead.");
       return;
     }
-    if (shifts.length === 1) {
-      doApprove(rec.id, { approvalMode: "schedule", shiftId: shifts[0].id });
-      return;
-    }
-
     // Collect shiftIds already used by sibling records on the same date so the
     // picker can gray them out and prevent double-booking the same shift.
     const usedShiftIds = new Set();

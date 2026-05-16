@@ -719,6 +719,10 @@ export default function EmployeesPunchLogs() {
   const [companyId, setCompanyId] = useState(null);
   const [companyType, setCompanyType] = useState(null);
   const isDayCare = companyType === "DAYCARE";
+  const [bncOtBlocks,         setBncOtBlocks]         = useState([]);
+  const [bncDailyOtThreshold, setBncDailyOtThreshold] = useState(8);
+  const [cutoffPeriods,    setCutoffPeriods]    = useState([]);
+  const [selectedCutoffId, setSelectedCutoffId] = useState("all");
 
   const [timelogs,       setTimelogs]       = useState([]);
   const [departments,    setDepartments]    = useState([]);
@@ -810,6 +814,7 @@ export default function EmployeesPunchLogs() {
   const clearAllFilters = () => {
     setFilters(resetFilters);
     setPendingDates({ from: getDefaultFrom(), to: getDefaultTo() });
+    setSelectedCutoffId("all");
   };
   const datesAreDirty = pendingDates.from !== filters.from || pendingDates.to !== filters.to;
   const applyDates = () => setFilters((prev) => ({ ...prev, from: pendingDates.from, to: pendingDates.to }));
@@ -961,6 +966,32 @@ export default function EmployeesPunchLogs() {
     finally { setLoadingRequests(false); }
   }, [token, API_URL]);
 
+  const fetchCutoffPeriods = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/cutoff-periods`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const j = await res.json();
+      if (res.ok) {
+        setCutoffPeriods(
+          (j.data || []).sort((a, b) => new Date(b.periodStart) - new Date(a.periodStart))
+        );
+      }
+    } catch { /* silent */ }
+  }, [token, API_URL]);
+
+  const handleCutoffSelect = (value) => {
+    setSelectedCutoffId(value);
+    if (value === "all") return;
+    const period = cutoffPeriods.find((p) => p.id === value);
+    if (!period) return;
+    const from = period.periodStart.slice(0, 10);
+    const to   = period.periodEnd.slice(0, 10);
+    setPendingDates({ from, to });
+    setFilters((prev) => ({ ...prev, from, to }));
+  };
+
   const handleApproveRequest = async (requestId) => {
     setApprovingRequest(requestId);
     try {
@@ -1011,6 +1042,8 @@ export default function EmployeesPunchLogs() {
         const tlJ = await tlRes.json();
         if (!tlRes.ok) throw new Error(tlJ.error || "Punch Logs fetch failed");
         if (tlJ.companyType) setCompanyType(tlJ.companyType);
+        setBncOtBlocks(tlJ.otBlocks || []);
+        if (tlJ.dailyOtThresholdHours != null) setBncDailyOtThreshold(tlJ.dailyOtThresholdHours);
 
         const enriched = (tlJ.data || []).map((t) => {
           // ── Break display strings (UI only) ───────────────────────────────
@@ -1135,8 +1168,8 @@ export default function EmployeesPunchLogs() {
   );
 
   useEffect(() => {
-    if (token) { bootstrap(); fetchPendingRequests(); }
-  }, [token, bootstrap, fetchPendingRequests]);
+    if (token) { bootstrap(); fetchPendingRequests(); fetchCutoffPeriods(); }
+  }, [token, bootstrap, fetchPendingRequests, fetchCutoffPeriods]);
 
   useEffect(() => {
     if (!token) return;
@@ -1199,6 +1232,7 @@ export default function EmployeesPunchLogs() {
       const result = await exportEmployeePunchLogsCSV({
         data: displayed, visibleColumns: columnVisibility,
         columnMap: columnMapForExport, filters, userTimezone, companyTimezone, isDayCare,
+        bncOtBlocks, bncDailyOtThreshold,
       });
       if (result.success) toast.success(result.filename);
     } catch (e) { toast.error(`Export failed: ${e.message}`); }
@@ -1213,6 +1247,7 @@ export default function EmployeesPunchLogs() {
       const result = await exportEmployeePunchLogsPDF({
         data: displayed, visibleColumns: columnVisibility,
         columnMap: columnMapForExport, filters, userTimezone, companyTimezone, isDayCare,
+        bncOtBlocks, bncDailyOtThreshold,
       });
       if (result.success) toast.success(result.filename);
     } catch (e) { toast.error(`Export failed: ${e.message}`); }
@@ -1447,13 +1482,35 @@ export default function EmployeesPunchLogs() {
           </div>
           <div className="flex flex-wrap gap-3 items-center">
             <span className={labelClass}><Calendar className="w-4 h-4 mr-1 inline" />Date Range:</span>
+            {cutoffPeriods.length > 0 && (
+              <Select value={selectedCutoffId} onValueChange={handleCutoffSelect}>
+                <SelectTrigger className="h-9 min-w-[180px] w-auto">
+                  <SelectValue placeholder="Custom range" />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  <SelectItem value="all">Custom range</SelectItem>
+                  {cutoffPeriods.map((p) => {
+                    const fmt = (iso) => {
+                      if (!iso) return "—";
+                      const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+                      return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                    };
+                    return (
+                      <SelectItem key={p.id} value={p.id}>
+                        {fmt(p.periodStart)} – {fmt(p.periodEnd)}{p.status ? ` (${p.status})` : ""}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            )}
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">From:</span>
-              <Input type="date" value={pendingDates.from} onChange={(e) => setPendingDates((prev) => ({ ...prev, from: e.target.value }))} className="h-9 w-auto" />
+              <Input type="date" value={pendingDates.from} onChange={(e) => { setPendingDates((prev) => ({ ...prev, from: e.target.value })); setSelectedCutoffId("all"); }} className="h-9 w-auto" />
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">To:</span>
-              <Input type="date" value={pendingDates.to} onChange={(e) => setPendingDates((prev) => ({ ...prev, to: e.target.value }))} className="h-9 w-auto" />
+              <Input type="date" value={pendingDates.to} onChange={(e) => { setPendingDates((prev) => ({ ...prev, to: e.target.value })); setSelectedCutoffId("all"); }} className="h-9 w-auto" />
             </div>
             <Button size="sm" onClick={applyDates}
               className={datesAreDirty ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-primary hover:bg-primary/90 text-primary-foreground"}>
